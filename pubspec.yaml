@@ -43,6 +43,9 @@ dependencies:
   image_picker: ^1.0.7
   camera: ^0.11.0
   fl_chart: ^0.66.0
+  flutter_dotenv: ^5.1.0
+  flutter_secure_storage: ^9.0.0
+  health: ^10.0.0
 
 dev_dependencies:
   flutter_test:
@@ -67,9 +70,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

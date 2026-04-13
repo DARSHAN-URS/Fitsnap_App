@@ -1,183 +1,204 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-import '../services/health_service.dart';
-import '../models/step_data.dart';
-import '../widgets/step_progress_card.dart';
-import '../widgets/metrics_row.dart';
-import '../widgets/activity_list.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../providers/meal_provider.dart';
+import '../providers/step_provider.dart';
+import '../providers/water_provider.dart';
+import 'profile_screen.dart';
+import 'chat_screen.dart';
+import 'gallery_screen.dart';
+import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final HealthService _healthService = HealthService();
-  int _steps = 0;
-  double _distance = 0.0;
-  int _calories = 0;
-  int _activeTime = 0;
-  List<StepData> _activities = [];
-  bool _isLoading = true;
-  bool _isSupported = true;
-  StreamSubscription<int>? _stepSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkHardwareAndStart();
-  }
-
-  Future<void> _checkHardwareAndStart() async {
-    // 1. Check hardware compatibility
-    _isSupported = await _healthService.isStepTrackingSupported();
-    if (!_isSupported) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    // 2. Perform initial fetch (Silent)
-    await _fetchData(silent: false);
-
-    // 3. Listen to real-time background stream
-    _stepSubscription = _healthService.stepStream.listen((steps) {
-       if (mounted) {
-         setState(() {
-           _steps = steps;
-           _calories = (_steps * 0.04).toInt();
-           _activeTime = (_steps / 100).toInt();
-         });
-       }
-    }, onError: (err) => debugPrint("Stream Error: $err"));
-  }
-
-  @override
-  void dispose() {
-    _stepSubscription?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _fetchData({bool silent = false}) async {
-    if (!silent) setState(() => _isLoading = true);
-    
-    try {
-      final bool granted = await _healthService.requestPermissions();
-      if (granted) {
-        final steps = await _healthService.getTodaySteps();
-        final distance = await _healthService.getTodayDistance();
-        final weekly = await _healthService.getWeeklySteps();
-        
-        if (mounted) {
-          setState(() {
-            _steps = steps;
-            _distance = distance > 0 ? (distance / 1000) : 0.0;
-            _calories = (steps * 0.04).toInt();
-            _activeTime = (steps / 100).toInt();
-            _activities = weekly;
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      debugPrint("Error fetching data: $e");
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+  DateTime _selectedDate = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
-    if (!_isSupported) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Text(
-              "Step tracking hardware is not supported on this device.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 18),
-            ),
-          ),
-        ),
-      );
-    }
+    final mealProvider = Provider.of<MealProvider>(context);
+    final stepProvider = Provider.of<StepProvider>(context);
+    final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    
+    final mealStats = {
+      'calories': mealProvider.getCaloriesForDate(_selectedDate),
+      'protein': mealProvider.getProteinForDate(_selectedDate),
+      'carbs': mealProvider.getCarbsForDate(_selectedDate),
+      'fat': mealProvider.getFatForDate(_selectedDate),
+    };
+
+    final stepData = stepProvider.getStepsForDate(dateStr);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => _fetchData(silent: false),
-          color: Colors.blueAccent,
-          backgroundColor: const Color(0xFF1E293B),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 16),
-                _buildWeeklyCalendar(),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: StepProgressCard(steps: _steps, goal: 10000),
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: MetricsRow(
-                    distance: _distance,
-                    calories: _calories,
-                    duration: _activeTime,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                ActivityList(sessions: _activities),
-                const SizedBox(height: 80),
-              ],
-            ),
+      appBar: AppBar(
+        title: const Text(
+          'FitSnap AI',
+          style: TextStyle(
+            color: Color(0xFFFF5E3A),
+            fontWeight: FontWeight.w900,
+            fontSize: 26,
+            letterSpacing: -0.5,
           ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 22),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.person_rounded, color: Colors.white, size: 26),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen())),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await mealProvider.fetchMeals();
+          await stepProvider.fetchTodaySteps();
+          await Provider.of<WaterProvider>(context, listen: false).fetchTodayWater();
+        },
+        color: const Color(0xFFFF5E3A),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+            _buildDateStrip(),
+            const SizedBox(height: 20),
+            _buildMainCalorieCard(mealStats, mealProvider.calorieGoal),
+            const SizedBox(height: 20),
+            _buildStepsCard(stepData, stepProvider.stepGoal),
+            const SizedBox(height: 20),
+            Consumer<WaterProvider>(
+              builder: (context, waterProvider, _) => _buildWaterCard(waterProvider),
+            ),
+            const SizedBox(height: 24),
+            _buildSectionHeader("Today's Meals"),
+            const SizedBox(height: 12),
+            _buildTodayMealsStack(),
+            const SizedBox(height: 30),
+            _buildQuickActions(),
+            const SizedBox(height: 100),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+  Widget _buildTopIcon(IconData icon, String? value) {
+    return Container(
+      margin: const EdgeInsets.only(left: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'StepTracker',
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          Icon(icon, size: 20, color: const Color(0xFFFFB053)),
+          if (value != null) ...[
+            const SizedBox(width: 4),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateStrip() {
+    // Generate 7 days around today or the last 7 days
+    final List<DateTime> dates = List.generate(7, (index) {
+        return DateTime.now().subtract(Duration(days: 5 - index));
+    });
+
+    return SizedBox(
+      height: 85,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: dates.length,
+        itemBuilder: (context, index) {
+          final date = dates[index];
+          final isSelected = DateUtils.isSameDay(date, _selectedDate);
+          
+          return GestureDetector(
+            onTap: () => setState(() => _selectedDate = date),
+            child: Container(
+              width: 58,
+              margin: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: isSelected ? BoxDecoration(
+                border: Border.all(color: Colors.blueAccent, width: 2, style: BorderStyle.solid),
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.blueAccent.withOpacity(0.1),
+              ) : null,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(DateFormat('EE').format(date), 
+                    style: TextStyle(color: isSelected ? Colors.white : Colors.blueGrey[400], fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text(DateFormat('d').format(date), 
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      fontSize: 18,
+                      color: isSelected ? Colors.white : Colors.white,
+                    )),
+                ],
               ),
-              Text(
-                'Production Release',
-                style: TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMainCalorieCard(Map<String, double> stats, double goal) {
+    final consumed = stats['calories']!;
+    final remaining = (goal - consumed).toInt();
+    final progress = (consumed / goal).clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(32),
+      ),
+      child: Column(
+        children: [
+          CustomPaint(
+            size: const Size(200, 110),
+            painter: ArcPainter(progress: progress),
+            child: SizedBox(
+              width: 200,
+              height: 110,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    remaining.toString(),
+                    style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'calories remaining',
+                    style: TextStyle(color: Colors.blueGrey[300], fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ),
-            ],
+            ),
           ),
+          const SizedBox(height: 24),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              IconButton(
-                icon: const Icon(Icons.sync, color: Colors.blueAccent),
-                onPressed: () => _fetchData(silent: false),
-                tooltip: 'Sync Now',
-              ),
-              const SizedBox(width: 8),
-              CircleAvatar(
-                backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                child: const Icon(Icons.person, color: Colors.blueAccent),
-              ),
+              _buildMacroMini('Protein', '${stats['protein']!.toInt()}g'),
+              _buildMacroMini('Carbs', '${stats['carbs']!.toInt()}g'),
+              _buildMacroMini('Fats', '${stats['fat']!.toInt()}g'),
             ],
           ),
         ],
@@ -185,47 +206,227 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildWeeklyCalendar() {
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final dates = [30, 31, 1, 2, 3, 4, 5];
-    
-    return SizedBox(
-      height: 85,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        itemCount: 7,
-        itemBuilder: (context, index) {
-          bool isSelected = index == 0; 
-          return Container(
-            width: 55,
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.blueAccent : const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(16),
-            ),
+  Widget _buildMacroMini(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 4),
+        Container(width: 40, height: 3, color: Colors.blueGrey[700]),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: Colors.blueGrey[400], fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _buildStepsCard(StepData data, int goal) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.directions_walk_rounded, color: Colors.greenAccent, size: 32),
+          const SizedBox(width: 16),
+          Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  days[index],
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white60,
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  dates[index].toString(),
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                const Text('Steps Today', style: TextStyle(color: Colors.blueGrey, fontSize: 13)),
+                Text('${data.stepCount} / $goal', 
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
-          );
-        },
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 45,
+                height: 45,
+                child: CircularProgressIndicator(
+                  value: (data.stepCount / goal).clamp(0.0, 1.0),
+                  backgroundColor: Colors.blueGrey[800],
+                  valueColor: const AlwaysStoppedAnimation(Colors.greenAccent),
+                  strokeWidth: 5,
+                ),
+              ),
+              if (data.stepCount >= goal)
+                const Icon(Icons.check, size: 16, color: Colors.greenAccent),
+            ],
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildTodayMealsStack() {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF141D2C),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.fastfood_rounded, size: 48, color: Colors.blueGrey[800]),
+          const SizedBox(height: 16),
+          Text('Tap + to log a meal', style: TextStyle(color: Colors.blueGrey[400])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildActionBtn(Icons.restaurant_menu_rounded, 'Food', const Color(0xFFFF5E3A))),
+            const SizedBox(width: 12),
+            Expanded(child: _buildActionBtn(Icons.local_fire_department, 'Exercise', Colors.orange)),
+          ],
+        ),
+        const SizedBox(height: 12),
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () {}, // Handled by WaterCard mostly now, but keep as quick add 500ml
+            child: _buildActionBtn(Icons.water_drop_rounded, 'Water', Colors.blue),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GalleryScreen())),
+            child: _buildActionBtn(Icons.photo_library_rounded, 'Gallery', Colors.green),
+          ),
+        ),
+      ],
+      ],
+    );
+  }
+
+  Widget _buildActionBtn(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  Widget _buildWaterCard(WaterProvider waterProvider) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Hydration', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text('Daily Target: 3L', style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${(waterProvider.progress * 100).toInt()}%',
+                  style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    LinearProgressIndicator(
+                      value: waterProvider.progress,
+                      backgroundColor: const Color(0xFF0F172A),
+                      color: Colors.blueAccent,
+                      minHeight: 12,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '${waterProvider.dailyAmount}ml / ${waterProvider.targetAmount}ml',
+                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              GestureDetector(
+                onTap: () => waterProvider.addWater(250),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Colors.blueAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.add_rounded, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ArcPainter extends CustomPainter {
+  final double progress;
+  ArcPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.blueGrey[800]!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round;
+
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 2);
+    canvas.drawArc(rect, math.pi, math.pi, false, paint);
+
+    paint.color = const Color(0xFF38BDF8); // Teal/Blue arc
+    canvas.drawArc(rect, math.pi, math.pi * progress, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

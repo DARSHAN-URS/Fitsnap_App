@@ -70,5 +70,11 @@
 	<string>We need access to your health data to track your steps and distance.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>We need access to update your health data for tracking purposes.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>This app needs access to your motion data to track your steps live throughout the day.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to identify and analyze your meals from photos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access for video recording features.</string>
 </dict>
 </plist>
