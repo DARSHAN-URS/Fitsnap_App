@@ -109,6 +109,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 children: [
+                  if (user?['is_pro'] != true) ...[
+                    _buildPremiumCard(),
+                    const SizedBox(height: 24),
+                  ],
                   _buildTabToggle(),
                   const SizedBox(height: 32),
                   _activeTab == 0 ? _buildBodyStatsView() : _buildGoalsView(),
@@ -305,7 +309,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(children: [IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white))]),
           const CircleAvatar(radius: 45, backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person_rounded, size: 50, color: Colors.white)),
           const SizedBox(height: 16),
-          Text('Hi, $displayName', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Hi, $displayName', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              if (user?['is_pro'] == true) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent[700],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('PRO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87)),
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: 4),
           Text(user?['email']?.toString() ?? '', style: TextStyle(color: Colors.blueGrey[400], fontSize: 14)),
         ],
@@ -328,6 +348,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+  Widget _buildPremiumCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF5E3A), Color(0xFFFF2D55)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF5E3A).withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('GO PREMIUM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: 1)),
+              Icon(Icons.diamond_rounded, color: Colors.white, size: 32),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Unlock AI Vision, unlimited historical coaching, and personalized workout plans.',
+            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () {
+                // In a real app, this would open a payment gateway
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Processing upgrade to Pro...'), behavior: SnackBarBehavior.floating),
+                );
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text('Upgrade for $9.99/mo', style: TextStyle(color: Color(0xFFFF5E3A), fontWeight: FontWeight.w900, fontSize: 16)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

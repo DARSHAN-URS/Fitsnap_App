@@ -16,7 +16,7 @@
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
 
     <application
-        android:label="Fit Snap"
+        android:label="FitSnap AI"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
