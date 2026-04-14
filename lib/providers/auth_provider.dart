@@ -68,10 +68,13 @@ class AuthProvider with ChangeNotifier {
     try {
       final response = await _dio.post(
         'auth/login',
-        data: FormData.fromMap({
+        data: {
           'username': email,
           'password': password,
-        }),
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+        ),
       );
       
       _token = response.data['access_token'];
