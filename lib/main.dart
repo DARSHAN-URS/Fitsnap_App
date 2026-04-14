@@ -105,7 +105,6 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const HistoryScreen(),
-    const CameraScreen(),
     const StepsScreen(),
     const ChatScreen(),
   ];
@@ -129,8 +128,8 @@ class _MainNavigationState extends State<MainNavigation> {
             _buildNavItem(0, Icons.home_filled, 'Home'),
             _buildNavItem(1, Icons.calendar_today_rounded, 'Diary'),
             const SizedBox(width: 48), // Space for FAB
-            _buildNavItem(3, Icons.bar_chart_rounded, 'Charts'),
-            _buildNavItem(4, Icons.psychology_rounded, 'Coach'),
+            _buildNavItem(2, Icons.bar_chart_rounded, 'Charts'),
+            _buildNavItem(3, Icons.psychology_rounded, 'Coach'),
           ],
         ),
       ),
@@ -138,7 +137,10 @@ class _MainNavigationState extends State<MainNavigation> {
       floatingActionButton: Container(
         margin: const EdgeInsets.only(top: 20),
         child: FloatingActionButton(
-          onPressed: () => setState(() => _currentIndex = 2),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CameraScreen()),
+          ),
           backgroundColor: const Color(0xFFFF5E3A),
           shape: const CircleBorder(),
           elevation: 8,

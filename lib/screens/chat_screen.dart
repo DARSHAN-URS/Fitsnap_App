@@ -48,8 +48,8 @@ class _ChatScreenState extends State<ChatScreen> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Nutrition Assistant', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('Always online', style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+            Text('FitSnap AI Coach', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFFFF5E3A))),
+            Text('Intelligent Health Agent', style: TextStyle(color: Colors.blueGrey, fontSize: 11, fontWeight: FontWeight.bold)),
           ],
         ),
         backgroundColor: const Color(0xFF1E293B),
@@ -93,27 +93,51 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF5E3A).withOpacity(0.1),
+                color: const Color(0xFFFF5E3A).withOpacity(0.15),
                 shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFF5E3A).withOpacity(0.3), width: 2),
               ),
-              child: const Icon(Icons.psychology_rounded, size: 60, color: Color(0xFFFF5E3A)),
+              child: const Icon(Icons.psychology_rounded, size: 70, color: Color(0xFFFF5E3A)),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             const Text(
-              'How can I help you today?',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              'hey fitsnap AI here\nhow can i help you',
+              style: TextStyle(
+                fontSize: 24, 
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+                height: 1.2
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
-              'Ask me about your calories, macro balance, or to correct a meal log.',
-              style: TextStyle(color: Colors.blueGrey[400]),
+              'I can analyze your nutrition, optimize your macros, or adjust your meal logs.',
+              style: TextStyle(color: Colors.blueGrey[400], fontSize: 16),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 48),
+            _buildQuickPrompt('Check my calories today'),
+            const SizedBox(height: 12),
+            _buildQuickPrompt('Optimize my protein intake'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickPrompt(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.blueGrey[800]!),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: Colors.blueGrey[300], fontSize: 14),
       ),
     );
   }

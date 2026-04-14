@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 import '../providers/meal_provider.dart';
 import '../providers/step_provider.dart';
 import '../providers/water_provider.dart';
+import '../providers/auth_provider.dart';
 import 'profile_screen.dart';
 import 'chat_screen.dart';
 import 'gallery_screen.dart';
+import 'camera_screen.dart';
 import '../models/step.dart';
 import '../models/meal.dart';
 import 'dart:math' as math;
@@ -71,6 +73,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
+            _buildWelcomeHeader(),
+            const SizedBox(height: 12),
             _buildDateStrip(),
             const SizedBox(height: 20),
             _buildMainCalorieCard(mealStats, mealProvider.calorieGoal),
@@ -117,6 +121,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildWelcomeHeader() {
+    final user = Provider.of<AuthProvider>(context).user;
+    final name = (user?['full_name'] != null && user!['full_name'].toString().isNotEmpty)
+        ? user['full_name']
+        : 'User';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 10, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hi, $name!',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Let's crush your goals today.",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.blueGrey[400],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDateStrip() {
     // Generate 7 days with Today at the center (index 3)
     final List<DateTime> dates = List.generate(7, (index) {
@@ -150,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 4),
                   Text(DateFormat('d').format(date), 
                     style: TextStyle(
-                      fontWeight: FontWeight.bold, 
+                      fontWeight: FontWeight.w900, 
                       fontSize: 18,
                       color: isSelected ? Colors.white : Colors.white,
                     )),
@@ -341,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CameraScreen())),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => CameraScreen())),
                 child: _buildActionBtn(Icons.restaurant_menu_rounded, 'Food', const Color(0xFFFF5E3A)),
               ),
             ),

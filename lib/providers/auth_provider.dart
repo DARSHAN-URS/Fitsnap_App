@@ -35,7 +35,7 @@ class AuthProvider with ChangeNotifier {
     if (_token == null) return;
     try {
       final response = await _dio.get(
-        '/auth/me',
+        'auth/me',
         options: Options(headers: {'Authorization': 'Bearer $_token'}),
       );
       _user = response.data;
@@ -49,7 +49,7 @@ class AuthProvider with ChangeNotifier {
     if (_token == null) return false;
     try {
       final response = await _dio.put(
-        '/auth/profile',
+        'auth/profile',
         data: data,
         options: Options(headers: {'Authorization': 'Bearer $_token'}),
       );
@@ -64,25 +64,36 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> login(String email, String password) async {
     try {
-      // For demo, we simulate a successful login
-      await Future.delayed(const Duration(seconds: 2));
-      _token = "mock_jwt_token_for_demo";
+      final response = await _dio.post(
+        'auth/login',
+        data: FormData.fromMap({
+          'username': email,
+          'password': password,
+        }),
+      );
       
+      _token = response.data['access_token'];
       await _storage.write(key: 'auth_token', value: _token);
       
       _isAuthenticated = true;
-      fetchProfile();
+      await fetchProfile(); // This will populate _user
       notifyListeners();
       return true;
     } catch (e) {
       print('Login Error: $e');
+      if (e is DioException) {
+        print('Dio response: ${e.response?.data}');
+      }
       return false;
     }
   }
 
   Future<bool> register(String email, String password) async {
     try {
-      await Future.delayed(const Duration(seconds: 2));
+      await _dio.post(
+        'auth/register',
+        data: {'email': email, 'password': password},
+      );
       return true;
     } catch (e) {
       print('Register Error: $e');

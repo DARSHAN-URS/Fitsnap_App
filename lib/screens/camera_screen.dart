@@ -320,7 +320,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   'ANALYZING',
                   style: TextStyle(
                     color: Colors.white, 
-                    fontWeight: FontWeight.black, 
+                    fontWeight: FontWeight.w900, 
                     letterSpacing: 4,
                     shadows: [Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)]
                   ),

@@ -96,12 +96,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final user = authProvider.user;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(user),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
@@ -288,11 +291,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    final user = Provider.of<AuthProvider>(context).user;
-    final displayName = user?['full_name'] != null && user!['full_name'].toString().isNotEmpty 
-        ? user['full_name'] 
-        : user?['email']?.split('@')[0].toUpperCase() ?? 'USER';
+  Widget _buildHeader(Map<String, dynamic>? user) {
+    final displayName = user?['full_name'] != null && user!['full_name'].toString().trim().isNotEmpty 
+        ? user['full_name'].toString()
+        : user?['email']?.toString().split('@')[0] ?? 'User';
 
     return Container(
       width: double.infinity,
@@ -305,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
           Text(displayName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 4),
-          Text(user?['email'] ?? '', style: TextStyle(color: Colors.blueGrey[400], fontSize: 14)),
+          Text(user?['email']?.toString() ?? '', style: TextStyle(color: Colors.blueGrey[400], fontSize: 14)),
         ],
       ),
     );
