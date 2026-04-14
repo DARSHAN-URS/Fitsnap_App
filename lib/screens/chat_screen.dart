@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/chat_message.dart';
 import 'package:intl/intl.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class ChatScreen extends StatefulWidget {
   final int? mealId;
@@ -15,6 +16,14 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -150,6 +159,23 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
+          GestureDetector(
+            onTap: _toggleListening,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _isListening ? const Color(0xFFFF5E3A) : const Color(0xFF0F172A),
+                shape: BoxShape.circle,
+                boxShadow: _isListening ? [BoxShadow(color: const Color(0xFFFF5E3A).withOpacity(0.4), blurRadius: 10, spreadRadius: 2)] : [],
+              ),
+              child: Icon(
+                _isListening ? Icons.mic_rounded : Icons.mic_none_rounded, 
+                color: Colors.white, 
+                size: 24
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -160,9 +186,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: TextField(
                 controller: _controller,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Ask anything...',
-                  hintStyle: TextStyle(color: Colors.blueGrey),
+                decoration: InputDecoration(
+                  hintText: _isListening ? 'Listening...' : 'Ask anything...',
+                  hintStyle: TextStyle(color: _isListening ? const Color(0xFFFF5E3A) : Colors.blueGrey),
                   border: InputBorder.none,
                 ),
                 onSubmitted: (_) => _handleSend(provider),
@@ -184,6 +210,26 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  }
+
+  void _toggleListening() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('onStatus: $val'),
+        onError: (val) => print('onError: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) => setState(() {
+            _controller.text = val.recognizedWords;
+          }),
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
   }
 
   void _handleSend(ChatProvider provider) {

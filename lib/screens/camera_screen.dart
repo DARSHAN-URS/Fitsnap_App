@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/meal_provider.dart';
@@ -19,6 +20,7 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isAnalyzing = false;
   bool _isCameraReady = false;
   XFile? _imageFile;
+  Meal? _detectedMeal;
 
   @override
   void initState() {
@@ -75,30 +77,31 @@ class _CameraScreenState extends State<CameraScreen> {
       final image = await _controller!.takePicture();
       
       setState(() {
+        _imageFile = image;
+        _isCaptured = true;
         _isAnalyzing = true;
       });
 
       final mealProvider = Provider.of<MealProvider>(context, listen: false);
       await mealProvider.addMealWithImage(image.path);
 
+      // Get the meal we just added (it's at the top of the list)
+      final newMeal = mealProvider.meals.first;
+
+      await Future.delayed(const Duration(seconds: 2));
+
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
+          _detectedMeal = newMeal;
         });
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Meal uploaded! AI analysis started...'),
-            backgroundColor: Color(0xFFFF5E3A),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
     } catch (e) {
       print('Capture Error: $e');
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
+          _isCaptured = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to process image: $e')),
@@ -208,13 +211,16 @@ class _CameraScreenState extends State<CameraScreen> {
             flex: 4,
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 image: DecorationImage(
-                  image: NetworkImage('https://images.unsplash.com/photo-1525351484163-7529414344d8'),
+                  image: _imageFile != null 
+                    ? FileImage(File(_imageFile!.path)) as ImageProvider
+                    : const NetworkImage('https://images.unsplash.com/photo-1525351484163-7529414344d8'),
                   fit: BoxFit.cover,
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
+              child: _isAnalyzing ? _buildScanningOverlay() : null,
             ),
           ),
           Expanded(
@@ -228,18 +234,18 @@ class _CameraScreenState extends State<CameraScreen> {
                     'Detected Meal',
                     style: TextStyle(fontSize: 14, color: Colors.blueGrey),
                   ),
-                  const Text(
-                    'Avocado Toast',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                  Text(
+                    _detectedMeal?.foodName ?? 'Analysing...',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildMacroInfo('Calories', '380', const Color(0xFF38BDF8)),
-                      _buildMacroInfo('Protein', '10g', Colors.orangeAccent),
-                      _buildMacroInfo('Carbs', '45g', Colors.greenAccent),
-                      _buildMacroInfo('Fat', '18g', Colors.purpleAccent),
+                      _buildMacroInfo('Calories', '${_detectedMeal?.calories.toInt() ?? '...'}', const Color(0xFF38BDF8)),
+                      _buildMacroInfo('Protein', '${_detectedMeal?.protein.toInt() ?? '...'}g', Colors.orangeAccent),
+                      _buildMacroInfo('Carbs', '${_detectedMeal?.carbs.toInt() ?? '...'}g', Colors.greenAccent),
+                      _buildMacroInfo('Fat', '${_detectedMeal?.fat.toInt() ?? '...'}g', Colors.purpleAccent),
                     ],
                   ),
                   const Spacer(),
@@ -295,23 +301,40 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  Widget _buildAnalyzingOverlay() {
+  Widget _buildScanningOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.7),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: Colors.white),
-            const SizedBox(height: 20),
-            Text(
-              'Analyzing with AI...',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.2),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
+      child: Stack(
+        children: [
+          _ScanningLine(),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                const SizedBox(height: 16),
+                Text(
+                  'ANALYZING',
+                  style: TextStyle(
+                    color: Colors.white, 
+                    fontWeight: FontWeight.black, 
+                    letterSpacing: 4,
+                    shadows: [Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)]
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildAnalyzingOverlay() {
+    return const SizedBox.shrink(); // Handled by _buildScanningOverlay now
   }
 
   Widget _buildTopControls() {
@@ -337,6 +360,63 @@ class _CameraScreenState extends State<CameraScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ScanningLine extends StatefulWidget {
+  @override
+  __ScanningLineState createState() => __ScanningLineState();
+}
+
+class __ScanningLineState extends State<_ScanningLine> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Positioned(
+          top: _controller.value * 300, // Roughly the height of the container
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF5E3A).withOpacity(0.5),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                )
+              ],
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  const Color(0xFFFF5E3A).withOpacity(0.8),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

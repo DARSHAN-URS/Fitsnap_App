@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/step.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +6,7 @@ import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StepProvider with ChangeNotifier {
   int _stepGoal = 10000;
@@ -160,6 +162,8 @@ class StepProvider with ChangeNotifier {
   double get caloriesBurned => currentSteps * 0.04;
   double get distanceKm => getStepsForDate(DateFormat('yyyy-MM-dd').format(DateTime.now())).distance;
 
+  Timer? _syncTimer;
+
   void updateSteps(int steps) {
     final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final todayIndex = _weeklySteps.indexWhere((data) => data.date == todayStr);
@@ -177,6 +181,11 @@ class StepProvider with ChangeNotifier {
       _weeklySteps.add(newData);
     }
     notifyListeners();
-    syncStepsToBackend(newData);
+    
+    // Debounce sync to backend
+    _syncTimer?.cancel();
+    _syncTimer = Timer(const Duration(seconds: 10), () {
+      syncStepsToBackend(newData);
+    });
   }
 }

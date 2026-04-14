@@ -51,7 +51,7 @@ class MealProvider with ChangeNotifier {
       _meals = data.map((item) => Meal.fromJson(item)).toList();
       
       // If any meal is still processing, keep polling
-      bool hasProcessing = _meals.any((m) => m.foodName == "Analysing..." || m.calories == 0);
+      bool hasProcessing = _meals.any((m) => m.status == "processing");
       if (hasProcessing) {
         if (_pollingTimer == null) _startPolling();
       } else {

@@ -44,8 +44,9 @@ dependencies:
   camera: ^0.11.0
   fl_chart: ^0.66.0
   flutter_dotenv: ^5.1.0
-  flutter_secure_storage: ^9.0.0
-  health: ^10.0.0
+  flutter_secure_storage: ^9.2.2
+  health: ^13.3.1
+  speech_to_text: ^7.3.0
 
 dev_dependencies:
   flutter_test:

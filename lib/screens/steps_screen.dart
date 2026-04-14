@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../providers/step_provider.dart';
 import '../providers/meal_provider.dart';
+import 'package:intl/intl.dart';
 
 class StepsScreen extends StatelessWidget {
   const StepsScreen({super.key});

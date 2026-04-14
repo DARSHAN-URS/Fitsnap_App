@@ -2,7 +2,7 @@ import 'package:health/health.dart';
 import 'dart:io' show Platform;
 
 class HealthService {
-  final HealthFactory health = HealthFactory();
+  final Health health = Health();
 
   static final types = [
     HealthDataType.STEPS,
@@ -33,9 +33,9 @@ class HealthService {
 
     try {
       List<HealthDataPoint> healthData = await health.getHealthDataFromTypes(
-        yesterday,
-        now,
-        types,
+        types: types,
+        startTime: yesterday,
+        endTime: now,
       );
       return healthData;
     } catch (e) {

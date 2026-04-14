@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 class WaterProvider with ChangeNotifier {
   int _dailyAmount = 0;
-  final int _targetAmount = 3000; // 3 Liters default
+  int _targetAmount = 3000; // Default 3L
   String? _authToken;
 
   final Dio _dio = Dio(BaseOptions(
@@ -14,7 +14,12 @@ class WaterProvider with ChangeNotifier {
 
   int get dailyAmount => _dailyAmount;
   int get targetAmount => _targetAmount;
-  double get progress => (_dailyAmount / _targetAmount).clamp(0.0, 1.0);
+  double get progress => _targetAmount > 0 ? (_dailyAmount / _targetAmount).clamp(0.0, 1.0) : 0.0;
+
+  void updateTargetAmount(int newTarget) {
+    _targetAmount = newTarget;
+    notifyListeners();
+  }
 
   void updateToken(String? token) {
     _authToken = token;

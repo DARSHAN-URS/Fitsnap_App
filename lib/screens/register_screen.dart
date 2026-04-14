@@ -14,6 +14,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   void _handleRegister() async {
     setState(() => _isLoading = true);
@@ -72,6 +73,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               label: 'Password',
               icon: Icons.lock_outline_rounded,
               isPassword: true,
+              obscureText: _obscurePassword,
+              onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
             const SizedBox(height: 48),
             SizedBox(
@@ -118,6 +121,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required String label,
     required IconData icon,
     bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onToggleVisibility,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -133,11 +138,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           child: TextField(
             controller: controller,
-            obscureText: isPassword,
+            obscureText: isPassword ? obscureText : false,
             keyboardType: keyboardType,
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             decoration: InputDecoration(
               prefixIcon: Icon(icon, color: Colors.blueGrey[600]),
+              suffixIcon: isPassword 
+                ? IconButton(
+                    icon: Icon(
+                      obscureText ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      color: Colors.blueGrey[600],
+                      size: 20,
+                    ),
+                    onPressed: onToggleVisibility,
+                  )
+                : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 16),
             ),

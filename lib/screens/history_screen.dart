@@ -114,8 +114,8 @@ class HistoryScreen extends StatelessWidget {
                       child: const Icon(Icons.fastfood_rounded, color: Color(0xFFFF5E3A), size: 20),
                     ),
             ),
-            title: Text(meal.foodName),
-            subtitle: Text('${meal.calories.toInt()} kcal'),
+            title: Text(meal.status == 'processing' ? 'Analysing...' : meal.foodName),
+            subtitle: Text(meal.status == 'processing' ? 'Processing ingredients...' : '${meal.calories.toInt()} kcal'),
             trailing: const Icon(Icons.chevron_right),
           ),
         );

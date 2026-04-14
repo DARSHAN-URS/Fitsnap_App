@@ -75,6 +75,8 @@
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to identify and analyze your meals from photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs microphone access for video recording features.</string>
+	<string>This app needs microphone access for voice commands and health notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app uses speech recognition to convert your voice to text for the AI Coach.</string>
 </dict>
 </plist>

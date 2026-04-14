@@ -7,6 +7,7 @@ class Meal {
   final double fat;
   final String? imageUrl;
   final DateTime createdAt;
+  final String status;
 
   Meal({
     this.id,
@@ -17,6 +18,7 @@ class Meal {
     required this.fat,
     this.imageUrl,
     required this.createdAt,
+    this.status = 'completed',
   });
 
   factory Meal.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,7 @@ class Meal {
       carbs: (json['carbs'] ?? 0.0).toDouble(),
       fat: (json['fat'] ?? 0.0).toDouble(),
       imageUrl: json['image_url'],
+      status: json['status'] ?? 'completed',
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : DateTime.now(),
@@ -41,6 +44,7 @@ class Meal {
     'carbs': carbs,
     'fat': fat,
     'image_url': imageUrl,
+    'status': status,
     'created_at': createdAt.toIso8601String(),
   };
 }

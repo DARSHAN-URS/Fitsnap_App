@@ -7,6 +7,8 @@ import '../providers/water_provider.dart';
 import 'profile_screen.dart';
 import 'chat_screen.dart';
 import 'gallery_screen.dart';
+import '../models/step.dart';
+import '../models/meal.dart';
 import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
@@ -81,13 +83,17 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 24),
             _buildSectionHeader("Today's Meals"),
             const SizedBox(height: 12),
-            _buildTodayMealsStack(),
+            _buildTodayMealsStack(mealProvider.meals.where((m) => 
+              m.createdAt.year == _selectedDate.year &&
+              m.createdAt.month == _selectedDate.month &&
+              m.createdAt.day == _selectedDate.day).toList()),
             const SizedBox(height: 30),
             _buildQuickActions(),
             const SizedBox(height: 100),
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -112,9 +118,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDateStrip() {
-    // Generate 7 days around today or the last 7 days
+    // Generate 7 days with Today at the center (index 3)
     final List<DateTime> dates = List.generate(7, (index) {
-        return DateTime.now().subtract(Duration(days: 5 - index));
+        return DateTime.now().add(Duration(days: index - 3));
     });
 
     return SizedBox(
@@ -172,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           CustomPaint(
             size: const Size(200, 110),
-            painter: ArcPainter(progress: progress),
+            painter: ArcPainter(progressVal: progress),
             child: SizedBox(
               width: 200,
               height: 110,
@@ -270,22 +276,61 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodayMealsStack() {
-    return Container(
-      height: 200,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF141D2C),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.fastfood_rounded, size: 48, color: Colors.blueGrey[800]),
-          const SizedBox(height: 16),
-          Text('Tap + to log a meal', style: TextStyle(color: Colors.blueGrey[400])),
-        ],
-      ),
+  Widget _buildTodayMealsStack(List<Meal> meals) {
+    if (meals.isEmpty) {
+      return Container(
+        height: 150,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFF141D2C),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.fastfood_rounded, size: 48, color: Colors.blueGrey[800]),
+            const SizedBox(height: 16),
+            Text('Tap + to log a meal', style: TextStyle(color: Colors.blueGrey[400])),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: meals.map((meal) => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                meal.imageUrl ?? 'https://images.unsplash.com/photo-1525351484163-7529414344d8',
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(width: 50, height: 50, color: Colors.blueGrey, child: const Icon(Icons.fastfood)),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(meal.foodName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(meal.status == 'processing' ? 'Analysing...' : '${meal.calories.toInt()} kcal', 
+                    style: TextStyle(color: meal.status == 'processing' ? Colors.orangeAccent : Colors.blueGrey[400], fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.blueGrey),
+          ],
+        ),
+      )).toList(),
     );
   }
 
@@ -294,27 +339,45 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: _buildActionBtn(Icons.restaurant_menu_rounded, 'Food', const Color(0xFFFF5E3A))),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CameraScreen())),
+                child: _buildActionBtn(Icons.restaurant_menu_rounded, 'Food', const Color(0xFFFF5E3A)),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _buildActionBtn(Icons.local_fire_department, 'Exercise', Colors.orange)),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Exercise logging coming soon!'), behavior: SnackBarBehavior.floating),
+                  );
+                },
+                child: _buildActionBtn(Icons.local_fire_department, 'Exercise', Colors.orange),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () {}, // Handled by WaterCard mostly now, but keep as quick add 500ml
-            child: _buildActionBtn(Icons.water_drop_rounded, 'Water', Colors.blue),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Consumer<WaterProvider>(
+                builder: (context, waterProvider, _) => GestureDetector(
+                  onTap: () => waterProvider.addWater(250),
+                  child: _buildActionBtn(Icons.water_drop_rounded, 'Water', Colors.blue),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GalleryScreen())),
+                child: _buildActionBtn(Icons.photo_library_rounded, 'Gallery', Colors.green),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GalleryScreen())),
-            child: _buildActionBtn(Icons.photo_library_rounded, 'Gallery', Colors.green),
-          ),
-        ),
-      ],
       ],
     );
   }
@@ -335,6 +398,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
   Widget _buildWaterCard(WaterProvider waterProvider) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -409,8 +474,8 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class ArcPainter extends CustomPainter {
-  final double progress;
-  ArcPainter({required this.progress});
+  final double progressVal;
+  ArcPainter({required this.progressVal});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -423,8 +488,8 @@ class ArcPainter extends CustomPainter {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height * 2);
     canvas.drawArc(rect, math.pi, math.pi, false, paint);
 
-    paint.color = const Color(0xFF38BDF8); // Teal/Blue arc
-    canvas.drawArc(rect, math.pi, math.pi * progress, false, paint);
+    paint.color = const Color(0xFFFF5E3A); // Sunset Orange arc
+    canvas.drawArc(rect, math.pi, math.pi * progressVal, false, paint);
   }
 
   @override
