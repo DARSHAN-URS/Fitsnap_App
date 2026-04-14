@@ -119,25 +119,36 @@ class _ChatScreenState extends State<ChatScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 48),
-            _buildQuickPrompt('Check my calories today'),
+            _buildQuickPrompt('How is my progress today?', chatProvider),
             const SizedBox(height: 12),
-            _buildQuickPrompt('Optimize my protein intake'),
+            _buildQuickPrompt('What should I eat for dinner?', chatProvider),
+            const SizedBox(height: 12),
+            _buildQuickPrompt('Log 250ml of water', chatProvider),
+            const SizedBox(height: 12),
+            _buildQuickPrompt('Give me a quick workout plan', chatProvider),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildQuickPrompt(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.blueGrey[800]!),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: Colors.blueGrey[300], fontSize: 14),
+  Widget _buildQuickPrompt(String text, ChatProvider provider) {
+    return GestureDetector(
+      onTap: () {
+        _controller.text = text;
+        _handleSend(provider);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.blueGrey[800]!),
+          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFF1E293B).withOpacity(0.5),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(color: Colors.blueGrey[100], fontSize: 14, fontWeight: FontWeight.w500),
+        ),
       ),
     );
   }
