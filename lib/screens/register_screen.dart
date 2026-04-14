@@ -17,9 +17,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
 
   void _handleRegister() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both email and password.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     final success = await Provider.of<AuthProvider>(context, listen: false)
-        .register(_emailController.text, _passwordController.text);
+        .register(email, password);
     
     setState(() => _isLoading = false);
 

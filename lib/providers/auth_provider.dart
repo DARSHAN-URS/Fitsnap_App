@@ -11,7 +11,9 @@ class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
+    baseUrl: (dotenv.env['API_URL'] ?? 'http://localhost:8000').replaceAll(RegExp(r'/$'), ''),
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 15),
   ));
 
   String? get token => _token;
@@ -76,14 +78,18 @@ class AuthProvider with ChangeNotifier {
       await _storage.write(key: 'auth_token', value: _token);
       
       _isAuthenticated = true;
-      await fetchProfile(); // This will populate _user
+      await fetchProfile();
       notifyListeners();
       return true;
-    } catch (e) {
-      print('Login Error: $e');
-      if (e is DioException) {
-        print('Dio response: ${e.response?.data}');
+    } on DioException catch (e) {
+      print('Login DioError: ${e.type} - ${e.message}');
+      if (e.response != null) {
+        print('Login Error Data: ${e.response?.data}');
+        print('Login Status Code: ${e.response?.statusCode}');
       }
+      return false;
+    } catch (e) {
+      print('Login Unexpected Error: $e');
       return false;
     }
   }
@@ -92,11 +98,20 @@ class AuthProvider with ChangeNotifier {
     try {
       await _dio.post(
         'auth/register',
-        data: {'email': email, 'password': password},
+        data: {
+          'email': email,
+          'password': password,
+        },
       );
       return true;
+    } on DioException catch (e) {
+      print('Register DioError: ${e.type} - ${e.message}');
+      if (e.response != null) {
+        print('Register Error Data: ${e.response?.data}');
+      }
+      return false;
     } catch (e) {
-      print('Register Error: $e');
+      print('Register Unexpected Error: $e');
       return false;
     }
   }

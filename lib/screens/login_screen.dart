@@ -17,9 +17,19 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   void _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both email and password.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     final success = await Provider.of<AuthProvider>(context, listen: false)
-        .login(_emailController.text, _passwordController.text);
+        .login(email, password);
     
     setState(() => _isLoading = false);
 
