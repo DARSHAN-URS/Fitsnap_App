@@ -29,7 +29,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
     final success = await Provider.of<AuthProvider>(context, listen: false)
-        .register(email, password);
+        .register(email, password, _nameController.text.trim());
     
     setState(() => _isLoading = false);
 

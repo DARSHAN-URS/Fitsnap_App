@@ -99,14 +99,15 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> register(String email, String password) async {
+  Future<bool> register(String email, String password, String fullName) async {
     try {
-      print('DEBUG: Attempting registration at ${_dio.options.baseUrl}/auth/register');
+      print('DEBUG: Attempting registration at ${_dio.options.baseUrl}auth/register');
       await _dio.post(
         'auth/register',
         data: {
           'email': email,
           'password': password,
+          'full_name': fullName,
         },
       );
       return true;

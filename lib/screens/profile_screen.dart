@@ -305,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(children: [IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white))]),
           const CircleAvatar(radius: 45, backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person_rounded, size: 50, color: Colors.white)),
           const SizedBox(height: 16),
-          Text(displayName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text('Hi, $displayName', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 4),
           Text(user?['email']?.toString() ?? '', style: TextStyle(color: Colors.blueGrey[400], fontSize: 14)),
         ],
