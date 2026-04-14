@@ -1,4 +1,4 @@
-package com.steptracker.health_tracker
+package com.fitsnap.ai
 
 import android.app.Activity
 import android.content.Context
