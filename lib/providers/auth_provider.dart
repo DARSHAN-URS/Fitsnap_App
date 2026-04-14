@@ -11,7 +11,9 @@ class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: (dotenv.env['API_URL'] ?? 'http://localhost:8000').replaceAll(RegExp(r'/$'), ''),
+    baseUrl: (dotenv.env['API_URL'] ?? 'http://localhost:8000').endsWith('/') 
+        ? (dotenv.env['API_URL'] ?? 'http://localhost:8000') 
+        : '${dotenv.env['API_URL'] ?? 'http://localhost:8000'}/',
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 15),
   ));
@@ -99,6 +101,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> register(String email, String password) async {
     try {
+      print('DEBUG: Attempting registration at ${_dio.options.baseUrl}/auth/register');
       await _dio.post(
         'auth/register',
         data: {

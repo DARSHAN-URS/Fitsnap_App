@@ -9,7 +9,9 @@ class WaterProvider with ChangeNotifier {
   String? _authToken;
 
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
+    baseUrl: (dotenv.env['API_URL'] ?? 'http://localhost:8000').endsWith('/') 
+        ? (dotenv.env['API_URL'] ?? 'http://localhost:8000') 
+        : '${dotenv.env['API_URL'] ?? 'http://localhost:8000'}/',
   ));
 
   int get dailyAmount => _dailyAmount;

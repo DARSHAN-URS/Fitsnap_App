@@ -11,7 +11,9 @@ class MealProvider with ChangeNotifier {
   Timer? _pollingTimer;
   
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: dotenv.env['API_URL'] ?? 'http://localhost:8000',
+    baseUrl: (dotenv.env['API_URL'] ?? 'http://localhost:8000').endsWith('/') 
+        ? (dotenv.env['API_URL'] ?? 'http://localhost:8000') 
+        : '${dotenv.env['API_URL'] ?? 'http://localhost:8000'}/',
   ));
 
   List<Meal> get meals => [..._meals];
