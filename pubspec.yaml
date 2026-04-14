@@ -47,6 +47,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   health: ^13.3.1
   speech_to_text: ^7.3.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

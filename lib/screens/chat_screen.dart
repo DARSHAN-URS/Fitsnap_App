@@ -4,6 +4,10 @@ import '../providers/chat_provider.dart';
 import '../models/chat_message.dart';
 import 'package:intl/intl.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'dart:convert';
+import 'dart:io';
 
 class ChatScreen extends StatefulWidget {
   final int? mealId;
@@ -17,12 +21,26 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late stt.SpeechToText _speech;
+  late FlutterTts _tts;
   bool _isListening = false;
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
+    _tts = FlutterTts();
+    _initTts();
+  }
+
+  void _initTts() async {
+    await _tts.setLanguage("en-US");
+    await _tts.setPitch(1.0);
+  }
+
+  void _speak(String text) async {
+    await _tts.speak(text);
   }
 
   void _scrollToBottom() {
@@ -66,6 +84,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemCount: chatProvider.messages.length,
                     itemBuilder: (context, index) {
                       final msg = chatProvider.messages[index];
+                      // Speak ONLY the last AI message if it just arrived
+                      if (index == chatProvider.messages.length - 1 && msg.role == 'assistant' && !chatProvider.isLoading) {
+                         _speak(msg.content);
+                      }
                       return _buildMessageBubble(msg);
                     },
                   ),
@@ -195,6 +217,15 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           GestureDetector(
+            onTap: _pickImage,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(color: Color(0xFF0F172A), shape: BoxShape.circle),
+              child: Icon(Icons.add_a_photo_rounded, color: _selectedImage != null ? const Color(0xFFFF5E3A) : Colors.blueGrey, size: 22),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
             onTap: _toggleListening,
             child: Container(
               padding: const EdgeInsets.all(12),
@@ -267,10 +298,28 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _handleSend(ChatProvider provider) {
-    if (_controller.text.trim().isNotEmpty) {
-      provider.sendMessage(_controller.text, mealId: widget.mealId);
+  Future<void> _pickImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() => _selectedImage = File(image.path));
+    }
+  }
+
+  void _handleSend(ChatProvider provider) async {
+    String? imageBase64;
+    if (_selectedImage != null) {
+      final bytes = await _selectedImage!.readAsBytes();
+      imageBase64 = base64Encode(bytes);
+    }
+
+    if (_controller.text.trim().isNotEmpty || imageBase64 != null) {
+      provider.sendMessage(
+        _controller.text.trim(), 
+        mealId: widget.mealId,
+        imageBase64: imageBase64
+      );
       _controller.clear();
+      setState(() => _selectedImage = null);
     }
   }
 }

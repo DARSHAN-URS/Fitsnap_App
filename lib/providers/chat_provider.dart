@@ -39,14 +39,14 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String content, {int? mealId}) async {
-    if (_authToken == null || content.trim().isEmpty) return;
+  Future<void> sendMessage(String content, {int? mealId, String? imageBase64}) async {
+    if (_authToken == null || (content.trim().isEmpty && imageBase64 == null)) return;
 
     // Optimistic UI update
     final tempMsg = ChatMsg(
       id: -1,
       role: 'user',
-      content: content,
+      content: imageBase64 != null ? "[Image Attached] $content" : content,
       createdAt: DateTime.now(),
       mealId: mealId,
     );
@@ -57,7 +57,11 @@ class ChatProvider with ChangeNotifier {
     try {
       final response = await _dio.post(
         '/chat/',
-        data: {'content': content, 'meal_id': mealId},
+        data: {
+          'content': content, 
+          'meal_id': mealId,
+          'image_base64': imageBase64,
+        },
         options: Options(headers: {'Authorization': 'Bearer $_authToken'}),
       );
       
