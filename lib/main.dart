@@ -129,7 +129,7 @@ class _MainNavigationState extends State<MainNavigation> {
             _buildNavItem(1, Icons.calendar_today_rounded, 'Diary'),
             const SizedBox(width: 48), // Space for FAB
             _buildNavItem(2, Icons.bar_chart_rounded, 'Charts'),
-            _buildNavItem(3, Icons.psychology_rounded, 'Coach'),
+            _buildNavItem(3, Icons.psychology_rounded, 'Advisor'),
           ],
         ),
       ),

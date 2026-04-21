@@ -399,7 +399,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('Upgrade for $9.99/mo', style: TextStyle(color: Color(0xFFFF5E3A), fontWeight: FontWeight.w900, fontSize: 16)),
+              child: const Text('Upgrade for \$9.99/mo', style: TextStyle(color: Color(0xFFFF5E3A), fontWeight: FontWeight.w900, fontSize: 16)),
             ),
           ),
         ],
