@@ -23,7 +23,23 @@ class StepProvider with ChangeNotifier {
     if (token != null) {
       fetchTodaySteps();
       fetchWeeklySteps();
+      _loadMockWeeklySteps();
     }
+  }
+
+  void _loadMockWeeklySteps() {
+    final now = DateTime.now();
+    final format = DateFormat('yyyy-MM-dd');
+    _weeklySteps = List.generate(7, (i) {
+      final date = now.subtract(Duration(days: 6 - i));
+      return StepData(
+        stepCount: 4000 + (i * 1200) + (i % 2 == 0 ? 500 : -300),
+        date: format.format(date),
+        distance: (5 + i * 0.8),
+        caloriesBurned: (200 + i * 40.0),
+      );
+    });
+    notifyListeners();
   }
 
   void updateStepGoal(int goal) {

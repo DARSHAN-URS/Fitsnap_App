@@ -100,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = authProvider.user;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF05080E),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -307,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           Row(children: [IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white))]),
-          const CircleAvatar(radius: 45, backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person_rounded, size: 50, color: Colors.white)),
+          const CircleAvatar(radius: 45, backgroundColor: Color(0xFF05080E), child: Icon(Icons.person_rounded, size: 50, color: Colors.white)),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,

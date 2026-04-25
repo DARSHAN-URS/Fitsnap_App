@@ -18,11 +18,26 @@ class ProgressProvider with ChangeNotifier {
   List<ProgressImg> get photos => [..._photos];
   bool get isLoading => _isLoading;
 
+  List<Map<String, dynamic>> _weeklyWeight = [];
+  List<Map<String, dynamic>> get weeklyWeight => _weeklyWeight;
+
   void updateToken(String? token) {
     _authToken = token;
     if (token != null) {
       fetchPhotos();
+      _loadMockWeeklyWeight();
     }
+  }
+
+  void _loadMockWeeklyWeight() {
+    final now = DateTime.now();
+    _weeklyWeight = List.generate(7, (i) {
+      return {
+        'date': now.subtract(Duration(days: 6 - i)),
+        'weight': 85.0 - (i * 0.2) + (i % 3 == 0 ? 0.3 : -0.1),
+      };
+    });
+    notifyListeners();
   }
 
   Future<void> fetchPhotos() async {

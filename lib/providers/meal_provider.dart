@@ -23,11 +23,66 @@ class MealProvider with ChangeNotifier {
     _authToken = token;
     if (token != null) {
       fetchMeals();
+      _loadMockData(); // Ensure UI is never empty for demonstration
     } else {
       _meals = [];
       _stopPolling();
       notifyListeners();
     }
+  }
+
+  List<Map<String, dynamic>> _weeklyMacros = [];
+  List<Map<String, dynamic>> get weeklyMacros => _weeklyMacros;
+
+  void _loadMockData() {
+    _meals = [
+      // ... existing mock meals
+      Meal(
+        id: 101,
+        foodName: "Avocado Toast",
+        calories: 350,
+        protein: 12,
+        carbs: 45,
+        fat: 18,
+        status: "completed",
+        imageUrl: "https://images.unsplash.com/photo-1525351484163-7529414344d8",
+        createdAt: DateTime.now(),
+      ),
+      Meal(
+        id: 102,
+        foodName: "Grilled Chicken Salad",
+        calories: 420,
+        protein: 35,
+        carbs: 15,
+        fat: 22,
+        status: "completed",
+        imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c",
+        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+      ),
+      Meal(
+        id: 103,
+        foodName: "Greek Yogurt Bowl",
+        calories: 280,
+        protein: 15,
+        carbs: 30,
+        fat: 8,
+        status: "completed",
+        imageUrl: "https://images.unsplash.com/photo-1488477181946-6428a0291777",
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      ),
+    ];
+
+    final now = DateTime.now();
+    _weeklyMacros = List.generate(7, (i) {
+      return {
+        'date': now.subtract(Duration(days: 6 - i)),
+        'protein': 120.0 + (i * 5),
+        'fat': 60.0 + (i * 2),
+        'carbs': 200.0 + (i * 10),
+        'calories': 1800.0 + (i * 100),
+      };
+    });
+    notifyListeners();
   }
 
   void _startPolling() {

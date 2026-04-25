@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_logo.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 
@@ -60,9 +61,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
               style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -1),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Join FitSnap AI and start your journey.',
-              style: TextStyle(fontSize: 16, color: Colors.blueGrey[400]),
+            Row(
+              children: [
+                Text(
+                  'Join ',
+                  style: TextStyle(fontSize: 16, color: Colors.blueGrey[400]),
+                ),
+                const AppLogo(fontSize: 18),
+                Text(
+                  ' and start your journey.',
+                  style: TextStyle(fontSize: 16, color: Colors.blueGrey[400]),
+                ),
+              ],
             ),
             const SizedBox(height: 48),
             _buildTextField(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_logo.dart';
 import 'package:provider/provider.dart';
 import '../providers/meal_provider.dart';
 
@@ -11,14 +12,7 @@ class HistoryScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'FitSnap AI',
-          style: TextStyle(
-            color: Color(0xFFFF5E3A),
-            fontWeight: FontWeight.w900,
-            fontSize: 26,
-          ),
-        ),
+        title: const AppLogo(fontSize: 22),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16.0),

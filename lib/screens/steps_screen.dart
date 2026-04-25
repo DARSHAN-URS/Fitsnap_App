@@ -1,232 +1,328 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../providers/step_provider.dart';
 import '../providers/meal_provider.dart';
-import 'package:intl/intl.dart';
+import '../providers/water_provider.dart';
+import '../providers/progress_provider.dart';
+import '../providers/measurement_provider.dart';
+import '../widgets/app_logo.dart';
 
-class StepsScreen extends StatelessWidget {
+class StepsScreen extends StatefulWidget {
   const StepsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final stepProvider = Provider.of<StepProvider>(context);
+  State<StepsScreen> createState() => _StepsScreenState();
+}
 
+class _StepsScreenState extends State<StepsScreen> {
+  String _selectedChart = 'Steps Trend';
+
+  final List<Map<String, dynamic>> _chartOptions = [
+    {'label': 'Steps Trend', 'icon': Icons.directions_walk_rounded, 'color': Color(0xFF3ABEF9)},
+    {'label': 'Weight Trend', 'icon': Icons.monitor_weight_rounded, 'color': Color(0xFF69F0AE)},
+    {'label': 'Calories Trend', 'icon': Icons.local_fire_department_rounded, 'color': Color(0xFFFFAB40)},
+    {'label': 'Protein Intake', 'icon': Icons.restaurant_rounded, 'color': Color(0xFFFF5252)},
+    {'label': 'Carbs Intake', 'icon': Icons.bakery_dining_rounded, 'color': Color(0xFF40C4FF)},
+    {'label': 'Fat Intake', 'icon': Icons.opacity_rounded, 'color': Color(0xFFFFD740)},
+    {'label': 'Water Intake', 'icon': Icons.water_drop_rounded, 'color': Color(0xFF40C4FF)},
+    {'label': 'Waist Measurement', 'icon': Icons.straighten_rounded, 'color': Color(0xFF3ABEF9)},
+    {'label': 'Chest Measurement', 'icon': Icons.straighten_rounded, 'color': Colors.orangeAccent},
+    {'label': 'Hips Measurement', 'icon': Icons.straighten_rounded, 'color': Colors.purpleAccent},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF05080E),
       appBar: AppBar(
-        title: const Text(
-          'FitSnap AI',
-          style: TextStyle(
-            color: Color(0xFFFF5E3A),
-            fontWeight: FontWeight.w900,
-            fontSize: 26,
-          ),
-        ),
+        title: const AppLogo(fontSize: 22),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDateRangeHeader(),
-            const SizedBox(height: 20),
-            _buildMetricChartCard(stepProvider),
-            const SizedBox(height: 20),
-            _buildSummaryStats(stepProvider),
-            const SizedBox(height: 24),
-            const Text("Macronutrients", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            _buildMacroHistoryChart(),
-          ],
+      body: Column(
+        children: [
+          _buildChartDropdown(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: _buildSelectedChart(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartDropdown() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161F2C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedChart,
+          dropdownColor: const Color(0xFF1A2636),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3ABEF9)),
+          isExpanded: true,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          items: _chartOptions.map((option) {
+            return DropdownMenuItem<String>(
+              value: option['label'],
+              child: Row(
+                children: [
+                  Icon(option['icon'], color: option['color'], size: 20),
+                  const SizedBox(width: 12),
+                  Text(option['label']),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (String? newValue) {
+            if (newValue != null) {
+              setState(() => _selectedChart = newValue);
+            }
+          },
         ),
       ),
     );
   }
 
-  Widget _buildDateRangeHeader() {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 6));
-    final fmt = DateFormat('MMM d');
-    
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildSelectedChart() {
+    final stepProvider = Provider.of<StepProvider>(context);
+    final mealProvider = Provider.of<MealProvider>(context);
+    final waterProvider = Provider.of<WaterProvider>(context);
+    final progressProvider = Provider.of<ProgressProvider>(context);
+    final measurementProvider = Provider.of<MeasurementProvider>(context);
+
+    Widget chart;
+    String title = _selectedChart;
+    Color color = Colors.white;
+
+    switch (_selectedChart) {
+      case 'Steps Trend':
+        color = const Color(0xFF3ABEF9);
+        chart = _buildLineChart(List<double>.from(stepProvider.weeklySteps.map((s) => s.stepCount.toDouble())), color);
+        break;
+      case 'Weight Trend':
+        color = const Color(0xFF69F0AE);
+        chart = _buildLineChart(List<double>.from(progressProvider.weeklyWeight.map((w) => (w['weight'] as num).toDouble())), color, showDots: true);
+        break;
+      case 'Calories Trend':
+        color = const Color(0xFFFFAB40);
+        chart = _buildLineChart(List<double>.from(mealProvider.weeklyMacros.map((m) => (m['calories'] as num).toDouble())), color);
+        break;
+      case 'Protein Intake':
+        color = const Color(0xFFFF5252);
+        chart = _buildBarChart(List<double>.from(mealProvider.weeklyMacros.map((m) => (m['protein'] as num).toDouble())), color);
+        break;
+      case 'Carbs Intake':
+        color = const Color(0xFF40C4FF);
+        chart = _buildBarChart(List<double>.from(mealProvider.weeklyMacros.map((m) => (m['carbs'] as num).toDouble())), color);
+        break;
+      case 'Fat Intake':
+        color = const Color(0xFFFFD740);
+        chart = _buildBarChart(List<double>.from(mealProvider.weeklyMacros.map((m) => (m['fat'] as num).toDouble())), color);
+        break;
+      case 'Water Intake':
+        color = const Color(0xFF40C4FF);
+        chart = _buildBarChart(List<double>.from(waterProvider.weeklyWater.map((w) => (w['amount_ml'] as num).toDouble())), color);
+        break;
+      case 'Waist Measurement':
+        color = const Color(0xFF3ABEF9);
+        chart = _buildLineChart(List<double>.from(measurementProvider.measurements.map((m) => m.waist ?? 0)), color, showDots: true);
+        break;
+      case 'Chest Measurement':
+        color = Colors.orangeAccent;
+        chart = _buildLineChart(List<double>.from(measurementProvider.measurements.map((m) => m.chest ?? 0)), color, showDots: true);
+        break;
+      case 'Hips Measurement':
+        color = Colors.purpleAccent;
+        chart = _buildLineChart(List<double>.from(measurementProvider.measurements.map((m) => m.hips ?? 0)), color, showDots: true);
+        break;
+      default:
+        chart = const SizedBox();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.chevron_left_rounded, color: Colors.blueGrey[400]),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            '${fmt.format(weekStart)} - ${fmt.format(weekEnd)}, ${now.year}',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Icon(Icons.chevron_right_rounded, color: Colors.blueGrey[400]),
+        _buildChartCard(title, chart, color),
+        const SizedBox(height: 30),
+        _buildSummaryInfo(title, color),
       ],
     );
   }
 
-  Widget _buildMetricChartCard(StepProvider stepProvider) {
+  Widget _buildChartCard(String title, Widget chart, Color color) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF161F2C),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: color.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Trend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.keyboard_arrow_down_rounded, size: 20),
-                    SizedBox(width: 8),
-                    Text('Steps History'),
-                  ],
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Text('WEEKLY', style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
-          const SizedBox(height: 30),
-          SizedBox(
-            height: 250,
-            child: stepProvider.weeklySteps.isEmpty 
-              ? const Center(child: Text('Logging your first week...', style: TextStyle(color: Colors.blueGrey)))
-              : LineChart(
-                LineChartData(
-                  gridData: const FlGridData(show: false),
-                  titlesData: FlTitlesData(
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          if (value.toInt() >= 0 && value.toInt() < stepProvider.weeklySteps.length) {
-                             final date = DateTime.parse(stepProvider.weeklySteps[value.toInt()].date);
-                             return Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(DateFormat('d/M').format(date), style: TextStyle(color: Colors.blueGrey[400], fontSize: 10)),
-                            );
-                          }
-                          return const Text('');
-                        },
-                      ),
-                    ),
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: stepProvider.weeklySteps.asMap().entries.map((e) {
-                        return FlSpot(e.key.toDouble(), e.value.stepCount.toDouble());
-                      }).toList(),
-                      isCurved: true,
-                      color: Colors.greenAccent,
-                      barWidth: 4,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: Colors.greenAccent.withOpacity(0.1),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ),
+          const SizedBox(height: 32),
+          SizedBox(height: 250, child: chart),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryStats(StepProvider stepProvider) {
-    final avg = stepProvider.weeklySteps.isEmpty ? 0 : 
-                stepProvider.weeklySteps.map((e) => e.stepCount).reduce((a, b) => a + b) ~/ stepProvider.weeklySteps.length;
-                
-    return Column(
-      children: [
-        _buildStatRow('Days Logged:', '${stepProvider.weeklySteps.length}'),
-        _buildStatRow('Weekly Average:', '$avg steps'),
-        _buildStatRow('Daily Goal:', '${stepProvider.stepGoal} steps'),
-        const Divider(color: Colors.blueGrey, height: 32),
-      ],
-    );
-  }
-
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.blueGrey[300])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMacroHistoryChart() {
+  Widget _buildSummaryInfo(String title, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.1)),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              _macroBar('Fat', 0.25, Colors.purple),
-              _macroBar('Carbs', 0.45, Colors.teal),
-              _macroBar('Protein', 0.30, Colors.yellow),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _macroLegend('Fat', Colors.purple),
-              const SizedBox(width: 16),
-              _macroLegend('Carbs', Colors.teal),
-              const SizedBox(width: 16),
-              _macroLegend('Protein', Colors.yellow),
-            ],
+          Icon(Icons.insights_rounded, color: color, size: 24),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              'Showing your $title progress for the last 7 days. Consistency is key to reaching your targets!',
+              style: TextStyle(color: Colors.blueGrey[300], fontSize: 14, height: 1.4),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _macroBar(String label, double flex, Color color) {
-    return Expanded(
-      flex: (flex * 100).toInt(),
-      child: Container(
-        height: 12,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
+  Widget _buildLineChart(List<double> data, Color color, {bool showDots = false}) {
+    if (data.isEmpty) return _buildEmptyState();
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
         ),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= data.length) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: Text('${index + 1}d', style: TextStyle(color: Colors.blueGrey[600], fontSize: 10, fontWeight: FontWeight.bold)),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),
+            isCurved: true,
+            curveSmoothness: 0.35,
+            color: color,
+            barWidth: 4,
+            isStrokeCapRound: true,
+            dotData: FlDotData(show: showDots),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [color.withOpacity(0.2), color.withOpacity(0.0)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _macroLegend(String label, Color color) {
-    return Row(
-      children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 12)),
-      ],
+  Widget _buildBarChart(List<double> data, Color color) {
+    if (data.isEmpty) return _buildEmptyState();
+    return BarChart(
+      BarChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= data.length) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: Text('${index + 1}d', style: TextStyle(color: Colors.blueGrey[600], fontSize: 10, fontWeight: FontWeight.bold)),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: data.asMap().entries.map((e) => BarChartGroupData(
+          x: e.key,
+          barRods: [
+            BarChartRodData(
+              toY: e.value,
+              color: color,
+              width: 14,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+              backDrawRodData: BackgroundBarRodData(
+                show: true,
+                toY: data.reduce((a, b) => a > b ? a : b) * 1.2,
+                color: Colors.white.withOpacity(0.03),
+              ),
+            )
+          ],
+        )).toList(),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.analytics_outlined, color: Colors.white12, size: 48),
+          SizedBox(height: 16),
+          Text('No data recorded for this period', style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.w500)),
+        ],
+      ),
     );
   }
 }

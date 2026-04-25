@@ -23,11 +23,26 @@ class WaterProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  List<Map<String, dynamic>> _weeklyWater = [];
+  List<Map<String, dynamic>> get weeklyWater => _weeklyWater;
+
   void updateToken(String? token) {
     _authToken = token;
     if (token != null) {
       fetchTodayWater();
+      _loadMockWeeklyWater();
     }
+  }
+
+  void _loadMockWeeklyWater() {
+    final now = DateTime.now();
+    _weeklyWater = List.generate(7, (i) {
+      return {
+        'date': DateFormat('yyyy-MM-dd').format(now.subtract(Duration(days: 6 - i))),
+        'amount_ml': 2000 + (i * 200) + (i % 2 == 0 ? 300 : -100),
+      };
+    });
+    notifyListeners();
   }
 
   Future<void> fetchTodayWater() async {
