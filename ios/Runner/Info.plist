@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Fit Snap</string>
+	<string>Fitflow Ai</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Fit Snap</string>
+	<string>fitflow_ai</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -66,17 +66,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSHealthShareUsageDescription</key>
-	<string>We need access to your health data to track your steps and distance.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>We need access to update your health data for tracking purposes.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>This app needs access to your motion data to track your steps live throughout the day.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to identify and analyze your meals from photos.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs microphone access for voice commands and health notes.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>This app uses speech recognition to convert your voice to text for the AI Coach.</string>
 </dict>
 </plist>

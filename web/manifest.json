@@ -1,6 +1,6 @@
 {
-    "name": "health_tracker",
-    "short_name": "health_tracker",
+    "name": "fitflow_ai",
+    "short_name": "fitflow_ai",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
