@@ -5,9 +5,9 @@ class AppTheme {
   // Color Palette
   static const Color primary = Color(0xFF0F172A); // Slate 900
   static const Color primaryLight = Color(0xFF1E293B); // Slate 800
-  static const Color accent = Color(0xFF6366F1); // Indigo 500
-  static const Color accentLight = Color(0xFF818CF8); // Indigo 400
-  
+  static const Color accent = Color(0xFF00D1B2); // Teal 400
+  static const Color accentLight = Color(0xFF5EEAD4); // Teal 200
+
   // Neon Accents
   static const Color neonIndigo = Color(0xFF6366F1);
   static const Color neonPink = Color(0xFFEC4899);
@@ -21,28 +21,27 @@ class AppTheme {
   static const Color fatsColor = Color(0xFF06B6D4);    // Cyan
   static const Color caloriesColor = Color(0xFFEF4444); // Red/Coral
 
-  // Gradients
+  // Gradients (Refined for new teal-neon aesthetic)
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+    colors: [Color(0xFF00D1B2), Color(0xFF06B6D4)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient accentGradient = LinearGradient(
-    colors: [Color(0xFFEC4899), Color(0xFF8B5CF6)],
+    colors: [Color(0xFF5EEAD4), Color(0xFF00D1B2)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient backgroundGradient = LinearGradient(
-    colors: [Color(0xFFEEF2FF), Color(0xFFF5F3FF), Color(0xFFF8FAFC)],
+    colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F6)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    stops: [0.0, 0.4, 1.0],
   );
 
   static const LinearGradient authGradient = LinearGradient(
-    colors: [Color(0xFF0F172A), Color(0xFF020617)],
+    colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F6)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -65,7 +64,7 @@ class AppTheme {
 
   static List<BoxShadow> get glowShadow => [
     BoxShadow(
-      color: const Color(0xFF6366F1).withOpacity(0.25),
+      color: const Color(0xFF6366F1).withOpacity(0.15),
       blurRadius: 20,
       offset: const Offset(0, 10),
       spreadRadius: 0,
@@ -99,13 +98,13 @@ class AppTheme {
 
   static TextStyle get bodyMedium => GoogleFonts.inter(
     fontSize: 14,
-    color: Colors.black54,
+    color: const Color(0xFF334155), // Slate 700
   );
 
   static TextStyle get labelSmall => GoogleFonts.inter(
     fontSize: 12,
     fontWeight: FontWeight.w600,
-    color: Colors.black45,
+    color: const Color(0xFF64748B), // Slate 500
   );
 
   // Glassmorphic Input Decoration helper

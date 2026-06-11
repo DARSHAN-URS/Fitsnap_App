@@ -717,25 +717,44 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                     child: Container(
-                      height: 76,
+                      height: 82,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withOpacity(0.75),
                         borderRadius: AppTheme.pillRadius,
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withOpacity(0.6),
                           width: 1.5,
                         ),
-                        boxShadow: AppTheme.cardShadow,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          Expanded(child: _buildNavItem(0, Icons.grid_view_rounded, 'Home')),
-                          Expanded(child: _buildNavItem(1, Icons.directions_run_rounded, 'Activity')),
-                          const SizedBox(width: 76), // Space for centered FAB
-                          Expanded(child: _buildNavItem(2, Icons.bar_chart_rounded, 'Progress', customIcon: _buildProgressIcon())),
-                          Expanded(child: _buildNavItem(3, Icons.explore_outlined, 'Groups')),
-                          Expanded(child: _buildNavItem(4, Icons.person_outline_rounded, 'Profile', isProfile: true)),
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Expanded(child: _buildNavItem(0, Icons.grid_view_rounded, 'Home')),
+                                Expanded(child: _buildNavItem(1, Icons.directions_run_rounded, 'Activity')),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 76), // Space for centered FAB, guaranteed to be exactly in the center!
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Expanded(child: _buildNavItem(2, Icons.bar_chart_rounded, 'Progress', customIcon: _buildProgressIcon())),
+                                Expanded(child: _buildNavItem(3, Icons.explore_outlined, 'Groups')),
+                                Expanded(child: _buildNavItem(4, Icons.person_outline_rounded, 'Profile', isProfile: true)),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -770,7 +789,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 height: 68 + (value * 22),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppTheme.accent.withOpacity((1 - value) * 0.2),
+                  color: AppTheme.neonIndigo.withOpacity((1 - value) * 0.2),
                 ),
               ),
             // Middle Pulse Ring
@@ -780,7 +799,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 height: 68 + (value * 12),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppTheme.accent.withOpacity((1 - value) * 0.3),
+                  color: AppTheme.neonIndigo.withOpacity((1 - value) * 0.3),
                 ),
               ),
             // The Button itself
@@ -841,7 +860,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Widget _buildProgressIcon() {
     final isSelected = _currentIndex == 2;
-    final color = isSelected ? AppTheme.accent : Colors.black45;
+    final color = isSelected ? AppTheme.neonIndigo : const Color(0xFF64748B);
     
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -879,13 +898,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Widget _buildNavItem(int index, IconData icon, String label, {Widget? customIcon, bool isProfile = false}) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? AppTheme.accent : Colors.black45;
+    final color = isSelected ? AppTheme.neonIndigo : const Color(0xFF64748B);
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -894,7 +913,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.accent : Colors.grey.shade300,
+                  color: isSelected ? AppTheme.neonIndigo : Colors.black.withOpacity(0.08),
                   shape: BoxShape.circle,
                   border: isSelected ? Border.all(color: Colors.white, width: 1.5) : null,
                 ),
@@ -902,7 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   child: Text(
                     'DU',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: isSelected ? Colors.white : const Color(0xFF64748B),
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                       fontFamily: GoogleFonts.inter().fontFamily,
@@ -915,6 +934,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             const SizedBox(height: 4),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+              softWrap: false,
               style: GoogleFonts.inter(
                 color: color,
                 fontSize: 11,
@@ -928,7 +950,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               width: isSelected ? 4 : 0,
               height: isSelected ? 4 : 0,
               decoration: const BoxDecoration(
-                color: AppTheme.accent,
+                color: AppTheme.neonIndigo,
                 shape: BoxShape.circle,
               ),
             ),

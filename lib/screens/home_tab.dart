@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'activity_tracker_screen.dart';
+import 'leaderboard_screen.dart';
+import 'challenge_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/badge_provider.dart';
 
-class HomeTab extends StatefulWidget {
+class HomeTab extends ConsumerStatefulWidget {
   final int consumed;
   final int protein;
   final int carbs;
@@ -23,14 +28,15 @@ class HomeTab extends StatefulWidget {
   });
 
   @override
-  State<HomeTab> createState() => _HomeTabState();
+  ConsumerState<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab> {
+class _HomeTabState extends ConsumerState<HomeTab> {
   int _steps = 6420;
   int _water = 1250; // ml
   final int _stepGoal = 10000;
   final int _waterGoal = 2500; // ml
+  String? _aiInsight;
 
   // Dynamic calorie burn based on step count
   int get _burnedCalories => 200 + (_steps * 0.04).toInt();
@@ -47,6 +53,17 @@ class _HomeTabState extends State<HomeTab> {
       _steps = prefs.getInt('home_steps') ?? 6420;
       _water = prefs.getInt('home_water') ?? 1250;
     });
+    
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getWorkoutInsight();
+      if (res['success'] && res['data'] != null) {
+        if (mounted) {
+          setState(() {
+            _aiInsight = res['data']['insight'];
+          });
+        }
+      }
+    }
   }
 
   Future<void> _saveStats() async {
@@ -118,6 +135,8 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    final badgeState = ref.watch(badgeProvider);
+    
     final int proteinLeft = (170 - widget.protein).clamp(0, 170);
     final double proteinProgress = (widget.protein / 170.0).clamp(0.0, 1.0);
 
@@ -136,49 +155,87 @@ class _HomeTabState extends State<HomeTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    'Good morning,',
-                    style: GoogleFonts.inter(fontSize: 14, color: Colors.black45, fontWeight: FontWeight.w500),
+                  Image.asset(
+                    'assets/images/logo.png',
+                    height: 38,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.fitness_center_rounded, color: AppTheme.accent, size: 24);
+                    },
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Darshan Urs 👋',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primary,
-                      letterSpacing: -0.8,
-                    ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Good morning,',
+                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Darshan Urs 👋',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primary,
+                          letterSpacing: -0.8,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
               Row(
                 children: [
                   // Streak Widget
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: AppTheme.cardShadow,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.local_fire_department_rounded, color: AppTheme.neonPink, size: 20),
-                        const SizedBox(width: 4),
-                        Text(
-                          '7 days',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            color: AppTheme.primary,
+                  GestureDetector(
+                    onTap: () {
+                      ref.read(badgeProvider.notifier).logActivity();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: AppTheme.cardShadow,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.local_fire_department_rounded, color: AppTheme.neonPink, size: 20),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${badgeState.streakDays} days',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: AppTheme.primary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Leaderboard Icon
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+                      );
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: AppTheme.cardShadow,
+                      ),
+                      child: const Icon(Icons.leaderboard_rounded, color: AppTheme.primary, size: 22),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -234,6 +291,97 @@ class _HomeTabState extends State<HomeTab> {
           ),
           const SizedBox(height: 24),
 
+          // Weekly Challenge Banner
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChallengeScreen()),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.accent, AppTheme.neonCyan],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: AppTheme.cardRadius,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.accent.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: Colors.white, size: 36),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Weekly Challenge',
+                          style: GoogleFonts.inter(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '7-Day Core Crusher',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // AI Insight Section
+          if (_aiInsight != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppTheme.accent.withOpacity(0.1), AppTheme.accent.withOpacity(0.02)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.accent.withOpacity(0.2), width: 1.5),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: AppTheme.accent, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI Insight', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.accent)),
+                        const SizedBox(height: 4),
+                        Text(_aiInsight!, style: GoogleFonts.inter(color: AppTheme.primary, height: 1.3)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
           // Combined Section: Activity & Hydration
           _buildActivityHydrationSection(),
           const SizedBox(height: 28),
@@ -273,7 +421,7 @@ class _HomeTabState extends State<HomeTab> {
               child: Center(
                 child: Text(
                   'No meals logged today yet.',
-                  style: GoogleFonts.inter(color: Colors.black38, fontSize: 14),
+                  style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 14),
                 ),
               ),
             )
@@ -305,7 +453,7 @@ class _HomeTabState extends State<HomeTab> {
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              color: isSelected ? AppTheme.accent : Colors.black45,
+              color: isSelected ? AppTheme.accent : const Color(0xFF64748B),
             ),
           ),
           const SizedBox(height: 6),
@@ -346,45 +494,61 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildMacroCard(String amount, String label, double progress, Color activeColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppTheme.cardRadius,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            amount,
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.primary,
-              letterSpacing: -0.5,
+    return ClipRRect(
+      borderRadius: AppTheme.cardRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            borderRadius: AppTheme.cardRadius,
+            border: Border.all(
+              color: Colors.white.withOpacity(0.5),
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: Colors.black45,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                amount,
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: Colors.black45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: activeColor.withOpacity(0.1),
+                  valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                  minHeight: 5,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: activeColor.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(activeColor),
-              minHeight: 5,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -449,204 +613,219 @@ class _HomeTabState extends State<HomeTab> {
           ],
         ),
         const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: AppTheme.cardRadius,
-            boxShadow: AppTheme.cardShadow,
-            border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
-          ),
-          child: Column(
-            children: [
-              // Row of Icons and Metrics
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        ClipRRect(
+          borderRadius: AppTheme.cardRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.55),
+                borderRadius: AppTheme.cardRadius,
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.6),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
                 children: [
-                  // Column 1: Steps
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent.withOpacity(0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.directions_walk_rounded, color: AppTheme.accent, size: 24),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '$_steps',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'steps',
-                          style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 10),
-                        // Mini steps progress bar
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: stepsProgress,
-                              minHeight: 4,
-                              backgroundColor: AppTheme.accent.withOpacity(0.1),
-                              color: AppTheme.accent,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Plus 1k steps button
-                        GestureDetector(
-                          onTap: _addSteps,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '+1k steps',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.accent,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Vertical Divider
-                  Container(width: 1, height: 110, color: const Color(0xFFF1F5F9)),
-                  // Column 2: Calorie Burn
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonPink.withOpacity(0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.local_fire_department_rounded, color: AppTheme.neonPink, size: 24),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '$_burnedCalories',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'kcal burned',
-                          style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Text(
-                            'Active Energy',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppTheme.neonPink,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Vertical Divider
-                  Container(width: 1, height: 110, color: const Color(0xFFF1F5F9)),
-                  // Column 3: Water Intake
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonCyan.withOpacity(0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.local_drink_rounded, color: AppTheme.neonCyan, size: 24),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '${(_water / 1000.0).toStringAsFixed(1)} L',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'of 2.5 L goal',
-                          style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 10),
-                        // Mini water progress bar
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: waterProgress,
-                              minHeight: 4,
-                              backgroundColor: AppTheme.neonCyan.withOpacity(0.1),
-                              color: AppTheme.neonCyan,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Log Water Controls
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                  // Row of Icons and Metrics
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Column 1: Steps
+                      Expanded(
+                        child: Column(
                           children: [
-                            GestureDetector(
-                              onTap: _removeWater,
-                              child: Container(
-                                padding: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.remove, size: 12, color: Colors.black54),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accent.withOpacity(0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.directions_walk_rounded, color: AppTheme.accent, size: 24),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '$_steps',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.primary,
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: _addWater,
-                              child: Container(
-                                padding: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.neonCyan.withOpacity(0.15),
-                                  shape: BoxShape.circle,
+                            const SizedBox(height: 2),
+                            Text(
+                              'steps',
+                              style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 10),
+                            // Mini steps progress bar
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: stepsProgress,
+                                  minHeight: 4,
+                                  backgroundColor: AppTheme.accent.withOpacity(0.1),
+                                  color: AppTheme.accent,
                                 ),
-                                child: const Icon(Icons.add, size: 12, color: AppTheme.neonCyan),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Plus 1k steps button
+                            GestureDetector(
+                              onTap: _addSteps,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accent.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '+1k steps',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.accent,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      // Vertical Divider
+                      Container(width: 1, height: 110, color: Colors.black.withOpacity(0.05)),
+                      // Column 2: Calorie Burn
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonPink.withOpacity(0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.local_fire_department_rounded, color: AppTheme.neonPink, size: 24),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '$_burnedCalories',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'kcal burned',
+                              style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 10),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text(
+                                'Active Energy',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppTheme.neonPink,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Vertical Divider
+                      Container(width: 1, height: 110, color: Colors.black.withOpacity(0.05)),
+                      // Column 3: Water Intake
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonCyan.withOpacity(0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.local_drink_rounded, color: AppTheme.neonCyan, size: 24),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '${(_water / 1000.0).toStringAsFixed(1)} L',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'of 2.5 L goal',
+                              style: GoogleFonts.inter(fontSize: 11, color: Colors.black38, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 10),
+                            // Mini water progress bar
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: waterProgress,
+                                  minHeight: 4,
+                                  backgroundColor: AppTheme.neonCyan.withOpacity(0.1),
+                                  color: AppTheme.neonCyan,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Log Water Controls
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                GestureDetector(
+                                  onTap: _removeWater,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.05),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.remove, size: 12, color: Colors.black54),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                GestureDetector(
+                                  onTap: _addWater,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.neonCyan.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.add, size: 12, color: AppTheme.neonCyan),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ],
@@ -663,69 +842,85 @@ class _HomeTabState extends State<HomeTab> {
     required String tagText,
     required Color tagColor,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppTheme.cardRadius,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: iconBg.withOpacity(0.1),
-              shape: BoxShape.circle,
+    return ClipRRect(
+      borderRadius: AppTheme.cardRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            borderRadius: AppTheme.cardRadius,
+            border: Border.all(
+              color: Colors.white.withOpacity(0.5),
+              width: 1.5,
             ),
-            child: Icon(icon, color: iconBg, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.primary),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(time, style: GoogleFonts.inter(fontSize: 12, color: Colors.black38)),
-                    const SizedBox(width: 8),
-                    Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle)),
-                    const SizedBox(width: 8),
-                    Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: Colors.black45)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$calories kcal',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primary),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: tagColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  tagText,
-                  style: GoogleFonts.inter(color: tagColor, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.01),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: iconBg.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconBg, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.primary),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(time, style: GoogleFonts.inter(fontSize: 12, color: Colors.black38)),
+                        const SizedBox(width: 8),
+                        Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: Colors.black45)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$calories kcal',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primary),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: tagColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      tagText,
+                      style: GoogleFonts.inter(color: tagColor, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -748,55 +943,71 @@ class CalorieRadialGauge extends StatelessWidget {
     final int left = goal - consumed + burned;
     final double percentage = (consumed - burned) / goal;
     
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppTheme.cardRadius,
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$left',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.primary,
-                    letterSpacing: -1.5,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Calories left',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.black45,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
+    return ClipRRect(
+      borderRadius: AppTheme.cardRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            borderRadius: AppTheme.cardRadius,
+            border: Border.all(
+              color: Colors.white.withOpacity(0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSubStat('Eaten', '$consumed kcal', AppTheme.accent),
-                    const SizedBox(width: 24),
-                    _buildSubStat('Burned', '$burned kcal', AppTheme.neonPink),
+                    Text(
+                      '$left',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                        letterSpacing: -1.5,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Calories left',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        _buildSubStat('Eaten', '$consumed kcal', AppTheme.accent),
+                        const SizedBox(width: 24),
+                        _buildSubStat('Burned', '$burned kcal', AppTheme.neonPink),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              CustomPaint(
+                size: const Size(100, 100),
+                painter: _RadialPainter(percentage: percentage.clamp(0.0, 1.0)),
+              ),
+            ],
           ),
-          CustomPaint(
-            size: const Size(100, 100),
-            painter: _RadialPainter(percentage: percentage.clamp(0.0, 1.0)),
-          ),
-        ],
+        ),
       ),
     );
   }
