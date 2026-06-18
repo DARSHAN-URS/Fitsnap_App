@@ -219,21 +219,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
-  void _handleCameraScan({bool mock = false, String? imagePath}) async {
+  void _handleCameraScan({String? imagePath}) async {
     setState(() => _isAnalyzing = true);
-    _showScanToast(mock ? 'Demo Mode: Simulating camera nutrition scan...' : 'Uploading and analyzing food image...');
+    _showScanToast('Uploading and analyzing food image...');
     
-    final result = await ApiService.analyzeNutrition(imagePath: mock ? null : imagePath);
+    final result = await ApiService.analyzeNutrition(imagePath: imagePath);
     setState(() => _isAnalyzing = false);
     
     _handleAnalysisResponse(result, 'Meal parsed successfully! Macros updated.');
   }
 
-  void _handleLabelScan({bool mock = false, String? imagePath}) async {
+  void _handleLabelScan({String? imagePath}) async {
     setState(() => _isAnalyzing = true);
-    _showScanToast(mock ? 'Demo Mode: Simulating label nutrition scan...' : 'Uploading and analyzing nutrition label...');
+    _showScanToast('Uploading and analyzing nutrition label...');
     
-    final result = await ApiService.analyzeNutritionLabel(imagePath: mock ? null : imagePath);
+    final result = await ApiService.analyzeNutritionLabel(imagePath: imagePath);
     setState(() => _isAnalyzing = false);
     
     _handleAnalysisResponse(result, 'Nutrition facts parsed successfully!');
@@ -264,9 +264,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       }
       
       if (isLabelScan) {
-        _handleLabelScan(mock: false, imagePath: image.path);
+        _handleLabelScan(imagePath: image.path);
       } else {
-        _handleCameraScan(mock: false, imagePath: image.path);
+        _handleCameraScan(imagePath: image.path);
       }
     } catch (e) {
       if (!mounted) return;
@@ -356,20 +356,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     onTap: () {
                       Navigator.pop(context);
                       _pickAndAnalyzeImage(source: ImageSource.gallery, isLabelScan: isLabelScan);
-                    },
-                  ),
-                  _buildOptionItem(
-                    icon: Icons.auto_awesome_rounded,
-                    title: 'Demo Mode (Mock Scan)',
-                    desc: 'Run a mock scan using pre-configured mock food data',
-                    color: AppTheme.neonEmerald,
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (isLabelScan) {
-                        _handleLabelScan(mock: true);
-                      } else {
-                        _handleCameraScan(mock: true);
-                      }
                     },
                   ),
                   const SizedBox(height: 12),
@@ -1025,13 +1011,16 @@ class _BarcodeScannerSimOverlayState extends State<_BarcodeScannerSimOverlay> wi
         if (res['success']) {
           widget.onScanComplete(Map<String, dynamic>.from(res['data']));
         } else {
-          widget.onScanComplete({
-            'name': 'Greek Yogurt Honey (Barcode)',
-            'calories': 150,
-            'protein': 12,
-            'carbs': 15,
-            'fats': 4
-          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(res['error'] ?? 'Barcode scan failed on backend.'),
+                backgroundColor: Colors.red.shade600,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            );
+          }
         }
       });
     });

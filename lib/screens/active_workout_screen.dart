@@ -95,9 +95,12 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
       final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isServiceEnabled) {
         debugPrint("Location services are disabled.");
-        setState(() {
-          _isMockSimulation = true;
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled. Please enable location services to track workouts.')),
+          );
+          Navigator.pop(context);
+        }
         return;
       }
 
@@ -113,16 +116,21 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
           _handleNewPosition(position);
         });
       }, onError: (error) {
-        debugPrint("Geolocator stream error: $error. Falling back to mock.");
-        setState(() {
-          _isMockSimulation = true;
-        });
+        debugPrint("Geolocator stream error: $error.");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('GPS Signal Error: $error')),
+          );
+        }
       });
     } else {
-      debugPrint("Location permission denied. Running in mock simulation mode.");
-      setState(() {
-        _isMockSimulation = true;
-      });
+      debugPrint("Location permission denied.");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission is required to track active workouts.')),
+        );
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -474,14 +482,14 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       Container(
                         width: 10,
                         height: 10,
-                        decoration: BoxDecoration(
-                          color: _isMockSimulation ? Colors.orangeAccent : Colors.redAccent,
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _isMockSimulation ? 'MOCK GPS' : 'LIVE GPS',
+                        'LIVE GPS',
                         style: GoogleFonts.inter(
                           color: Colors.white60,
                           fontSize: 11,
@@ -591,7 +599,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                                     const Icon(Icons.satellite_alt_rounded, color: Colors.cyanAccent, size: 12),
                                     const SizedBox(width: 4),
                                     Text(
-                                      _isMockSimulation ? 'GPS: MOCK MODE' : 'GPS: ACTIVE (98%)',
+                                      'GPS: ACTIVE (98%)',
                                       style: GoogleFonts.inter(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
                                     ),
                                   ],
@@ -618,52 +626,7 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                             ],
                           ),
                         ),
-                        // Simulate Speeding developer shortcut
-                        Positioned(
-                          right: 16,
-                          top: 16,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _simulateSpeeding = !_simulateSpeeding;
-                                if (_simulateSpeeding) {
-                                  _speedKmH = 45.0; // Instantly trigger speed check
-                                } else {
-                                  _speedKmH = 0.0;
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: _simulateSpeeding ? Colors.redAccent.withOpacity(0.8) : Colors.black45,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _simulateSpeeding ? Colors.redAccent : Colors.transparent,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _simulateSpeeding ? Icons.speed_rounded : Icons.directions_run_rounded,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _simulateSpeeding ? 'STOP SPEEDING' : 'SIMULATE SPEEDING',
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                        const SizedBox.shrink(),
                       ],
                     ),
                   ),
