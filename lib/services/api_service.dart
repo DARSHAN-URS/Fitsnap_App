@@ -120,7 +120,7 @@ class ApiService {
   }
 
   // --- Smart Nutrition (Cal AI Feature) ---
-  static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath}) async {
+  static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath, String? date}) async {
     try {
       if (imagePath != null) {
         final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze'));
@@ -129,6 +129,9 @@ class ApiService {
         }
         final file = await http.MultipartFile.fromPath('image', imagePath);
         request.files.add(file);
+        if (date != null) {
+          request.fields['date'] = date;
+        }
         
         final streamedResponse = await request.send();
         final response = await http.Response.fromStream(streamedResponse);
@@ -144,7 +147,10 @@ class ApiService {
             'Content-Type': 'application/json',
             if (_token != null) 'Authorization': 'Bearer $_token',
           },
-          body: jsonEncode({'mockImage': true}),
+          body: jsonEncode({
+            'mockImage': true,
+            if (date != null) 'date': date,
+          }),
         );
         
         if (response.statusCode == 200) {
@@ -157,7 +163,7 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> analyzeNutritionText(String description) async {
+  static Future<Map<String, dynamic>> analyzeNutritionText(String description, {String? date}) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/nutrition/describe'),
@@ -165,7 +171,10 @@ class ApiService {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
-        body: jsonEncode({'description': description}),
+        body: jsonEncode({
+          'description': description,
+          if (date != null) 'date': date,
+        }),
       );
       
       if (response.statusCode == 200) {
@@ -177,7 +186,7 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> analyzeNutritionLabel({String? imagePath}) async {
+  static Future<Map<String, dynamic>> analyzeNutritionLabel({String? imagePath, String? date}) async {
     try {
       if (imagePath != null) {
         final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze-label'));
@@ -186,6 +195,9 @@ class ApiService {
         }
         final file = await http.MultipartFile.fromPath('image', imagePath);
         request.files.add(file);
+        if (date != null) {
+          request.fields['date'] = date;
+        }
         
         final streamedResponse = await request.send();
         final response = await http.Response.fromStream(streamedResponse);
@@ -201,7 +213,10 @@ class ApiService {
             'Content-Type': 'application/json',
             if (_token != null) 'Authorization': 'Bearer $_token',
           },
-          body: jsonEncode({'mockImage': true}),
+          body: jsonEncode({
+            'mockImage': true,
+            if (date != null) 'date': date,
+          }),
         );
         
         if (response.statusCode == 200) {
@@ -290,10 +305,11 @@ class ApiService {
   }
 
   // --- Meals Logging & Fetching ---
-  static Future<Map<String, dynamic>> getMeals() async {
+  static Future<Map<String, dynamic>> getMeals({String? date}) async {
     try {
+      final queryParam = date != null ? '?date=$date' : '';
       final response = await http.get(
-        Uri.parse('$baseUrl/meals'),
+        Uri.parse('$baseUrl/meals$queryParam'),
         headers: {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
@@ -315,6 +331,7 @@ class ApiService {
     int? protein,
     int? carbs,
     int? fats,
+    String? date,
   }) async {
     try {
       final response = await http.post(
@@ -329,6 +346,7 @@ class ApiService {
           'protein': protein ?? 0,
           'carbs': carbs ?? 0,
           'fats': fats ?? 0,
+          if (date != null) 'date': date,
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {

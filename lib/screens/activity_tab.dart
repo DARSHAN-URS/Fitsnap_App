@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/preferences_helper.dart';
@@ -203,120 +204,121 @@ class _ActivityTabState extends State<ActivityTab> with TickerProviderStateMixin
           StaggeredListItem(
             index: 1,
             animationController: _entryAnimController,
-            child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
+            child: ClipRRect(
               borderRadius: AppTheme.cardRadius,
-              image: DecorationImage(
-                image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1486218119243-13883505764c?q=80&w=600&auto=format&fit=crop'),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.65),
-                  BlendMode.darken,
-                ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    borderRadius: AppTheme.cardRadius,
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                    color: Colors.white.withOpacity(0.55),
+                    boxShadow: AppTheme.cardShadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Colors.greenAccent,
-                              shape: BoxShape.circle,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonEmerald.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppTheme.neonEmerald.withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.neonEmerald,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Ready to Track',
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.neonEmerald,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Ready to Track',
-                            style: GoogleFonts.inter(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
+                          const Icon(
+                            Icons.insights_rounded,
+                            color: Color(0xFF64748B),
+                            size: 24,
                           ),
                         ],
                       ),
-                    ),
-                    const Icon(
-                      Icons.insights_rounded,
-                      color: Colors.white70,
-                      size: 24,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Record Your Next Run or Ride',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Analyze GPS routes, real-time pace, and live active energy burn metrics.',
-                  style: GoogleFonts.inter(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ActivityTrackerScreen(),
-                      ),
-                    ).then((_) => _loadWorkoutHistory());
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppTheme.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    minimumSize: const Size(double.infinity, 54),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.play_arrow_rounded, size: 20),
-                      const SizedBox(width: 6),
+                      const SizedBox(height: 20),
                       Text(
-                        'Start Live Workout',
-                        style: GoogleFonts.inter(
+                        'Record Your Next Run or Ride',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 20,
                           fontWeight: FontWeight.w800,
-                          fontSize: 15,
+                          color: AppTheme.primary,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Analyze GPS routes, real-time pace, and live active energy burn metrics.',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF64748B),
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ActivityTrackerScreen(),
+                            ),
+                          ).then((_) => _loadWorkoutHistory());
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          minimumSize: const Size(double.infinity, 54),
+                          elevation: 0,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.play_arrow_rounded, size: 20),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Start Live Workout',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
           ),
           const SizedBox(height: 28),
 
@@ -396,74 +398,75 @@ class _ActivityTabState extends State<ActivityTab> with TickerProviderStateMixin
             StaggeredListItem(
               index: 5,
               animationController: _entryAnimController,
-              child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-              decoration: BoxDecoration(
+              child: ClipRRect(
                 borderRadius: AppTheme.cardRadius,
-                image: DecorationImage(
-                  image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=600&auto=format&fit=crop'),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.7),
-                    BlendMode.darken,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+                    decoration: BoxDecoration(
+                      borderRadius: AppTheme.cardRadius,
+                      border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                      color: Colors.white.withOpacity(0.55),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.05),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.primary.withOpacity(0.1)),
+                          ),
+                          child: const Icon(Icons.directions_run_rounded, color: AppTheme.primary, size: 40),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'No Workouts Yet',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primary,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Complete your first live workout\nto see it tracked here.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF64748B),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ActivityTrackerScreen()),
+                            ).then((_) => _loadWorkoutHistory());
+                          },
+                          icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                          label: Text(
+                            'Start First Workout',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: const Icon(Icons.directions_run_rounded, color: Colors.white70, size: 40),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'No Workouts Yet',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      fontSize: 18,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Complete your first live workout\nto see it tracked here.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      color: Colors.white60,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ActivityTrackerScreen()),
-                      ).then((_) => _loadWorkoutHistory());
-                    },
-                    icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                    label: Text(
-                      'Start First Workout',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppTheme.primary,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             )
           else
             ListView.builder(

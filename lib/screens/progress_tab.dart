@@ -3,18 +3,22 @@ import 'dart:ui';
 import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
 import '../widgets/staggered_animation.dart';
 import '../services/api_service.dart';
+import '../providers/badge_provider.dart';
+import 'badges_screen.dart';
 
-class ProgressTab extends StatefulWidget {
+class ProgressTab extends ConsumerStatefulWidget {
   const ProgressTab({super.key});
 
-  State<ProgressTab> createState() => _ProgressTabState();
+  @override
+  ConsumerState<ProgressTab> createState() => _ProgressTabState();
 }
 
-class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin {
+class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderStateMixin {
   int _selectedSegment = 0; // 30D, 90D, 6M, ALL
 
   late AnimationController _entryAnimController;
@@ -39,7 +43,7 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
       'insight': '0.0 km total',
     },
     {
-      'name': 'Strength Gain (Chest Press)',
+      'name': 'Strength Gain',
       'icon': Icons.fitness_center_rounded,
       'unit': 'kg',
       'data': [5.0, 5.0, 5.0, 7.5, 7.5, 7.5, 10.0],
@@ -94,6 +98,9 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
     );
     _entryAnimController.forward();
     _loadProgressData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(badgeProvider.notifier).updateStreakDaily();
+    });
   }
 
   Future<void> _loadProgressData() async {
@@ -277,7 +284,7 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
       setState(() {
         _updateMetricData('Weight', chartValues['weight']!, chartLabels['weight']!, weightInsight);
         _updateMetricData('Distance Traveled', distanceData, distanceLabels, '${totalDistance.toStringAsFixed(1)} km total');
-        _updateMetricData('Strength Gain (Chest Press)', chartValues['strength']!, chartLabels['strength']!, strengthInsight);
+        _updateMetricData('Strength Gain', chartValues['strength']!, chartLabels['strength']!, strengthInsight);
         _updateMetricData('Waist Size', chartValues['waist']!, chartLabels['waist']!, waistInsight);
         _updateMetricData('Chest Size', chartValues['chest']!, chartLabels['chest']!, chestInsight);
         _updateMetricData('Thighs Size', chartValues['thighs']!, chartLabels['thighs']!, thighsInsight);
@@ -305,6 +312,18 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final badgeState = ref.watch(badgeProvider);
+    
+    // Calculate which weekdays are active based on the current week's dates
+    final now = DateTime.now();
+    final int currentWeekday = now.weekday; // 1 = Monday, 7 = Sunday
+    final List<bool> activeWeekdays = List.generate(7, (index) {
+      final int diff = (index + 1) - currentWeekday;
+      final DateTime dayDate = now.add(Duration(days: diff));
+      final String dayStr = dayDate.toIso8601String().split('T')[0];
+      return badgeState.activeDates.contains(dayStr);
+    });
+
     return SingleChildScrollView(
       padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
       child: Column(
@@ -333,110 +352,114 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
             child: Row(
             children: [
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: AppTheme.cardRadius,
-                    image: DecorationImage(
-                      image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=300&auto=format&fit=crop'),
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black.withOpacity(0.65),
-                        BlendMode.darken,
+                child: ClipRRect(
+                  borderRadius: AppTheme.cardRadius,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: AppTheme.cardRadius,
+                        border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                        color: Colors.white.withOpacity(0.55),
+                        boxShadow: AppTheme.cardShadow,
                       ),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 48),
-                        const SizedBox(height: 6),
-                        Text(
-                          '7 Days',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Active streak',
-                          style: GoogleFonts.inter(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // Weekly dot matrix
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            _StreakDot(label: 'M', isActive: true),
-                            _StreakDot(label: 'T', isActive: true),
-                            _StreakDot(label: 'W', isActive: true),
-                            _StreakDot(label: 'T', isActive: true),
-                            _StreakDot(label: 'F', isActive: true),
-                            _StreakDot(label: 'S', isActive: true),
-                            _StreakDot(label: 'S', isActive: true),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Icon(Icons.local_fire_department_rounded, color: Colors.orange.shade800, size: 48),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${badgeState.streakDays} ${badgeState.streakDays == 1 ? "Day" : "Days"}',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Active streak',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF64748B),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // Weekly dot matrix
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _StreakDot(label: 'M', isActive: activeWeekdays[0]),
+                                _StreakDot(label: 'T', isActive: activeWeekdays[1]),
+                                _StreakDot(label: 'W', isActive: activeWeekdays[2]),
+                                _StreakDot(label: 'T', isActive: activeWeekdays[3]),
+                                _StreakDot(label: 'F', isActive: activeWeekdays[4]),
+                                _StreakDot(label: 'S', isActive: activeWeekdays[5]),
+                                _StreakDot(label: 'S', isActive: activeWeekdays[6]),
+                              ],
+                            )
                           ],
-                        )
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const BadgesScreen()),
+                    );
+                  },
+                  child: ClipRRect(
                     borderRadius: AppTheme.cardRadius,
-                    image: DecorationImage(
-                      image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1578269174936-2709b6aeb913?q=80&w=300&auto=format&fit=crop'),
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black.withOpacity(0.65),
-                        BlendMode.darken,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: AppTheme.cardRadius,
+                          border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                          color: Colors.white.withOpacity(0.55),
+                          boxShadow: AppTheme.cardShadow,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.stars_rounded, color: Colors.amber, size: 48),
+                              const SizedBox(height: 6),
+                              Text(
+                                '${badgeState.earnedBadges.length} Earned',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Total achievements',
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              // Badge mini circles
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: _buildMiniBadges(badgeState.earnedBadges),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.stars_rounded, color: Colors.amber, size: 48),
-                        const SizedBox(height: 6),
-                        Text(
-                          '3 Earned',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Total achievements',
-                          style: GoogleFonts.inter(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        // Badge mini circles
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.verified_rounded, color: AppTheme.accent, size: 20),
-                            SizedBox(width: 6),
-                            Icon(Icons.offline_bolt_rounded, color: AppTheme.neonCyan, size: 20),
-                            SizedBox(width: 6),
-                            Icon(Icons.fitness_center_rounded, color: AppTheme.neonEmerald, size: 20),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
                 ),
@@ -655,6 +678,36 @@ class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin
       ),
     );
   }
+
+  List<Widget> _buildMiniBadges(List<String> earned) {
+    if (earned.isEmpty) {
+      return [
+        Text(
+          'No badges yet',
+          style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B), fontWeight: FontWeight.bold),
+        )
+      ];
+    }
+    
+    final List<Widget> list = [];
+    for (int i = 0; i < earned.length && i < 3; i++) {
+      final name = earned[i];
+      IconData icon = Icons.stars_rounded;
+      Color color = Colors.amber;
+      
+      try {
+        final badge = allBadges.firstWhere((b) => b.id == name);
+        icon = badge.icon;
+        color = badge.color;
+      } catch (_) {}
+      
+      list.add(Icon(icon, color: color, size: 20));
+      if (i < earned.length - 1 && i < 2) {
+        list.add(const SizedBox(width: 6));
+      }
+    }
+    return list;
+  }
 }
 
 class _StreakDot extends StatelessWidget {
@@ -669,7 +722,7 @@ class _StreakDot extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.inter(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.w600),
+          style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B), fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
         Container(

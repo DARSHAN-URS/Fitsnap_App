@@ -27,9 +27,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   // Dynamic state for logged calories, macros, and meals list
   int _consumed = 0;
   int _protein = 0;
-  // Initialize carbs and fats to 0
   int _carbs = 0;
   int _fats = 0;
+  int _steps = 0;
+  int _water = 0;
+  DateTime _selectedDate = DateTime.now();
 
   final List<Map<String, dynamic>> _meals = [];
 
@@ -40,6 +42,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       carbs: _carbs,
       fats: _fats,
       meals: _meals,
+      selectedDate: _selectedDate,
+      steps: _steps,
+      water: _water,
+      onStepsChanged: (newSteps) {
+        setState(() => _steps = newSteps);
+        _saveLogs();
+      },
+      onWaterChanged: (newWater) {
+        setState(() => _water = newWater);
+        _saveLogs();
+      },
+      onDateChanged: (newDate) {
+        setState(() {
+          _selectedDate = newDate;
+        });
+        _loadLogs();
+      },
     ),
     const ActivityTab(),
     const ProgressTab(),
@@ -51,32 +70,80 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late AnimationController _pulseController;
 
   Future<void> _loadLogs() async {
+    final String dateStr = _selectedDate.toIso8601String().split('T')[0];
+    final String todayStr = DateTime.now().toIso8601String().split('T')[0];
     final prefs = await SharedPreferences.getInstance();
-    int consumedTemp = prefs.getInt('dashboard_consumed') ?? 0;
-    int proteinTemp = prefs.getInt('dashboard_protein') ?? 0;
-    int carbsTemp = prefs.getInt('dashboard_carbs') ?? 0;
-    int fatsTemp = prefs.getInt('dashboard_fats') ?? 0;
+
+    int consumedTemp = 0;
+    int proteinTemp = 0;
+    int carbsTemp = 0;
+    int fatsTemp = 0;
+    int stepsTemp = 0;
+    int waterTemp = 0;
     List<Map<String, dynamic>> mealsTemp = [];
 
-    final String? mealsJson = prefs.getString('dashboard_meals');
-    if (mealsJson != null) {
-      try {
-        final List<dynamic> decoded = jsonDecode(mealsJson);
-        for (var item in decoded) {
-          final Map<String, dynamic> meal = Map<String, dynamic>.from(item);
-          if (meal['tagColor'] != null && meal['tagColor'] is int) {
-            meal['tagColor'] = Color(meal['tagColor'] as int);
+    if (dateStr == todayStr) {
+      consumedTemp = prefs.getInt('dashboard_consumed') ?? prefs.getInt('dashboard_consumed_$dateStr') ?? 0;
+      proteinTemp = prefs.getInt('dashboard_protein') ?? prefs.getInt('dashboard_protein_$dateStr') ?? 0;
+      carbsTemp = prefs.getInt('dashboard_carbs') ?? prefs.getInt('dashboard_carbs_$dateStr') ?? 0;
+      fatsTemp = prefs.getInt('dashboard_fats') ?? prefs.getInt('dashboard_fats_$dateStr') ?? 0;
+      stepsTemp = prefs.getInt('home_steps') ?? prefs.getInt('home_steps_$dateStr') ?? 0;
+      waterTemp = prefs.getInt('home_water') ?? prefs.getInt('home_water_$dateStr') ?? 0;
+      
+      final String? mealsJson = prefs.getString('dashboard_meals') ?? prefs.getString('dashboard_meals_$dateStr');
+      if (mealsJson != null) {
+        try {
+          final List<dynamic> decoded = jsonDecode(mealsJson);
+          for (var item in decoded) {
+            final Map<String, dynamic> meal = Map<String, dynamic>.from(item);
+            if (meal['tagColor'] != null && meal['tagColor'] is int) {
+              meal['tagColor'] = Color(meal['tagColor'] as int);
+            }
+            mealsTemp.add(meal);
           }
-          mealsTemp.add(meal);
+        } catch (e) {
+          debugPrint('Error loading local meals: $e');
         }
-      } catch (e) {
-        debugPrint('Error loading local meals: $e');
+      }
+    } else {
+      consumedTemp = prefs.getInt('dashboard_consumed_$dateStr') ?? 0;
+      proteinTemp = prefs.getInt('dashboard_protein_$dateStr') ?? 0;
+      carbsTemp = prefs.getInt('dashboard_carbs_$dateStr') ?? 0;
+      fatsTemp = prefs.getInt('dashboard_fats_$dateStr') ?? 0;
+      stepsTemp = prefs.getInt('home_steps_$dateStr') ?? 0;
+      waterTemp = prefs.getInt('home_water_$dateStr') ?? 0;
+      
+      final String? mealsJson = prefs.getString('dashboard_meals_$dateStr');
+      if (mealsJson != null) {
+        try {
+          final List<dynamic> decoded = jsonDecode(mealsJson);
+          for (var item in decoded) {
+            final Map<String, dynamic> meal = Map<String, dynamic>.from(item);
+            if (meal['tagColor'] != null && meal['tagColor'] is int) {
+              meal['tagColor'] = Color(meal['tagColor'] as int);
+            }
+            mealsTemp.add(meal);
+          }
+        } catch (e) {
+          debugPrint('Error loading local meals: $e');
+        }
       }
     }
 
+    setState(() {
+      _consumed = consumedTemp;
+      _protein = proteinTemp;
+      _carbs = carbsTemp;
+      _fats = fatsTemp;
+      _steps = stepsTemp;
+      _water = waterTemp;
+      _meals.clear();
+      _meals.addAll(mealsTemp);
+    });
+
     if (ApiService.isAuthenticated) {
-      // 1. Fetch meals from backend
-      final mealsRes = await ApiService.getMeals();
+      // 1. Fetch meals from backend for the selected date
+      final mealsRes = await ApiService.getMeals(date: dateStr);
       if (mealsRes['success']) {
         final List<dynamic> serverMeals = mealsRes['data'];
         mealsTemp.clear();
@@ -108,31 +175,46 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
       }
 
-      // 2. Fetch daily stats from backend
-      final statsRes = await ApiService.getDailyStats();
+      // 2. Fetch daily stats from backend for the selected date
+      final statsRes = await ApiService.getDailyStats(date: dateStr);
       if (statsRes['success']) {
         final stats = statsRes['data'];
-        await prefs.setInt('home_steps', (stats['steps'] as num?)?.toInt() ?? 0);
-        await prefs.setInt('home_water', (stats['water_ml'] as num?)?.toInt() ?? 0);
+        stepsTemp = (stats['steps'] as num?)?.toInt() ?? 0;
+        waterTemp = (stats['water_ml'] as num?)?.toInt() ?? 0;
+        
+        await prefs.setInt('home_steps_$dateStr', stepsTemp);
+        await prefs.setInt('home_water_$dateStr', waterTemp);
+        if (dateStr == todayStr) {
+          await prefs.setInt('home_steps', stepsTemp);
+          await prefs.setInt('home_water', waterTemp);
+        }
       }
-    }
 
-    setState(() {
-      _consumed = consumedTemp;
-      _protein = proteinTemp;
-      _carbs = carbsTemp;
-      _fats = fatsTemp;
-      _meals.clear();
-      _meals.addAll(mealsTemp);
-    });
+      setState(() {
+        _consumed = consumedTemp;
+        _protein = proteinTemp;
+        _carbs = carbsTemp;
+        _fats = fatsTemp;
+        _steps = stepsTemp;
+        _water = waterTemp;
+        _meals.clear();
+        _meals.addAll(mealsTemp);
+      });
+      await _saveLogs();
+    }
   }
 
   Future<void> _saveLogs() async {
+    final String dateStr = _selectedDate.toIso8601String().split('T')[0];
+    final String todayStr = DateTime.now().toIso8601String().split('T')[0];
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('dashboard_consumed', _consumed);
-    await prefs.setInt('dashboard_protein', _protein);
-    await prefs.setInt('dashboard_carbs', _carbs);
-    await prefs.setInt('dashboard_fats', _fats);
+
+    await prefs.setInt('dashboard_consumed_$dateStr', _consumed);
+    await prefs.setInt('dashboard_protein_$dateStr', _protein);
+    await prefs.setInt('dashboard_carbs_$dateStr', _carbs);
+    await prefs.setInt('dashboard_fats_$dateStr', _fats);
+    await prefs.setInt('home_steps_$dateStr', _steps);
+    await prefs.setInt('home_water_$dateStr', _water);
 
     final List<Map<String, dynamic>> serializableMeals = _meals.map((meal) {
       final Map<String, dynamic> copy = Map<String, dynamic>.from(meal);
@@ -142,7 +224,17 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return copy;
     }).toList();
 
-    await prefs.setString('dashboard_meals', jsonEncode(serializableMeals));
+    await prefs.setString('dashboard_meals_$dateStr', jsonEncode(serializableMeals));
+
+    if (dateStr == todayStr) {
+      await prefs.setInt('dashboard_consumed', _consumed);
+      await prefs.setInt('dashboard_protein', _protein);
+      await prefs.setInt('dashboard_carbs', _carbs);
+      await prefs.setInt('dashboard_fats', _fats);
+      await prefs.setInt('home_steps', _steps);
+      await prefs.setInt('home_water', _water);
+      await prefs.setString('dashboard_meals', jsonEncode(serializableMeals));
+    }
   }
 
   @override
@@ -223,7 +315,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     setState(() => _isAnalyzing = true);
     _showScanToast('Uploading and analyzing food image...');
     
-    final result = await ApiService.analyzeNutrition(imagePath: imagePath);
+    final dateStr = _selectedDate.toIso8601String().split('T')[0];
+    final result = await ApiService.analyzeNutrition(imagePath: imagePath, date: dateStr);
     setState(() => _isAnalyzing = false);
     
     _handleAnalysisResponse(result, 'Meal parsed successfully! Macros updated.');
@@ -233,7 +326,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     setState(() => _isAnalyzing = true);
     _showScanToast('Uploading and analyzing nutrition label...');
     
-    final result = await ApiService.analyzeNutritionLabel(imagePath: imagePath);
+    final dateStr = _selectedDate.toIso8601String().split('T')[0];
+    final result = await ApiService.analyzeNutritionLabel(imagePath: imagePath, date: dateStr);
     setState(() => _isAnalyzing = false);
     
     _handleAnalysisResponse(result, 'Nutrition facts parsed successfully!');
@@ -243,7 +337,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     setState(() => _isAnalyzing = true);
     _showScanToast('AI parsing text description...');
     
-    final result = await ApiService.analyzeNutritionText(text);
+    final dateStr = _selectedDate.toIso8601String().split('T')[0];
+    final result = await ApiService.analyzeNutritionText(text, date: dateStr);
     setState(() => _isAnalyzing = false);
     
     _handleAnalysisResponse(result, 'Text description parsed successfully!');
@@ -456,7 +551,18 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, anim1, anim2) {
         return _BarcodeScannerSimOverlay(
-          onScanComplete: (scannedProduct) {
+          onScanComplete: (scannedProduct) async {
+            final dateStr = _selectedDate.toIso8601String().split('T')[0];
+            if (ApiService.isAuthenticated) {
+              await ApiService.logMeal(
+                name: scannedProduct['name'] ?? 'Barcode Product',
+                calories: scannedProduct['calories'] ?? 0,
+                protein: scannedProduct['protein'],
+                carbs: scannedProduct['carbs'],
+                fats: scannedProduct['fats'],
+                date: dateStr,
+              );
+            }
             _handleAnalysisResponse({
               'success': true,
               'data': {
@@ -473,6 +579,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void _showEntryOptions() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withOpacity(0.4),
       builder: (BuildContext context) {
@@ -496,84 +603,86 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.black12,
-                        borderRadius: BorderRadius.circular(10),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.black12,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Track Your Meal',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primary,
-                      letterSpacing: -0.5,
+                    const SizedBox(height: 24),
+                    Text(
+                      'Track Your Meal',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Select a method to calculate calories & macros',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: Colors.black45,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select a method to calculate calories & macros',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 28),
-                  
-                  // Options List
-                  _buildOptionItem(
-                    icon: Icons.camera_alt_rounded,
-                    title: 'Take a Picture',
-                    desc: 'Analyze meal instantly using computer vision',
-                    color: AppTheme.accent,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _selectImageSource(isLabelScan: false);
-                    },
-                  ),
-                  _buildOptionItem(
-                    icon: Icons.edit_note_rounded,
-                    title: 'Describe Meal',
-                    desc: 'Type what you ate (e.g. 2 eggs and whole wheat toast)',
-                    color: AppTheme.neonPink,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showDescribeDialog();
-                    },
-                  ),
-                  _buildOptionItem(
-                    icon: Icons.qr_code_scanner_rounded,
-                    title: 'Scan Barcode',
-                    desc: 'Scan UPC barcode on packaged foods',
-                    color: AppTheme.neonEmerald,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showBarcodeScannerOverlay();
-                    },
-                  ),
-                  _buildOptionItem(
-                    icon: Icons.receipt_long_rounded,
-                    title: 'Nutrition Label Scan',
-                    desc: 'Scan back label information table',
-                    color: AppTheme.neonAmber,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _selectImageSource(isLabelScan: true);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
+                    const SizedBox(height: 28),
+                    
+                    // Options List
+                    _buildOptionItem(
+                      icon: Icons.camera_alt_rounded,
+                      title: 'Take a Picture',
+                      desc: 'Analyze meal instantly using computer vision',
+                      color: AppTheme.accent,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _selectImageSource(isLabelScan: false);
+                      },
+                    ),
+                    _buildOptionItem(
+                      icon: Icons.edit_note_rounded,
+                      title: 'Describe Meal',
+                      desc: 'Type what you ate (e.g. 2 eggs and whole wheat toast)',
+                      color: AppTheme.neonPink,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDescribeDialog();
+                      },
+                    ),
+                    _buildOptionItem(
+                      icon: Icons.qr_code_scanner_rounded,
+                      title: 'Scan Barcode',
+                      desc: 'Scan UPC barcode on packaged foods',
+                      color: AppTheme.neonEmerald,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showBarcodeScannerOverlay();
+                      },
+                    ),
+                    _buildOptionItem(
+                      icon: Icons.receipt_long_rounded,
+                      title: 'Nutrition Label Scan',
+                      desc: 'Scan back label information table',
+                      color: AppTheme.neonAmber,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _selectImageSource(isLabelScan: true);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
           ),

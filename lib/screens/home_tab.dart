@@ -9,7 +9,6 @@ import 'activity_tracker_screen.dart';
 import 'challenge_screen.dart';
 import 'profile_tab.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/badge_provider.dart';
 import '../providers/profile_provider.dart';
 import '../widgets/staggered_animation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -20,6 +19,12 @@ class HomeTab extends ConsumerStatefulWidget {
   final int carbs;
   final int fats;
   final List<Map<String, dynamic>> meals;
+  final DateTime selectedDate;
+  final int steps;
+  final int water;
+  final ValueChanged<int> onStepsChanged;
+  final ValueChanged<int> onWaterChanged;
+  final ValueChanged<DateTime> onDateChanged;
 
   const HomeTab({
     super.key,
@@ -28,6 +33,12 @@ class HomeTab extends ConsumerStatefulWidget {
     required this.carbs,
     required this.fats,
     required this.meals,
+    required this.selectedDate,
+    required this.steps,
+    required this.water,
+    required this.onStepsChanged,
+    required this.onWaterChanged,
+    required this.onDateChanged,
   });
 
   @override
@@ -35,8 +46,6 @@ class HomeTab extends ConsumerStatefulWidget {
 }
 
 class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin {
-  int _steps = 0;
-  int _water = 0; // ml
   final int _stepGoal = 10000;
   final int _waterGoal = 2500; // ml
   String? _aiInsight;
@@ -74,7 +83,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     end: Alignment.bottomRight,
   );
 
-  int get _burnedCalories => (_steps * 0.04).toInt();
+  int get _burnedCalories => (widget.steps * 0.04).toInt();
 
   @override
   void initState() {
@@ -111,8 +120,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     final double? customFatTemp = prefs.getDouble('profile_fats_goal');
 
     setState(() {
-      _steps = prefs.getInt('home_steps') ?? 0;
-      _water = prefs.getInt('home_water') ?? 0;
       _profileName = nameTemp;
       _profilePicUrl = picTemp;
       _height = heightTemp;
@@ -138,13 +145,20 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     }
   }
 
-  Future<void> _saveStats() async {
+  Future<void> _saveStats(int steps, int water) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('home_steps', _steps);
-    await prefs.setInt('home_water', _water);
+    final dateStr = widget.selectedDate.toIso8601String().split('T')[0];
+    await prefs.setInt('home_steps_$dateStr', steps);
+    await prefs.setInt('home_water_$dateStr', water);
+
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    if (dateStr == todayStr) {
+      await prefs.setInt('home_steps', steps);
+      await prefs.setInt('home_water', water);
+    }
 
     if (ApiService.isAuthenticated) {
-      final res = await ApiService.updateDailyStats(steps: _steps, waterMl: _water);
+      final res = await ApiService.updateDailyStats(date: dateStr, steps: steps, waterMl: water);
       if (!res['success']) {
         debugPrint('Failed to sync daily stats: ${res['error']}');
       }
@@ -152,10 +166,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   void _addSteps() {
-    setState(() {
-      _steps += 1000;
-    });
-    _saveStats();
+    final newSteps = widget.steps + 1000;
+    widget.onStepsChanged(newSteps);
+    _saveStats(newSteps, widget.water);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Logged 1,000 steps!'),
@@ -168,29 +181,125 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   void _addWater() {
-    setState(() {
-      _water = (_water + 250).clamp(0, 5000);
-    });
-    _saveStats();
+    final newWater = (widget.water + 250).clamp(0, 5000);
+    widget.onWaterChanged(newWater);
+    _saveStats(widget.steps, newWater);
   }
 
   void _removeWater() {
-    setState(() {
-      _water = (_water - 250).clamp(0, 5000);
-    });
-    _saveStats();
+    final newWater = (widget.water - 250).clamp(0, 5000);
+    widget.onWaterChanged(newWater);
+    _saveStats(widget.steps, newWater);
   }
 
-  String _getTodayMonth() {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months[DateTime.now().month - 1];
+  String _getFormattedMonthYear(DateTime date) {
+    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return '${months[date.month - 1]} ${date.year}';
   }
-  String _getTodayDayNumber() {
-    return DateTime.now().day.toString();
-  }
-  String _getTodayWeekday() {
+
+  String _getFormattedDayText(DateTime date) {
     final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    return weekdays[DateTime.now().weekday - 1];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${weekdays[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
+  }
+
+  String _getFormattedFullDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month && date.day == now.day;
+  }
+
+  Widget _buildCalendarStrip() {
+    final days = List.generate(7, (index) {
+      return DateTime.now().subtract(Duration(days: 6 - index));
+    });
+
+    final DateFormat = (DateTime dt) {
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[dt.weekday - 1];
+    };
+
+    return Container(
+      height: 80,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: days.length,
+        itemBuilder: (context, index) {
+          final day = days[index];
+          final isSelected = day.year == widget.selectedDate.year &&
+              day.month == widget.selectedDate.month &&
+              day.day == widget.selectedDate.day;
+
+          return GestureDetector(
+            onTap: () {
+              widget.onDateChanged(day);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 48,
+              margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? const LinearGradient(
+                        colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                color: isSelected ? null : Colors.white.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected ? Colors.transparent : borderColor,
+                  width: 1.5,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: purpleAccent.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.01),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat(day),
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: isSelected ? Colors.white.withOpacity(0.8) : textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${day.day}',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? Colors.white : textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _showAllMealsBottomSheet() {
@@ -382,7 +491,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final badgeState = ref.watch(badgeProvider);
     final profileState = ref.watch(profileProvider);
     
     // Nutrition metrics calculations
@@ -424,41 +532,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
               ),
               Row(
                 children: [
-                  // Streak Badge
-                  GestureDetector(
-                    onTap: () {
-                      ref.read(badgeProvider.notifier).logActivity();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        gradient: primaryGradient,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.local_fire_department_rounded, color: Colors.orange, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${badgeState.streakDays} days',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                                color: textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
+
                   // Notification Icon
                   Container(
                     width: 38,
@@ -535,85 +609,78 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 20),
 
-          // Date Calendar Strip showing Today
           StaggeredListItem(
             index: 1,
             animationController: _entryAnimController,
-            child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: borderColor),
-              image: DecorationImage(
-                image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1506784983877-45594efa4cbe?q=80&w=600&auto=format&fit=crop'),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.65),
-                  BlendMode.darken,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        _getTodayMonth().toUpperCase(),
-                        style: GoogleFonts.inter(
-                          color: Colors.cyanAccent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _getTodayDayNumber(),
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
+                    color: Colors.white.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _getTodayWeekday(),
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _getFormattedMonthYear(widget.selectedDate),
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: textPrimary,
+                            ),
+                          ),
+                          Text(
+                            _getFormattedDayText(widget.selectedDate),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: purpleAccent,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Your health track overview for today',
-                        style: GoogleFonts.inter(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      const SizedBox(height: 12),
+                      _buildCalendarStrip(),
+                      const Divider(height: 12, thickness: 1, color: Color(0xFFE2E8F0)),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today_rounded, color: purpleAccent, size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _isToday(widget.selectedDate)
+                                  ? 'Your health track overview for today'
+                                  : 'Your health track overview for ${_getFormattedFullDate(widget.selectedDate)}',
+                              style: GoogleFonts.inter(
+                                color: textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
           ),
           const SizedBox(height: 20),
 
@@ -876,99 +943,111 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   Widget _buildCaloriesLeftCard(int leftCal, double completionPercent) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: borderColor),
-        image: DecorationImage(
-          image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.55),
-            BlendMode.darken,
-          ),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '$leftCal',
-                  style: GoogleFonts.inter(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -1.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Calories left',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(100, 100),
-                painter: _RadialPainter(percentage: completionPercent.clamp(0.0, 1.0)),
-              ),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-        ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '$leftCal',
+                      style: GoogleFonts.inter(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w800,
+                        color: textPrimary,
+                        letterSpacing: -1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Calories left',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        color: textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(100, 100),
+                    painter: _RadialPainter(percentage: completionPercent.clamp(0.0, 1.0)),
+                  ),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: purpleAccent.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.local_fire_department_rounded,
+                      color: purpleAccent,
+                      size: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildMacrosLeftCard(int proteinLeft, int carbsLeft, int fatsLeft) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: borderColor),
-        image: DecorationImage(
-          image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.55),
-            BlendMode.darken,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(child: _buildMacroSubColumn('${proteinLeft}g', 'Protein left', Icons.restaurant_rounded, Colors.red.shade700)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMacroSubColumn('${carbsLeft}g', 'Carbs left', Icons.bakery_dining_rounded, Colors.orange.shade800)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMacroSubColumn('${fatsLeft}g', 'Fats left', Icons.opacity_rounded, const Color(0xFF0284C7))),
+            ],
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(child: _buildMacroSubColumn('${proteinLeft}g', 'Protein left', Icons.restaurant_rounded, Colors.redAccent)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildMacroSubColumn('${carbsLeft}g', 'Carbs left', Icons.bakery_dining_rounded, Colors.orange)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildMacroSubColumn('${fatsLeft}g', 'Fats left', Icons.opacity_rounded, const Color(0xFF00D4FF))),
-        ],
       ),
     );
   }
@@ -977,9 +1056,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -989,9 +1068,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
               Text(
                 amount,
                 style: GoogleFonts.inter(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1000,7 +1079,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 12,
-                  color: Colors.white70,
+                  color: textSecondary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1008,12 +1087,11 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 12),
           Container(
-            width: 50,
-            height: 50,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: color.withOpacity(0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white30, width: 2),
             ),
             child: Center(
               child: Icon(icon, color: color, size: 20),
@@ -1025,272 +1103,278 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   Widget _buildActivityAndWaterCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: borderColor),
-        image: DecorationImage(
-          image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1548690312-e3b507d8c110?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.55),
-            BlendMode.darken,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Top row
-          Expanded(
-            child: Row(
-              children: [
-                // Steps card
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '$_steps',
-                              style: GoogleFonts.inter(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              '/$_stepGoal',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Steps Today',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Connect box
-                        GestureDetector(
-                          onTap: _addSteps,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 14),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    'Connect Fit',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Burned card
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.local_fire_department_rounded, color: Colors.orange, size: 20),
-                            const SizedBox(width: 4),
-                            Text(
-                              '$_burnedCalories',
-                              style: GoogleFonts.inter(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Calories burned',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Steps indicator
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.white24,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.directions_walk_rounded, color: Colors.white, size: 12),
-                            ),
-                            const SizedBox(width: 6),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Steps',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  '+$_steps',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Bottom water card
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.local_drink_rounded, color: Color(0xFF00D4FF), size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Water',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Row(
-                        children: [
-                          Text(
-                            '${(_water * 0.033814).toStringAsFixed(1)} fl oz ',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            '(${(_water / 250).toInt()} cups)',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
+          child: Column(
+            children: [
+              // Top row
+              Expanded(
+                child: Row(
                   children: [
-                    GestureDetector(
-                      onTap: _removeWater,
+                    // Steps card
+                    Expanded(
                       child: Container(
-                        width: 32,
-                        height: 32,
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white38, width: 1.5),
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: borderColor),
                         ),
-                        child: const Icon(Icons.remove_rounded, color: Colors.white, size: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  '${widget.steps}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  '/$_stepGoal',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Steps Today',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            // Connect box
+                            GestureDetector(
+                              onTap: _addSteps,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2E8F0),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.favorite_rounded, color: Colors.red.shade700, size: 14),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Connect Fit',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _addWater,
+                    // Burned card
+                    Expanded(
                       child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: borderColor),
                         ),
-                        child: const Icon(Icons.add_rounded, color: Colors.black, size: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.local_fire_department_rounded, color: Colors.orange.shade800, size: 20),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$_burnedCalories',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Calories burned',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Steps indicator
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade800.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(Icons.directions_walk_rounded, color: Colors.orange.shade800, size: 12),
+                                ),
+                                const SizedBox(width: 6),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Steps',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      '+${widget.steps}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              // Bottom water card
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.local_drink_rounded, color: Color(0xFF0284C7), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Water',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Row(
+                            children: [
+                              Text(
+                                '${(widget.water * 0.033814).toStringAsFixed(1)} fl oz ',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
+                              ),
+                              Text(
+                                '(${(widget.water / 250).toInt()} cups)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: _removeWater,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: borderColor, width: 1.5),
+                            ),
+                            child: Icon(Icons.remove_rounded, color: textPrimary, size: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _addWater,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: textPrimary,
+                            ),
+                            child: const Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1301,182 +1385,188 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     final double bmi = heightM > 0 ? _weight / (heightM * heightM) : 0.0;
     
     String status = 'Normal';
-    Color statusColor = Colors.greenAccent;
+    Color statusColor = Colors.green.shade700;
     if (bmi < 18.5) {
       status = 'Underweight';
-      statusColor = Colors.orangeAccent;
+      statusColor = Colors.orange.shade800;
     } else if (bmi < 25) {
       status = 'Normal';
-      statusColor = Colors.greenAccent;
+      statusColor = Colors.green.shade700;
     } else if (bmi < 30) {
       status = 'Overweight';
-      statusColor = Colors.orangeAccent;
+      statusColor = Colors.orange.shade800;
     } else {
       status = 'Obese';
-      statusColor = Colors.redAccent;
+      statusColor = Colors.red.shade700;
     }
 
     final double gaugeProgress = ((bmi - 15) / (35 - 15)).clamp(0.0, 1.0);
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
-        image: DecorationImage(
-          image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1518481612222-68bbe828ecd1?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.6),
-            BlendMode.darken,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Body Mass Index (BMI)',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor.withOpacity(0.4)),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
-                  ),
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                bmi.toStringAsFixed(1),
-                style: GoogleFonts.inter(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -1.0,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'kg/m²',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                ),
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Weight: ${_weight.toStringAsFixed(1)} kg',
+                    'Body Mass Index (BMI)',
                     style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Height: ${_height.toStringAsFixed(0)} cm',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white70,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusColor.withOpacity(0.2)),
                     ),
+                    child: Text(
+                      status,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    bmi.toStringAsFixed(1),
+                    style: GoogleFonts.inter(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      color: textPrimary,
+                      letterSpacing: -1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'kg/m²',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Weight: ${_weight.toStringAsFixed(1)} kg',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Height: ${_height.toStringAsFixed(0)} cm',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Colors.blue,
+                          Colors.green,
+                          Colors.orange,
+                          Colors.red,
+                        ],
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment(2.0 * gaugeProgress - 1.0, 0.0),
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: textPrimary, width: 2.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '15.0',
+                    style: GoogleFonts.inter(fontSize: 10, color: textSecondary, fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '18.5',
+                    style: GoogleFonts.inter(fontSize: 10, color: textSecondary, fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '25.0',
+                    style: GoogleFonts.inter(fontSize: 10, color: textSecondary, fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '30.0',
+                    style: GoogleFonts.inter(fontSize: 10, color: textSecondary, fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '35.0',
+                    style: GoogleFonts.inter(fontSize: 10, color: textSecondary, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              Container(
-                height: 8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Colors.blue,
-                      Colors.green,
-                      Colors.orange,
-                      Colors.red,
-                    ],
-                  ),
-                ),
-              ),
-              Align(
-                alignment: Alignment(2.0 * gaugeProgress - 1.0, 0.0),
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: textPrimary, width: 2.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '15.0',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500),
-              ),
-              Text(
-                '18.5',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500),
-              ),
-              Text(
-                '25.0',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500),
-              ),
-              Text(
-                '30.0',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500),
-              ),
-              Text(
-                '35.0',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1519,99 +1609,105 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   Widget _buildChallengeCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
-        image: DecorationImage(
-          image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.6),
-            BlendMode.darken,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white30),
-                ),
-                child: const Icon(Icons.star_rounded, color: Colors.amber, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '7-Day Core Crusher',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '2 out of 5 workouts completed',
-                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: const LinearProgressIndicator(
-              value: 0.4,
-              backgroundColor: Colors.white24,
-              color: Colors.greenAccent,
-              minHeight: 6,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.emoji_events_outlined, color: Colors.amber, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Golden Abs Badge',
-                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.bold),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                    ),
+                    child: const Icon(Icons.star_rounded, color: Colors.amber, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '7-Day Core Crusher',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 16, color: textPrimary),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '2 out of 5 workouts completed',
+                          style: GoogleFonts.inter(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ChallengeScreen()),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: 0.4,
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  color: purpleAccent,
+                  minHeight: 6,
                 ),
-                child: Text(
-                  'Continue',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.emoji_events_outlined, color: Colors.amber.shade700, size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Golden Abs Badge',
+                        style: GoogleFonts.inter(fontSize: 12, color: textSecondary, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ChallengeScreen()),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: textPrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                    child: Text(
+                      'Continue',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

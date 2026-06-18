@@ -76,6 +76,37 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     final int calories = (steps * 0.04).toInt();
     final int workoutsCount = workouts.length;
 
+    // Load actual friends list from SharedPreferences
+    final List<String>? friendsJsonList = await PreferencesHelper.readStringList('user_friends');
+    if (friendsJsonList != null && friendsJsonList.isNotEmpty) {
+      try {
+        final List<FriendItem> loaded = friendsJsonList.map((fJson) => FriendItem.fromJson(jsonDecode(fJson))).toList();
+        _friendStats.clear();
+        for (int i = 0; i < loaded.length; i++) {
+          final friend = loaded[i];
+          final List<Color> colors = [
+            Colors.blue,
+            Colors.pink,
+            Colors.teal,
+            Colors.amber,
+            Colors.purple,
+            Colors.orange,
+            Colors.cyan,
+          ];
+          final color = colors[i % colors.length];
+          _friendStats[friend.name] = {
+            'steps': friend.steps,
+            'calories': (friend.steps * 0.045).toInt(),
+            'workouts': (friend.steps / 4000).toInt(),
+            'avatar': friend.avatar,
+            'color': color,
+          };
+        }
+      } catch (e) {
+        debugPrint('Error loading user friends for details: $e');
+      }
+    }
+
     if (mounted) {
       setState(() {
         _mySteps = steps;
@@ -128,6 +159,22 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           'color': member['color'],
           'isMe': false,
         });
+      }
+
+      // Add user's friends to public groups as well to make it feel active and integrated
+      for (var friend in _friendStats.keys) {
+        if (!temp.any((m) => m['name'] == friend)) {
+          final stats = _friendStats[friend]!;
+          temp.add({
+            'name': friend,
+            'steps': stats['steps'],
+            'calories': stats['calories'],
+            'workouts': stats['workouts'],
+            'avatar': stats['avatar'],
+            'color': stats['color'],
+            'isMe': false,
+          });
+        }
       }
     }
 
@@ -223,7 +270,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   }
 
   void _showInviteFriendsDialog() {
-    final friends = ['Alex Johnson', 'Sarah Miller', 'John Doe', 'Emma Wilson'];
+    final friends = _friendStats.keys.toList();
     final availableFriends = friends.where((f) => !widget.group.invitedFriends.contains(f)).toList();
 
     if (availableFriends.isEmpty) {
@@ -293,9 +340,23 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                         // Rebuild avatars stack representation
                         final List<String> newAvatars = ['ME'];
                         for (var f in widget.group.invitedFriends) {
-                          final parts = f.split(' ');
-                          if (parts.isNotEmpty) {
-                            newAvatars.add(parts[0][0]);
+                          final stats = _friendStats[f];
+                          if (stats != null && stats['avatar'] != null) {
+                            newAvatars.add(stats['avatar']);
+                          } else {
+                            final parts = f.split(' ');
+                            String init = '';
+                            if (parts.isNotEmpty && parts[0].isNotEmpty) {
+                              init += parts[0][0];
+                            }
+                            if (parts.length > 1 && parts[1].isNotEmpty) {
+                              init += parts[1][0];
+                            }
+                            if (init.isNotEmpty) {
+                              newAvatars.add(init.toUpperCase());
+                            } else {
+                              newAvatars.add('FR');
+                            }
                           }
                         }
                         widget.group.avatars.clear();
