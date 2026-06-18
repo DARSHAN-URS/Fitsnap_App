@@ -284,7 +284,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                             ),
                           ),
                         ),
-                        if (profileState.isLoading)
+                        if (profileState.isUploading)
                           Positioned.fill(
                             child: Container(
                               decoration: BoxDecoration(

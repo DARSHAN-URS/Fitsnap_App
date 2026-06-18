@@ -10,6 +10,7 @@ import 'challenge_screen.dart';
 import 'profile_tab.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/badge_provider.dart';
+import '../providers/profile_provider.dart';
 import '../widgets/staggered_animation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -382,6 +383,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final badgeState = ref.watch(badgeProvider);
+    final profileState = ref.watch(profileProvider);
     
     // Nutrition metrics calculations
 
@@ -410,7 +412,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$_profileName 👋',
+                    '${profileState.name} 👋',
                     style: GoogleFonts.inter(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
@@ -495,12 +497,12 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                       height: 40,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: _profilePicUrl == null ? primaryGradient : null,
-                        image: _profilePicUrl != null
+                        gradient: profileState.profilePictureUrl == null ? primaryGradient : null,
+                        image: profileState.profilePictureUrl != null
                             ? DecorationImage(
-                                 image: _profilePicUrl!.startsWith('http')
-                                     ? CachedNetworkImageProvider(_profilePicUrl!)
-                                     : FileImage(File(_profilePicUrl!)) as ImageProvider,
+                                 image: profileState.profilePictureUrl!.startsWith('http')
+                                     ? CachedNetworkImageProvider(profileState.profilePictureUrl!)
+                                     : FileImage(File(profileState.profilePictureUrl!)) as ImageProvider,
                                  fit: BoxFit.cover,
                               )
                             : null,
@@ -512,10 +514,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                           ),
                         ],
                       ),
-                      child: _profilePicUrl == null
+                      child: profileState.profilePictureUrl == null
                           ? Center(
                               child: Text(
-                                _profileName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                profileState.name.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
                                 style: GoogleFonts.inter(
                                   color: Colors.white,
                                   fontSize: 12,

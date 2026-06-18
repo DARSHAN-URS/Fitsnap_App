@@ -10,6 +10,7 @@ class ProfileState {
   final int mealsScanned;
   final String avgTarget;
   final bool isLoading;
+  final bool isUploading;
   final String? error;
 
   const ProfileState({
@@ -20,6 +21,7 @@ class ProfileState {
     this.mealsScanned = 0,
     this.avgTarget = '0%',
     this.isLoading = false,
+    this.isUploading = false,
     this.error,
   });
 
@@ -31,6 +33,7 @@ class ProfileState {
     int? mealsScanned,
     String? avgTarget,
     bool? isLoading,
+    bool? isUploading,
     String? error,
   }) {
     return ProfileState(
@@ -41,6 +44,7 @@ class ProfileState {
       mealsScanned: mealsScanned ?? this.mealsScanned,
       avgTarget: avgTarget ?? this.avgTarget,
       isLoading: isLoading ?? this.isLoading,
+      isUploading: isUploading ?? this.isUploading,
       error: error ?? this.error,
     );
   }
@@ -124,23 +128,23 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   }
 
   Future<void> updateProfilePicture(String imagePath) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isUploading: true, error: null);
     try {
       if (ApiService.isAuthenticated) {
         final res = await ApiService.updateProfilePicture(imagePath);
         if (res['success'] == true) {
           final url = res['url'];
-          state = state.copyWith(profilePictureUrl: url, isLoading: false);
+          state = state.copyWith(profilePictureUrl: url, isUploading: false);
           await PreferencesHelper.saveString('profile_pic_url', url);
         } else {
           throw Exception(res['error'] ?? 'Upload failed');
         }
       } else {
-        state = state.copyWith(profilePictureUrl: imagePath, isLoading: false);
+        state = state.copyWith(profilePictureUrl: imagePath, isUploading: false);
         await PreferencesHelper.saveString('profile_pic_url', imagePath);
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isUploading: false, error: e.toString());
       rethrow;
     }
   }
