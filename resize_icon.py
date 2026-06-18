@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 
-def create_padded_icon(input_path, output_path, scale_factor=0.65):
+def create_padded_icon(input_path, output_path, scale_factor=0.55):
     try:
         # Open the original image
         img = Image.open(input_path).convert("RGBA")
