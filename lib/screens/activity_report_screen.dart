@@ -455,22 +455,19 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
               children: [
                 _buildShareCard(
                   name: 'Share Image',
-                  icon: Icons.ios_share_rounded,
-                  color: AppTheme.accent,
+                  logo: const ShareImageLogo(size: 28),
                   onTap: () => _showShareOverlay('Social Media'),
                 ),
                 const SizedBox(width: 12),
                 _buildShareCard(
-                  name: 'Strava',
-                  icon: Icons.run_circle_rounded,
-                  color: const Color(0xFFFC6100),
-                  onTap: () => _showShareOverlay('Strava'),
+                  name: 'WhatsApp',
+                  logo: const WhatsAppLogo(size: 28),
+                  onTap: () => _showShareOverlay('WhatsApp'),
                 ),
                 const SizedBox(width: 12),
                 _buildShareCard(
                   name: 'Instagram',
-                  icon: Icons.camera_rounded,
-                  color: const Color(0xFFE1306C),
+                  logo: const InstagramLogo(size: 28),
                   onTap: () => _showShareOverlay('Instagram Story'),
                 ),
               ],
@@ -531,8 +528,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
 
   Widget _buildShareCard({
     required String name,
-    required IconData icon,
-    required Color color,
+    required Widget logo,
     required VoidCallback onTap,
   }) {
     return Expanded(
@@ -548,7 +544,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
           ),
           child: Column(
             children: [
-              Icon(icon, color: color, size: 28),
+              logo,
               const SizedBox(height: 6),
               Text(
                 name,
@@ -711,5 +707,184 @@ class _ReportRoutePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _ReportRoutePainter oldDelegate) {
     return oldDelegate.points.length != points.length;
+  }
+}
+
+class ShareImageLogo extends StatelessWidget {
+  final double size;
+  const ShareImageLogo({super.key, this.size = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Background photo card
+          Positioned(
+            left: size * 0.05,
+            bottom: size * 0.05,
+            child: Container(
+              width: size * 0.78,
+              height: size * 0.78,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(size * 0.15),
+                border: Border.all(color: AppTheme.accent, width: size * 0.05),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.image_outlined,
+                  color: AppTheme.accent,
+                  size: size * 0.45,
+                ),
+              ),
+            ),
+          ),
+          // Share arrow overlay at top-right
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Container(
+              padding: EdgeInsets.all(size * 0.05),
+              decoration: const BoxDecoration(
+                color: AppTheme.accent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.reply_rounded,
+                color: Colors.white,
+                size: size * 0.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class WhatsAppLogo extends StatelessWidget {
+  final double size;
+  const WhatsAppLogo({super.key, this.size = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _WhatsAppSpeechBubblePainter(),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: size * 0.04, right: size * 0.02),
+            child: Icon(
+              Icons.call,
+              color: Colors.white,
+              size: size * 0.52,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WhatsAppSpeechBubblePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final center = Offset(w / 2, h / 2);
+    final double r = w * 0.42;
+
+    final paint = Paint()
+      ..color = const Color(0xFF25D366)
+      ..style = PaintingStyle.fill;
+
+    // Draw main circle
+    canvas.drawCircle(center, r, paint);
+
+    // Draw bottom-left speech tail
+    final tailPath = Path();
+    final double angle1 = 0.65 * math.pi;
+    final double angle2 = 0.88 * math.pi;
+    final double angleMid = 0.77 * math.pi;
+
+    tailPath.moveTo(w / 2 + r * math.cos(angle1), h / 2 + r * math.sin(angle1));
+    tailPath.lineTo(w / 2 + r * 1.35 * math.cos(angleMid), h / 2 + r * 1.35 * math.sin(angleMid));
+    tailPath.lineTo(w / 2 + r * math.cos(angle2), h / 2 + r * math.sin(angle2));
+    tailPath.close();
+
+    canvas.drawPath(tailPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class InstagramLogo extends StatelessWidget {
+  final double size;
+  const InstagramLogo({super.key, this.size = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.28),
+        gradient: const RadialGradient(
+          center: Alignment(-0.6, 0.9),
+          radius: 1.2,
+          colors: [
+            Color(0xFFFEE140),
+            Color(0xFFFA709A),
+            Color(0xFFE1306C),
+            Color(0xFFC13584),
+            Color(0xFF833AB4),
+            Color(0xFF405DE6),
+          ],
+          stops: [0.0, 0.25, 0.5, 0.65, 0.85, 1.0],
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: size * 0.75,
+          height: size * 0.75,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white, width: size * 0.08),
+            borderRadius: BorderRadius.circular(size * 0.22),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: size * 0.32,
+                height: size * 0.32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: size * 0.08),
+                ),
+              ),
+              Positioned(
+                top: size * 0.05,
+                right: size * 0.05,
+                child: Container(
+                  width: size * 0.08,
+                  height: size * 0.08,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

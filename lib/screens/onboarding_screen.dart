@@ -290,7 +290,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 28,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: AppTheme.primary,
               letterSpacing: -0.5,
               height: 1.25,
             ),
@@ -320,7 +320,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Text(
           'Your Age',
           style: GoogleFonts.inter(
-            color: Colors.white70,
+            color: const Color(0xFF475569),
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -409,7 +409,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           style: GoogleFonts.plusJakartaSans(
             fontSize: 26,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppTheme.primary,
           ),
         ),
         const SizedBox(height: 4),
@@ -417,7 +417,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'Help us personalize your experience',
           style: GoogleFonts.inter(
             fontSize: 14,
-            color: Colors.white38,
+            color: const Color(0xFF64748B),
           ),
         ),
         const SizedBox(height: 32),
@@ -605,7 +605,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           style: GoogleFonts.plusJakartaSans(
             fontSize: 26,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppTheme.primary,
           ),
         ),
         const SizedBox(height: 4),
@@ -613,7 +613,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'What would you like to achieve?',
           style: GoogleFonts.inter(
             fontSize: 14,
-            color: Colors.white38,
+            color: const Color(0xFF64748B),
           ),
         ),
         const SizedBox(height: 28),
@@ -705,7 +705,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           style: GoogleFonts.plusJakartaSans(
             fontSize: 26,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppTheme.primary,
           ),
         ),
         const SizedBox(height: 4),
@@ -713,7 +713,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'Help us create safe meal plans',
           style: GoogleFonts.inter(
             fontSize: 14,
-            color: Colors.white38,
+            color: const Color(0xFF64748B),
           ),
         ),
         const SizedBox(height: 20),
@@ -753,7 +753,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Text(
           'Common Allergies',
           style: GoogleFonts.inter(
-            color: Colors.white70,
+            color: const Color(0xFF475569),
             fontWeight: FontWeight.bold,
             fontSize: 15,
           ),
@@ -828,7 +828,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Text(
             'Selected (${_selectedAllergies.length})',
             style: GoogleFonts.inter(
-              color: Colors.white70,
+              color: const Color(0xFF475569),
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -891,7 +891,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Text(
           'Add Custom Allergy',
           style: GoogleFonts.inter(
-            color: Colors.white70,
+            color: const Color(0xFF475569),
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
@@ -1019,7 +1019,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           style: GoogleFonts.plusJakartaSans(
             fontSize: 28,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppTheme.primary,
             letterSpacing: -0.5,
           ),
         ),
@@ -1029,7 +1029,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13,
-            color: Colors.white70,
+            color: const Color(0xFF475569),
             height: 1.4,
           ),
         ),
@@ -1156,14 +1156,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: OutlinedButton(
                     onPressed: _prevStep,
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.white24, width: 1.5),
+                      side: BorderSide(color: AppTheme.primary.withOpacity(0.12), width: 1.5),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       minimumSize: const Size(double.infinity, 54),
                     ),
                     child: Text(
                       'Back',
                       style: GoogleFonts.inter(
-                        color: Colors.white,
+                        color: AppTheme.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
@@ -1247,7 +1247,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Text(
               'You can always update your preferences in Settings',
               style: GoogleFonts.inter(
-                color: Colors.white38,
+                color: const Color(0xFF64748B),
                 fontSize: 10,
               ),
             ),
