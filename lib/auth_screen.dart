@@ -21,8 +21,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   bool isLogin = true;
   bool isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   // IMPORTANT: To fix Google Sign In Error (sign_in_failed, code 10):
   // 1. Add these Android SHA-1 keys to your Google Cloud Console / Supabase Google provider settings:
   //    Debug SHA-1: 03:A0:8B:4B:FF:CF:81:E8:E3:7D:2C:C5:21:28:88:DC:65:A3:C8:EB
@@ -47,6 +49,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -57,6 +60,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         const SnackBar(content: Text('Please fill in all fields')),
       );
       return;
+    }
+    if (!isLogin) {
+      if (_confirmPasswordController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please confirm your password')),
+        );
+        return;
+      }
+      if (_passwordController.text != _confirmPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Passwords do not match')),
+        );
+        return;
+      }
     }
     // Use Riverpod auth provider
     final authNotifier = ref.read(authProvider.notifier);
@@ -186,7 +203,27 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                               },
                             ),
                           ),
-                          
+                          if (!isLogin) ...[
+                            const SizedBox(height: 18),
+                            _buildInput(
+                              'Confirm Password',
+                              Icons.lock_outline_rounded,
+                              _confirmPasswordController,
+                              obscureText: _obscureConfirmPassword,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  color: const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 32),
 
                           // Auth Button
