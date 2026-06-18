@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "fitflow_ai" "\0"
+            VALUE "FileDescription", "sabtrack_ai" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "fitflow_ai" "\0"
+            VALUE "InternalName", "sabtrack_ai" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "fitflow_ai.exe" "\0"
-            VALUE "ProductName", "fitflow_ai" "\0"
+            VALUE "OriginalFilename", "sabtrack_ai.exe" "\0"
+            VALUE "ProductName", "sabtrack_ai" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

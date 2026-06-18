@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../utils/preferences_helper.dart';
 
 class LanguageScreen extends StatefulWidget {
   const LanguageScreen({super.key});
@@ -32,6 +33,16 @@ class _LanguageScreenState extends State<LanguageScreen> {
     super.initState();
     _filteredLanguages = List.from(_languages);
     _searchController.addListener(_filterList);
+    _loadSavedLanguage();
+  }
+
+  Future<void> _loadSavedLanguage() async {
+    final code = await PreferencesHelper.readString('selected_language_code');
+    if (code != null) {
+      setState(() {
+        _selectedLanguageCode = code;
+      });
+    }
   }
 
   @override
@@ -54,10 +65,13 @@ class _LanguageScreenState extends State<LanguageScreen> {
     });
   }
 
-  void _selectLanguage(String code, String name) {
+  void _selectLanguage(String code, String name) async {
     setState(() => _selectedLanguageCode = code);
+    await PreferencesHelper.saveString('selected_language_code', code);
+    await PreferencesHelper.saveString('selected_language_name', name);
     
     // Simulate updating language
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(

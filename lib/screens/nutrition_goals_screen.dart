@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../utils/preferences_helper.dart';
 
 class NutritionGoalsScreen extends StatefulWidget {
   const NutritionGoalsScreen({super.key});
@@ -15,6 +16,68 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
   double _carbsGoal = 220;    // grams (880 kcal)
   double _fatsGoal = 65;      // grams (585 kcal)
 
+  @override
+  void initState() {
+    super.initState();
+    _loadGoals();
+  }
+
+  Future<void> _loadGoals() async {
+    final double? savedCal = await PreferencesHelper.readDouble('profile_calorie_goal');
+    final double? savedProt = await PreferencesHelper.readDouble('profile_protein_goal');
+    final double? savedCarb = await PreferencesHelper.readDouble('profile_carbs_goal');
+    final double? savedFat = await PreferencesHelper.readDouble('profile_fats_goal');
+
+    if (savedCal != null && savedProt != null && savedCarb != null && savedFat != null) {
+      setState(() {
+        _calorieGoal = savedCal;
+        _proteinGoal = savedProt;
+        _carbsGoal = savedCarb;
+        _fatsGoal = savedFat;
+      });
+      return;
+    }
+
+    // Load user details to calculate default recommended BMR/TDEE goals
+    final String ageStr = await PreferencesHelper.readString('profile_age') ?? '25';
+    final int age = int.tryParse(ageStr) ?? 25;
+    final double weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
+    final double height = await PreferencesHelper.readDouble('profile_height') ?? 178.0;
+    final String goal = await PreferencesHelper.readString('profile_goal') ?? 'Build Muscle';
+    final String gender = await PreferencesHelper.readString('profile_gender') ?? 'Male';
+
+    // Mifflin-St Jeor
+    double bmr = 0;
+    if (gender.toLowerCase() == 'male') {
+      bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+    } else {
+      bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+    }
+
+    double tdee = bmr * 1.375; // Lightly active multiplier
+    double recommendedCal = tdee;
+
+    if (goal.toLowerCase().contains('lose')) {
+      recommendedCal = tdee - 500;
+    } else if (goal.toLowerCase().contains('build') || goal.toLowerCase().contains('gain')) {
+      recommendedCal = tdee + 300;
+    }
+
+    recommendedCal = recommendedCal.clamp(1200, 4500);
+
+    // 30% Protein, 45% Carbs, 25% Fats
+    final double recommendedProt = (recommendedCal * 0.30) / 4;
+    final double recommendedCarb = (recommendedCal * 0.45) / 4;
+    final double recommendedFat = (recommendedCal * 0.25) / 9;
+
+    setState(() {
+      _calorieGoal = double.parse(recommendedCal.toStringAsFixed(0));
+      _proteinGoal = double.parse(recommendedProt.toStringAsFixed(0));
+      _carbsGoal = double.parse(recommendedCarb.toStringAsFixed(0));
+      _fatsGoal = double.parse(recommendedFat.toStringAsFixed(0));
+    });
+  }
+
   // Calorie calculations from macros:
   // Protein: 4 kcal/g
   // Carbs: 4 kcal/g
@@ -22,24 +85,31 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
   int get _calculatedMacroCalories =>
       (_proteinGoal * 4 + _carbsGoal * 4 + _fatsGoal * 9).toInt();
 
-  void _saveGoals() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: const [
-            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('Nutrition targets updated!'),
-          ],
+  void _saveGoals() async {
+    await PreferencesHelper.saveDouble('profile_calorie_goal', _calorieGoal);
+    await PreferencesHelper.saveDouble('profile_protein_goal', _proteinGoal);
+    await PreferencesHelper.saveDouble('profile_carbs_goal', _carbsGoal);
+    await PreferencesHelper.saveDouble('profile_fats_goal', _fatsGoal);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text('Nutrition targets updated!'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.neonEmerald,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppTheme.neonEmerald,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-    );
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) Navigator.pop(context);
-    });
+      );
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) Navigator.pop(context);
+      });
+    }
   }
 
   @override

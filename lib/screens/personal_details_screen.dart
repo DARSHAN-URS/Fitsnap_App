@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
@@ -16,9 +16,13 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   
   late TextEditingController _nameController;
   late TextEditingController _ageController;
+  final TextEditingController _customAllergyController = TextEditingController();
+  
   double _weight = 76.4; // kg
   double _height = 178.0; // cm
   String _selectedGoal = 'Build Muscle';
+  String _gender = 'Male';
+  List<String> _selectedAllergies = [];
 
   final List<Map<String, dynamic>> _goalsList = [
     {'name': 'Lose Weight', 'icon': Icons.trending_down_rounded, 'color': AppTheme.caloriesColor},
@@ -29,7 +33,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: 'Darshan Urs');
+    _nameController = TextEditingController(text: 'Guest User');
     _ageController = TextEditingController(text: '25');
     _loadPersonalDetails();
   }
@@ -38,17 +42,27 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   void dispose() {
     _nameController.dispose();
     _ageController.dispose();
+    _customAllergyController.dispose();
     super.dispose();
   }
 
   Future<void> _loadPersonalDetails() async {
-    final prefs = await SharedPreferences.getInstance();
+    final name = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
+    final age = await PreferencesHelper.readString('profile_age') ?? '25';
+    final weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
+    final height = await PreferencesHelper.readDouble('profile_height') ?? 178.0;
+    final goal = await PreferencesHelper.readString('profile_goal') ?? 'Build Muscle';
+    final gender = await PreferencesHelper.readString('profile_gender') ?? 'Male';
+    final allergies = await PreferencesHelper.readStringList('profile_allergies') ?? [];
+ 
     setState(() {
-      _nameController.text = prefs.getString('profile_name') ?? 'Darshan Urs';
-      _ageController.text = prefs.getString('profile_age') ?? '25';
-      _weight = prefs.getDouble('profile_weight') ?? 76.4;
-      _height = prefs.getDouble('profile_height') ?? 178.0;
-      _selectedGoal = prefs.getString('profile_goal') ?? 'Build Muscle';
+      _nameController.text = name;
+      _ageController.text = age;
+      _weight = weight;
+      _height = height;
+      _selectedGoal = goal;
+      _gender = gender;
+      _selectedAllergies = allergies;
     });
   }
 
@@ -57,12 +71,14 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     final ageStr = _ageController.text.trim();
     final age = int.tryParse(ageStr) ?? 25;
     
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('profile_name', name);
-    await prefs.setString('profile_age', ageStr);
-    await prefs.setDouble('profile_weight', _weight);
-    await prefs.setDouble('profile_height', _height);
-    await prefs.setString('profile_goal', _selectedGoal);
+    await PreferencesHelper.saveString('profile_name', name);
+    await PreferencesHelper.saveString('profile_age', ageStr);
+    await PreferencesHelper.saveDouble('profile_weight', _weight);
+    await PreferencesHelper.saveDouble('profile_height', _height);
+    await PreferencesHelper.saveString('profile_goal', _selectedGoal);
+    await PreferencesHelper.saveString('profile_goals', _selectedGoal);
+    await PreferencesHelper.saveString('profile_gender', _gender);
+    await PreferencesHelper.saveStringList('profile_allergies', _selectedAllergies);
 
     if (ApiService.isAuthenticated) {
       final res = await ApiService.updateProfile(
@@ -217,6 +233,81 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                         },
                       ),
                     ),
+                    const SizedBox(height: 18),
+
+                    // Gender selection
+                    Text(
+                      'Gender',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _gender = 'Male'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _gender == 'Male' ? AppTheme.accent.withOpacity(0.08) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _gender == 'Male' ? AppTheme.accent : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('🙋‍♂️', style: TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Male',
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: _gender == 'Male' ? AppTheme.accent : AppTheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _gender = 'Female'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _gender == 'Female' ? AppTheme.accent.withOpacity(0.08) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _gender == 'Female' ? AppTheme.accent : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('🙋‍♀️', style: TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Female',
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: _gender == 'Female' ? AppTheme.accent : AppTheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -278,6 +369,136 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                       activeColor: AppTheme.neonPink,
                       inactiveColor: const Color(0xFFF1F5F9),
                       onChanged: (val) => setState(() => _height = val),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Allergies & Restrictions Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppTheme.cardRadius,
+                  boxShadow: AppTheme.cardShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Allergies & Restrictions',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Chips Wrap
+                    if (_selectedAllergies.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _selectedAllergies.map((allergy) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  allergy,
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.accent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedAllergies.remove(allergy);
+                                    });
+                                  },
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                    color: AppTheme.accent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Input Form
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: TextField(
+                              controller: _customAllergyController,
+                              style: GoogleFonts.inter(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w600),
+                              decoration: InputDecoration(
+                                hintText: 'Add custom allergy...',
+                                hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 12),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () {
+                            final String text = _customAllergyController.text.trim().toLowerCase();
+                            if (text.isNotEmpty && !_selectedAllergies.contains(text)) {
+                              setState(() {
+                                _selectedAllergies.add(text);
+                                _customAllergyController.clear();
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Add',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+                    // Common allergies list
+                    Text(
+                      'Common: Dairy, Gluten, Nuts, Soy, Eggs, Shellfish',
+                      style: GoogleFonts.inter(
+                        color: Colors.black38,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),

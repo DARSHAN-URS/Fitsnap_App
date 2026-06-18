@@ -1,11 +1,11 @@
 {
-    "name": "fitflow_ai",
-    "short_name": "fitflow_ai",
+    "name": "sabtrack_ai",
+    "short_name": "sabtrack_ai",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "SABTRACK AI App.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

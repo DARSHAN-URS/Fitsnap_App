@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../services/api_service.dart';
+import '../utils/share_helper.dart';
 
 class ActivityReportScreen extends StatefulWidget {
   final String activityType;
@@ -35,6 +36,7 @@ class ActivityReportScreen extends StatefulWidget {
 class _ActivityReportScreenState extends State<ActivityReportScreen> {
   String _displayName = 'Darshan Urs';
   bool _isSaving = false;
+  final GlobalKey _repaintKey = GlobalKey();
 
   @override
   void initState() {
@@ -167,6 +169,10 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
     );
   }
 
+  void _shareReal() async {
+    await ShareHelper.shareWidgetCapture(_repaintKey, 'Just completed a great ${widget.activityType} workout on Sabtrack AI! 🚀');
+  }
+
   void _showShareOverlay(String platform) {
     showModalBottomSheet(
       context: context,
@@ -217,25 +223,11 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
       },
     );
 
-    // Simulate completion
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    // Simulate completion and share via OS
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
       Navigator.pop(context); // close progress overlay
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text('Successfully shared workout to $platform!'),
-            ],
-          ),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.green.shade600,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-      );
+      _shareReal();
     });
   }
 
@@ -267,7 +259,9 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
         child: Column(
           children: [
             // Shareable card layout
-            Card(
+            RepaintBoundary(
+              key: _repaintKey,
+              child: Card(
               elevation: 8,
               shadowColor: Colors.black12,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -423,7 +417,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                                 ],
                               ),
                               Text(
-                                'fitflow AI companion',
+                                'Sabtrack AI companion',
                                 style: GoogleFonts.inter(
                                   color: Colors.white38,
                                   fontSize: 10,
@@ -438,6 +432,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                   ],
                 ),
               ),
+            ),
             ),
             const SizedBox(height: 28),
 
@@ -459,6 +454,13 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
             Row(
               children: [
                 _buildShareCard(
+                  name: 'Share Image',
+                  icon: Icons.ios_share_rounded,
+                  color: AppTheme.accent,
+                  onTap: () => _showShareOverlay('Social Media'),
+                ),
+                const SizedBox(width: 12),
+                _buildShareCard(
                   name: 'Strava',
                   icon: Icons.run_circle_rounded,
                   color: const Color(0xFFFC6100),
@@ -470,13 +472,6 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                   icon: Icons.camera_rounded,
                   color: const Color(0xFFE1306C),
                   onTap: () => _showShareOverlay('Instagram Story'),
-                ),
-                const SizedBox(width: 12),
-                _buildShareCard(
-                  name: 'Twitter',
-                  icon: Icons.alternate_email_rounded,
-                  color: const Color(0xFF1DA1F2),
-                  onTap: () => _showShareOverlay('Twitter'),
                 ),
               ],
             ),

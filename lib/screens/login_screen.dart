@@ -12,6 +12,7 @@ import '../providers/auth_provider.dart';
 import '../utils/preferences_helper.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/loading_overlay.dart';
+import '../theme/sabtrack_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -195,13 +196,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Center(
-                            child: Image.asset(
-                              'assets/images/logo.png',
-                              height: 60,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(Icons.fitness_center_rounded, color: AppTheme.accent, size: 48);
-                              },
+                            child: Container(
+                              width: 76,
+                              height: 76,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black,
+                                border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
+                              ),
+                              child: const Center(
+                                child: SabtrackLogo(size: 48, color: Colors.white),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 28),

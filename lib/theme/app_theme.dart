@@ -122,4 +122,38 @@ class AppTheme {
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
     );
   }
+
+  static ThemeData get lightTheme {
+    return ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      colorScheme: const ColorScheme.light(
+        primary: primary,
+        secondary: accent,
+        background: Color(0xFFF8FAFC),
+        surface: Colors.white,
+      ),
+      textTheme: GoogleFonts.interTextTheme(
+        ThemeData.light().textTheme,
+      ),
+      useMaterial3: true,
+    );
+  }
+
+  static ThemeData get darkTheme {
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      colorScheme: const ColorScheme.dark(
+        primary: Colors.white,
+        secondary: accent,
+        background: Color(0xFF0F172A),
+        surface: Color(0xFF1E293B),
+      ),
+      textTheme: GoogleFonts.interTextTheme(
+        ThemeData.dark().textTheme,
+      ),
+      useMaterial3: true,
+    );
+  }
 }

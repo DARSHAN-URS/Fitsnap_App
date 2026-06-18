@@ -13,13 +13,11 @@ class SabtrackLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logoColor = color ?? AppTheme.primary;
-    return SizedBox(
+    return Image.asset(
+      'assets/images/logo.png',
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _SabtrackLogoPainter(color: logoColor),
-      ),
+      fit: BoxFit.contain,
     );
   }
 }

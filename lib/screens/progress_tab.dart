@@ -1,17 +1,307 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
+import '../utils/preferences_helper.dart';
+import '../widgets/staggered_animation.dart';
+import '../services/api_service.dart';
 
 class ProgressTab extends StatefulWidget {
   const ProgressTab({super.key});
 
-  @override
   State<ProgressTab> createState() => _ProgressTabState();
 }
 
-class _ProgressTabState extends State<ProgressTab> {
-  int _selectedSegment = 0;
+class _ProgressTabState extends State<ProgressTab> with TickerProviderStateMixin {
+  int _selectedSegment = 0; // 30D, 90D, 6M, ALL
+
+  late AnimationController _entryAnimController;
+
+  final List<Map<String, dynamic>> _metrics = [
+    {
+      'name': 'Weight',
+      'icon': Icons.monitor_weight_outlined,
+      'unit': 'kg',
+      'data': [78.5, 78.2, 77.8, 78.0, 77.3, 76.9, 76.4],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.accent,
+      'insight': '-2.1 kg from goal',
+    },
+    {
+      'name': 'Distance Traveled',
+      'icon': Icons.directions_run_rounded,
+      'unit': 'km',
+      'data': [3.2, 4.5, 2.8, 5.0, 3.6, 4.2, 5.8],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonCyan,
+      'insight': '0.0 km total',
+    },
+    {
+      'name': 'Strength Gain (Chest Press)',
+      'icon': Icons.fitness_center_rounded,
+      'unit': 'kg',
+      'data': [5.0, 5.0, 5.0, 7.5, 7.5, 7.5, 10.0],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonPink,
+      'insight': '+5.0 kg progress',
+    },
+    {
+      'name': 'Waist Size',
+      'icon': Icons.accessibility_new_rounded,
+      'unit': 'in',
+      'data': [34.0, 33.8, 33.5, 33.6, 33.2, 33.0, 32.8],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonCyan,
+      'insight': '-1.2 in shredded',
+    },
+    {
+      'name': 'Chest Size',
+      'icon': Icons.sports_gymnastics_rounded,
+      'unit': 'in',
+      'data': [38.5, 38.6, 38.8, 39.0, 39.2, 39.3, 39.5],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonAmber,
+      'insight': '+1.0 in gained',
+    },
+    {
+      'name': 'Thighs Size',
+      'icon': Icons.directions_run_rounded,
+      'unit': 'in',
+      'data': [22.0, 22.1, 22.1, 22.3, 22.4, 22.4, 22.6],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonEmerald,
+      'insight': '+0.6 in volume',
+    },
+    {
+      'name': 'Arms Size',
+      'icon': Icons.gesture_rounded,
+      'unit': 'in',
+      'data': [13.2, 13.3, 13.3, 13.5, 13.6, 13.7, 13.8],
+      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'color': AppTheme.neonIndigo,
+      'insight': '+0.6 in peak',
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _entryAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _entryAnimController.forward();
+    _loadProgressData();
+  }
+
+  Future<void> _loadProgressData() async {
+    // Sync workouts from backend if authenticated to make Distance Traveled dynamic
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getWorkouts();
+      if (res['success'] == true) {
+        final List<dynamic> list = res['data'];
+        final List<String> wHistory = [];
+        for (var item in list) {
+          final name = item['workout_name'] ?? 'Workout';
+          final dist = item['distance'] ?? 0.0;
+          final duration = item['duration_seconds'] ?? 0;
+          final calories = item['calories'] ?? 0;
+          final dateStr = item['completed_at'] ?? DateTime.now().toIso8601String();
+          final durationStr = "${(duration ~/ 60).toString().padLeft(2, '0')}:${(duration % 60).toString().padLeft(2, '0')}";
+          wHistory.add("$name|$dist|$durationStr|$calories|$dateStr");
+        }
+        await PreferencesHelper.saveStringList('workout_history', wHistory);
+      }
+    }
+
+    // Load measurements from backend if authenticated
+    Map<String, List<Map<String, dynamic>>> fetchedData = {};
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getMeasurements();
+      if (res['success'] == true) {
+        final List<dynamic> list = res['data'];
+        for (var item in list) {
+          final type = item['metric_type'] as String;
+          fetchedData.putIfAbsent(type, () => []);
+          fetchedData[type]!.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+
+    // Load fallbacks from cache if missing
+    for (var type in ['weight', 'waist', 'chest', 'arms', 'thighs', 'strength']) {
+      if (!fetchedData.containsKey(type) || fetchedData[type]!.isEmpty) {
+        final String cacheKey = type == 'weight' ? 'weight_logs' : 'cached_logs_$type';
+        final String? cacheJson = await PreferencesHelper.readString(cacheKey);
+        if (cacheJson != null) {
+          try {
+            final List<dynamic> decoded = jsonDecode(cacheJson);
+            fetchedData[type] = decoded.map((item) => Map<String, dynamic>.from(item)).toList();
+          } catch (e) {
+            debugPrint('Error parsing cached $type logs: $e');
+          }
+        }
+      }
+    }
+
+    // Weight target
+    final double currentWeight = await PreferencesHelper.readDouble('weight_current') ?? 76.4;
+    final double targetWeight = await PreferencesHelper.readDouble('weight_target') ?? 74.3;
+    final double diffWeight = currentWeight - targetWeight;
+    final String weightInsight = diffWeight > 0
+        ? '${diffWeight.toStringAsFixed(1)} kg from goal'
+        : '${diffWeight.abs().toStringAsFixed(1)} kg from goal';
+
+    // Waist target
+    final double currentWaist = await PreferencesHelper.readDouble('waist_current') ?? 34.0;
+    final double targetWaist = await PreferencesHelper.readDouble('waist_target') ?? 32.0;
+    final double diffWaist = currentWaist - targetWaist;
+    final String waistInsight = diffWaist > 0
+        ? '${diffWaist.toStringAsFixed(1)} in from goal'
+        : '${diffWaist.abs().toStringAsFixed(1)} in from goal';
+
+    // Chest target
+    final double currentChest = await PreferencesHelper.readDouble('chest_current') ?? 38.5;
+    final double targetChest = await PreferencesHelper.readDouble('chest_target') ?? 40.0;
+    final double diffChest = targetChest - currentChest;
+    final String chestInsight = diffChest > 0
+        ? '${diffChest.toStringAsFixed(1)} in from goal'
+        : '${diffChest.abs().toStringAsFixed(1)} in from goal';
+
+    // Arms target
+    final double currentArms = await PreferencesHelper.readDouble('arms_current') ?? 13.2;
+    final double targetArms = await PreferencesHelper.readDouble('arms_target') ?? 14.0;
+    final double diffArms = targetArms - currentArms;
+    final String armsInsight = diffArms > 0
+        ? '${diffArms.toStringAsFixed(1)} in from goal'
+        : '${diffArms.abs().toStringAsFixed(1)} in from goal';
+
+    // Thighs target
+    final double currentThighs = await PreferencesHelper.readDouble('thighs_current') ?? 22.0;
+    final double targetThighs = await PreferencesHelper.readDouble('thighs_target') ?? 23.0;
+    final double diffThighs = targetThighs - currentThighs;
+    final String thighsInsight = diffThighs > 0
+        ? '${diffThighs.toStringAsFixed(1)} in from goal'
+        : '${diffThighs.abs().toStringAsFixed(1)} in from goal';
+
+    // Strength target
+    final double currentStrength = await PreferencesHelper.readDouble('strength_current') ?? 5.0;
+    final double targetStrength = await PreferencesHelper.readDouble('strength_target') ?? 15.0;
+    final double diffStrength = targetStrength - currentStrength;
+    final String strengthInsight = diffStrength > 0
+        ? '${diffStrength.toStringAsFixed(1)} kg from goal'
+        : '${diffStrength.abs().toStringAsFixed(1)} kg from goal';
+
+    // Parse values for each metric type
+    Map<String, List<double>> chartValues = {};
+    Map<String, List<String>> chartLabels = {};
+
+    final List<String> fallbackLabels = ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Today'];
+    final Map<String, List<double>> fallbacksData = {
+      'weight': [78.5, 78.2, 77.8, 78.0, 77.3, 76.9, currentWeight],
+      'waist': [34.0, 33.8, 33.5, 33.6, 33.2, 33.0, currentWaist],
+      'chest': [38.5, 38.6, 38.8, 39.0, 39.2, 39.3, currentChest],
+      'arms': [13.2, 13.3, 13.3, 13.5, 13.6, 13.7, currentArms],
+      'thighs': [22.0, 22.1, 22.1, 22.3, 22.4, 22.4, currentThighs],
+      'strength': [5.0, 5.0, 5.0, 7.5, 7.5, 7.5, currentStrength],
+    };
+
+    for (var type in ['weight', 'waist', 'chest', 'arms', 'thighs', 'strength']) {
+      List<double> vals = [];
+      List<String> lbls = [];
+      
+      final typeLogs = fetchedData[type] ?? [];
+      final chronLogs = typeLogs.reversed.toList();
+      
+      for (var item in chronLogs) {
+        final double val = (item['value'] ?? item['weight'] ?? 0.0) as double;
+        String dateStr = (item['date'] ?? '') as String;
+        if (dateStr.contains(',')) {
+          dateStr = dateStr.split(',')[0].trim();
+        }
+        if (val > 0 && dateStr.isNotEmpty) {
+          vals.add(val);
+          lbls.add(dateStr);
+        }
+      }
+      
+      if (vals.isEmpty) {
+        chartValues[type] = fallbacksData[type]!;
+        chartLabels[type] = fallbackLabels;
+      } else {
+        chartValues[type] = vals;
+        chartLabels[type] = lbls;
+      }
+    }
+
+    // Load distance traveled logs
+    double totalDistance = 0.0;
+    List<double> distanceData = [];
+    List<String> distanceLabels = [];
+    
+    final List<String> rawWorkouts = await PreferencesHelper.readStringList('workout_history') ?? [];
+    Map<String, double> distanceByDay = {};
+    
+    for (var raw in rawWorkouts) {
+      final parts = raw.split('|');
+      if (parts.length >= 2) {
+        final double dist = double.tryParse(parts[1]) ?? 0.0;
+        final String dateStr = parts.length > 4 ? parts[4] : DateTime.now().toIso8601String();
+        final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+        
+        final List<String> months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        final String dayKey = "${months[parsedDate.month - 1]} ${parsedDate.day}";
+        distanceByDay[dayKey] = (distanceByDay[dayKey] ?? 0.0) + dist;
+      }
+    }
+    
+    if (distanceByDay.isNotEmpty) {
+      final keys = distanceByDay.keys.toList();
+      final start = keys.length > 7 ? keys.length - 7 : 0;
+      for (int i = start; i < keys.length; i++) {
+        distanceLabels.add(keys[i]);
+        distanceData.add(distanceByDay[keys[i]]!);
+        totalDistance += distanceByDay[keys[i]]!;
+      }
+    }
+    
+    if (distanceData.isEmpty) {
+      distanceData = [3.2, 4.5, 2.8, 5.0, 3.6, 4.2, 5.8];
+      distanceLabels = ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Today'];
+      totalDistance = 29.1;
+    }
+
+    if (mounted) {
+      setState(() {
+        _updateMetricData('Weight', chartValues['weight']!, chartLabels['weight']!, weightInsight);
+        _updateMetricData('Distance Traveled', distanceData, distanceLabels, '${totalDistance.toStringAsFixed(1)} km total');
+        _updateMetricData('Strength Gain (Chest Press)', chartValues['strength']!, chartLabels['strength']!, strengthInsight);
+        _updateMetricData('Waist Size', chartValues['waist']!, chartLabels['waist']!, waistInsight);
+        _updateMetricData('Chest Size', chartValues['chest']!, chartLabels['chest']!, chestInsight);
+        _updateMetricData('Thighs Size', chartValues['thighs']!, chartLabels['thighs']!, thighsInsight);
+        _updateMetricData('Arms Size', chartValues['arms']!, chartLabels['arms']!, armsInsight);
+      });
+    }
+  }
+
+  void _updateMetricData(String name, List<double> data, List<String> labels, String insight) {
+    try {
+      final metric = _metrics.firstWhere((m) => m['name'] == name);
+      metric['data'] = data;
+      metric['labels'] = labels;
+      metric['insight'] = insight;
+    } catch (e) {
+      debugPrint('Metric not found: $name');
+    }
+  }
+
+  @override
+  void dispose() {
+    _entryAnimController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +311,10 @@ class _ProgressTabState extends State<ProgressTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header title
-          Text(
+          StaggeredListItem(
+            index: 0,
+            animationController: _entryAnimController,
+            child: Text(
             'Progress',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 32,
@@ -30,32 +323,47 @@ class _ProgressTabState extends State<ProgressTab> {
               letterSpacing: -1,
             ),
           ),
+          ),
           const SizedBox(height: 24),
           
           // Stats Row
-          Row(
+          StaggeredListItem(
+            index: 1,
+            animationController: _entryAnimController,
+            child: Row(
             children: [
               Expanded(
-                child: _buildCard(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppTheme.cardRadius,
+                    image: DecorationImage(
+                      image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=300&auto=format&fit=crop'),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withOpacity(0.65),
+                        BlendMode.darken,
+                      ),
+                    ),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Icon(Icons.local_fire_department_rounded, color: AppTheme.neonPink, size: 48),
+                        const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 48),
                         const SizedBox(height: 6),
                         Text(
                           '7 Days',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.primary,
+                            color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Active streak',
                           style: GoogleFonts.inter(
-                            color: Colors.black45,
+                            color: Colors.white70,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -76,31 +384,42 @@ class _ProgressTabState extends State<ProgressTab> {
                         )
                       ],
                     ),
-                  )
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildCard(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppTheme.cardRadius,
+                    image: DecorationImage(
+                      image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1578269174936-2709b6aeb913?q=80&w=300&auto=format&fit=crop'),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withOpacity(0.65),
+                        BlendMode.darken,
+                      ),
+                    ),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Icon(Icons.stars_rounded, color: AppTheme.neonAmber, size: 48),
+                        const Icon(Icons.stars_rounded, color: Colors.amber, size: 48),
                         const SizedBox(height: 6),
                         Text(
                           '3 Earned',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.primary,
+                            color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Total achievements',
                           style: GoogleFonts.inter(
-                            color: Colors.black45,
+                            color: Colors.white70,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -119,85 +438,118 @@ class _ProgressTabState extends State<ProgressTab> {
                         ),
                       ],
                     ),
-                  )
+                  ),
                 ),
               ),
             ],
           ),
+          ),
           const SizedBox(height: 24),
 
-          // Main weight chart card
-          _buildCard(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // Global Time Window Segment Slider
+          StaggeredListItem(
+            index: 2,
+            animationController: _entryAnimController,
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Weight Progress',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.flag_rounded, size: 14, color: AppTheme.primary),
-                            const SizedBox(width: 4),
-                            Text(
-                              '-2.1 kg from goal',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppTheme.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  
-                  // Custom Bezier Chart
-                  const WeightCurveChart(),
-                  const SizedBox(height: 28),
-
-                  // iOS styled Segment Slider
-                  Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: Row(
-                      children: [
-                        _buildSegmentButton(0, '30D'),
-                        _buildSegmentButton(1, '90D'),
-                        _buildSegmentButton(2, '6M'),
-                        _buildSegmentButton(3, 'ALL'),
-                      ],
-                    ),
-                  ),
+                  _buildSegmentButton(0, '30D'),
+                  _buildSegmentButton(1, '90D'),
+                  _buildSegmentButton(2, '6M'),
+                  _buildSegmentButton(3, 'ALL'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
 
+          // Vertical Stack of Bar Charts
+          Column(
+            children: _metrics.asMap().entries.map((entry) {
+              final int idx = entry.key;
+              final Map<String, dynamic> metric = entry.value;
+
+              return StaggeredListItem(
+                index: 3 + idx,
+                animationController: _entryAnimController,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: _buildCard(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(metric['icon'], color: metric['color'], size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${metric['name']} Tracker',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.bar_chart_rounded, size: 14, color: metric['color']),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      metric['insight'],
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: AppTheme.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // Custom Bar Chart
+                          ProgressBarChart(
+                            dataPoints: List<double>.from(metric['data']),
+                            labels: List<String>.from(metric['labels']),
+                            chartColor: metric['color'],
+                            unit: metric['unit'],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+
           // Tip / Insights banner
-          Container(
+          StaggeredListItem(
+            index: 3 + _metrics.length,
+            animationController: _entryAnimController,
+            child: Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -235,6 +587,7 @@ class _ProgressTabState extends State<ProgressTab> {
                 ),
               ],
             ),
+          ),
           )
         ],
       ),
@@ -316,7 +669,7 @@ class _StreakDot extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.inter(fontSize: 10, color: Colors.black38, fontWeight: FontWeight.w600),
+          style: GoogleFonts.inter(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
         Container(
@@ -344,34 +697,111 @@ class _StreakDot extends StatelessWidget {
   }
 }
 
-class WeightCurveChart extends StatelessWidget {
-  final List<double> dataPoints = const [78.5, 78.2, 77.8, 78.0, 77.3, 76.9, 76.4];
-  final List<String> labels = const ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'];
+class ProgressBarChart extends StatefulWidget {
+  final List<double> dataPoints;
+  final List<String> labels;
+  final Color chartColor;
+  final String unit;
 
-  const WeightCurveChart({super.key});
+  const ProgressBarChart({
+    super.key,
+    required this.dataPoints,
+    required this.labels,
+    required this.chartColor,
+    required this.unit,
+  });
+
+  @override
+  State<ProgressBarChart> createState() => _ProgressBarChartState();
+}
+
+class _ProgressBarChartState extends State<ProgressBarChart>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _chartAnimController;
+  late Animation<double> _chartProgress;
+
+  @override
+  void initState() {
+    super.initState();
+    _chartAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _chartProgress = CurvedAnimation(
+      parent: _chartAnimController,
+      curve: Curves.easeOutCubic,
+    );
+    _chartAnimController.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProgressBarChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dataPoints != widget.dataPoints ||
+        oldWidget.chartColor != widget.chartColor) {
+      _chartAnimController.reset();
+      _chartAnimController.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _chartAnimController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CustomPaint(
-          size: const Size(double.infinity, 160),
-          painter: _ChartPainter(dataPoints: dataPoints),
+        AnimatedBuilder(
+          animation: _chartProgress,
+          builder: (context, child) {
+            return CustomPaint(
+              size: const Size(double.infinity, 160),
+              painter: _ProgressBarChartPainter(
+                dataPoints: widget.dataPoints,
+                color: widget.chartColor,
+                unit: widget.unit,
+                progress: _chartProgress.value,
+              ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: labels.map((l) => Text(l, style: GoogleFonts.inter(fontSize: 10, color: Colors.black38, fontWeight: FontWeight.w600))).toList(),
+          children: widget.labels
+              .map((l) => Expanded(
+                    child: Center(
+                      child: Text(
+                        l,
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          color: Colors.black38,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ))
+              .toList(),
         ),
       ],
     );
   }
 }
 
-class _ChartPainter extends CustomPainter {
+class _ProgressBarChartPainter extends CustomPainter {
   final List<double> dataPoints;
+  final Color color;
+  final String unit;
+  final double progress;
 
-  _ChartPainter({required this.dataPoints});
+  _ProgressBarChartPainter({
+    required this.dataPoints,
+    required this.color,
+    required this.unit,
+    this.progress = 1.0,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -387,11 +817,12 @@ class _ChartPainter extends CustomPainter {
     // Add small buffer to top and bottom of chart
     double range = maxVal - minVal;
     if (range == 0) range = 1.0;
-    minVal -= range * 0.15;
+    minVal = (minVal - range * 0.25).clamp(0.0, double.infinity);
     maxVal += range * 0.15;
     range = maxVal - minVal;
 
-    final double stepX = width / (dataPoints.length - 1);
+    final double stepX = width / dataPoints.length;
+    final double barWidth = (stepX * 0.55).clamp(6.0, 32.0);
     
     // Draw Grid Lines (3 horizontal lines)
     final gridPaint = Paint()
@@ -402,95 +833,63 @@ class _ChartPainter extends CustomPainter {
       double y = height * (i / 3);
       canvas.drawLine(Offset(0, y), Offset(width, y), gridPaint);
       
-      // Draw weight label on grid lines
+      // Draw label on grid lines
       final double val = maxVal - (range * (i / 3));
       final textPainter = TextPainter(
         text: TextSpan(
-          text: '${val.toStringAsFixed(1)} kg',
-          style: GoogleFonts.inter(fontSize: 9, color: Colors.black26, fontWeight: FontWeight.w600),
+          text: '${val.toStringAsFixed(1)} $unit',
+          style: GoogleFonts.inter(fontSize: 8.5, color: Colors.black26, fontWeight: FontWeight.w600),
         ),
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(4, y - 12));
+      textPainter.paint(canvas, Offset(4, y - 11));
     }
 
-    // Build the path for the line
-    final path = Path();
-    final fillPath = Path();
+    // Draw the vertical bars
+    for (int i = 0; i < dataPoints.length; i++) {
+      final double val = dataPoints[i];
+      double barHeight = ((val - minVal) / range * height) * progress;
+      if (barHeight < 0.0) barHeight = 0.0;
 
-    double getX(int index) => index * stepX;
-    double getY(double val) => height - ((val - minVal) / range * height);
+      // Center the bar within its step segment
+      final double x = (i * stepX) + (stepX - barWidth) / 2;
+      final double y = height - barHeight;
 
-    path.moveTo(getX(0), getY(dataPoints[0]));
-    fillPath.moveTo(getX(0), height);
-    fillPath.lineTo(getX(0), getY(dataPoints[0]));
+      final barRect = RRect.fromRectAndCorners(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        topLeft: const Radius.circular(5),
+        topRight: const Radius.circular(5),
+      );
 
-    for (int i = 0; i < dataPoints.length - 1; i++) {
-      final double x1 = getX(i);
-      final double y1 = getY(dataPoints[i]);
-      final double x2 = getX(i + 1);
-      final double y2 = getY(dataPoints[i + 1]);
+      final barPaint = Paint()
+        ..shader = LinearGradient(
+          colors: [
+            color,
+            color.withOpacity(0.35),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ).createShader(Rect.fromLTWH(x, y, barWidth, barHeight))
+        ..style = PaintingStyle.fill;
 
-      // Control points for smooth bezier curve
-      final double cx1 = x1 + stepX / 2;
-      final double cy1 = y1;
-      final double cx2 = x2 - stepX / 2;
-      final double cy2 = y2;
+      canvas.drawRRect(barRect, barPaint);
 
-      path.cubicTo(cx1, cy1, cx2, cy2, x2, y2);
-      fillPath.cubicTo(cx1, cy1, cx2, cy2, x2, y2);
+      // Subtle stroke border for premium definition
+      final borderPaint = Paint()
+        ..color = color.withOpacity(0.7)
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke;
+      canvas.drawRRect(barRect, borderPaint);
     }
-
-    fillPath.lineTo(getX(dataPoints.length - 1), height);
-    fillPath.close();
-
-    // Draw the gradient fill
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          AppTheme.accent.withOpacity(0.22),
-          AppTheme.accent.withOpacity(0.0),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromLTWH(0, 0, width, height))
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(fillPath, fillPaint);
-
-    // Draw the main curve line
-    final linePaint = Paint()
-      ..color = AppTheme.accent
-      ..strokeWidth = 3.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawPath(path, linePaint);
-
-    // Draw active dot at the last point
-    final double lastX = getX(dataPoints.length - 1);
-    final double lastY = getY(dataPoints.last);
-
-    final dotShadowPaint = Paint()
-      ..color = AppTheme.accent.withOpacity(0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    
-    final dotOuterPaint = Paint()
-      ..color = AppTheme.accent
-      ..style = PaintingStyle.fill;
-
-    final dotInnerPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(lastX, lastY), 8, dotShadowPaint);
-    canvas.drawCircle(Offset(lastX, lastY), 6, dotOuterPaint);
-    canvas.drawCircle(Offset(lastX, lastY), 3, dotInnerPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _ChartPainter oldDelegate) {
-    return oldDelegate.dataPoints != dataPoints;
+  bool shouldRepaint(covariant _ProgressBarChartPainter oldDelegate) {
+    return oldDelegate.dataPoints != dataPoints ||
+        oldDelegate.color != color ||
+        oldDelegate.unit != unit ||
+        oldDelegate.progress != progress;
   }
 }
+

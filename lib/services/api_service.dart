@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../utils/preferences_helper.dart';
 
 class ApiService {
   static String get _localHost {
@@ -19,9 +20,27 @@ class ApiService {
     baseUrl = isDevelopment ? localUrl : productionUrl;
   }
 
+  // Initialize the JWT token from secure storage on startup
+  static Future<void> initToken() async {
+    try {
+      _token = await PreferencesHelper.readString('auth_token');
+    } catch (e) {
+      debugPrint('Error initializing auth token: $e');
+    }
+  }
+
   // Set the JWT token after login
   static void setToken(String token) {
-    _token = token;
+    _token = token.isEmpty ? null : token;
+    if (token.isEmpty) {
+      PreferencesHelper.delete('auth_token').catchError((e) {
+        debugPrint('Error deleting token: $e');
+      });
+    } else {
+      PreferencesHelper.saveString('auth_token', token).catchError((e) {
+        debugPrint('Error saving token: $e');
+      });
+    }
   }
 
   // --- Authentication ---
@@ -76,7 +95,12 @@ class ApiService {
         if (data['token'] != null) setToken(data['token']);
         return {'success': true, 'data': data};
       }
-      return {'success': false, 'error': 'Google authentication failed'};
+      try {
+        final data = jsonDecode(response.body);
+        return {'success': false, 'error': data['error'] ?? 'Google authentication failed'};
+      } catch (_) {
+        return {'success': false, 'error': 'Google authentication failed (Status: ${response.statusCode})'};
+      }
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -402,6 +426,77 @@ class ApiService {
     }
   }
 
+  // --- Body Measurements Logging & Fetching ---
+  static Future<Map<String, dynamic>> logMeasurement({
+    required String metricType,
+    required double value,
+    String? date,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/user/measurements'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'metric_type': metricType,
+          'value': value,
+          if (date != null) 'date': date,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      try {
+        final err = jsonDecode(response.body)['error'];
+        return {'success': false, 'error': err ?? 'Failed to log measurement'};
+      } catch (_) {
+        return {'success': false, 'error': 'Failed to log measurement (Status: ${response.statusCode})'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getMeasurements({String? metricType}) async {
+    try {
+      final queryParam = metricType != null ? '?metric_type=$metricType' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/measurements$queryParam'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve measurements'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteMeasurement(String id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/user/measurements/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to delete measurement'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   // --- AI Barcode Lookup ---
   static Future<Map<String, dynamic>> scanBarcode(String barcode) async {
     try {
@@ -415,6 +510,26 @@ class ApiService {
       }
       return {'success': false, 'error': 'Failed to recognize barcode'};
     } catch (e) {
+      debugPrint('Sync Stats Error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // AI Workout Insights
+  static Future<Map<String, dynamic>> getWorkoutInsight() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/insights'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+      return data;
+    } catch (e) {
+      debugPrint('Insights Error: $e');
       return {'success': false, 'error': e.toString()};
     }
   }

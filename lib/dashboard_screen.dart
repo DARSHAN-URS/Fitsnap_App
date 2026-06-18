@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:google_fonts/google_fonts.dart';
@@ -24,33 +25,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   int _currentIndex = 0;
 
   // Dynamic state for logged calories, macros, and meals list
-  int _consumed = 840; // 320 (breakfast) + 520 (lunch)
-  int _protein = 56;  // 14g + 42g
-  int _carbs = 76;    // 26g + 50g
-  int _fats = 40;     // 18g + 22g
+  int _consumed = 0;
+  int _protein = 0;
+  // Initialize carbs and fats to 0
+  int _carbs = 0;
+  int _fats = 0;
 
-  final List<Map<String, dynamic>> _meals = [
-    {
-      'name': 'Avocado Toast & Egg',
-      'protein': 14,
-      'carbs': 26,
-      'fats': 18,
-      'calories': 320,
-      'time': '08:30 AM',
-      'tag': 'Healthy Choice',
-      'tagColor': Colors.green,
-    },
-    {
-      'name': 'Grilled Salmon & Rice',
-      'protein': 42,
-      'carbs': 50,
-      'fats': 22,
-      'calories': 520,
-      'time': '01:15 PM',
-      'tag': 'High Protein',
-      'tagColor': AppTheme.accent,
-    },
-  ];
+  final List<Map<String, dynamic>> _meals = [];
 
   List<Widget> get _screens => [
     HomeTab(
@@ -71,10 +52,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Future<void> _loadLogs() async {
     final prefs = await SharedPreferences.getInstance();
-    int consumedTemp = prefs.getInt('dashboard_consumed') ?? 840;
-    int proteinTemp = prefs.getInt('dashboard_protein') ?? 56;
-    int carbsTemp = prefs.getInt('dashboard_carbs') ?? 76;
-    int fatsTemp = prefs.getInt('dashboard_fats') ?? 40;
+    int consumedTemp = prefs.getInt('dashboard_consumed') ?? 0;
+    int proteinTemp = prefs.getInt('dashboard_protein') ?? 0;
+    int carbsTemp = prefs.getInt('dashboard_carbs') ?? 0;
+    int fatsTemp = prefs.getInt('dashboard_fats') ?? 0;
     List<Map<String, dynamic>> mealsTemp = [];
 
     final String? mealsJson = prefs.getString('dashboard_meals');
@@ -682,11 +663,105 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+
+
+  Widget _buildPremiumFooter() {
+    final double bottomInset = MediaQuery.of(context).padding.bottom;
+    return Container(
+      margin: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: bottomInset > 0 ? bottomInset : 16,
+      ),
+      height: 80 + 26,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 80,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.82),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.6),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Left navigation items
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              Expanded(child: _buildNavItem(0, Icons.grid_view_rounded, 'Home')),
+                              Expanded(child: _buildNavItem(1, Icons.directions_run_rounded, 'Activity')),
+                            ],
+                          ),
+                        ),
+                        
+                        // Centered space for the FAB
+                        const SizedBox(width: 80),
+                        
+                        // Right navigation items
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              Expanded(child: _buildNavItem(2, Icons.bar_chart_rounded, 'Progress', customIcon: _buildProgressIcon())),
+                              Expanded(child: _buildNavItem(3, Icons.explore_outlined, 'Groups')),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
+          // Pulsing FAB centered
+          Positioned(
+            top: 0,
+            child: _buildPulseFAB(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      extendBody: true, // Allows content to flow behind bottom nav
+      extendBody: true, // Let content scroll behind the floating bottom bar
       body: Stack(
         children: [
           // Global Background Gradient
@@ -696,78 +771,35 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ),
           ),
           
-          // Main Content
-          SafeArea(
-            bottom: false,
-            child: _screens[_currentIndex],
-          ),
-
-          // Custom Floating Footer with Glassmorphism
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                // Glassmorphic Navigation Bar
-                ClipRRect(
-                  borderRadius: AppTheme.pillRadius,
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Container(
-                      height: 82,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.75),
-                        borderRadius: AppTheme.pillRadius,
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.6),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Expanded(child: _buildNavItem(0, Icons.grid_view_rounded, 'Home')),
-                                Expanded(child: _buildNavItem(1, Icons.directions_run_rounded, 'Activity')),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 76), // Space for centered FAB, guaranteed to be exactly in the center!
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Expanded(child: _buildNavItem(2, Icons.bar_chart_rounded, 'Progress', customIcon: _buildProgressIcon())),
-                                Expanded(child: _buildNavItem(3, Icons.explore_outlined, 'Groups')),
-                                Expanded(child: _buildNavItem(4, Icons.person_outline_rounded, 'Profile', isProfile: true)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+          Column(
+            children: [
+              // Main Tab Content
+              Expanded(
+                child: SafeArea(
+                  bottom: false,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (Widget child, Animation<double> animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_currentIndex),
+                      child: _screens[_currentIndex],
                     ),
                   ),
                 ),
-                
-                // Pulsing Gradient FAB (AI Scan Icon)
-                Positioned(
-                  bottom: 12, // elevated above the nav bar height
-                  child: _buildPulseFAB(),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
+          
+          // Floating Bottom Navigation Bar (Footer)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildPremiumFooter(),
           ),
         ],
       ),
@@ -775,92 +807,60 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildPulseFAB() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        double value = _pulseController.value;
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Outermost Pulse Ring
-            if (!_isAnalyzing)
-              Container(
-                width: 68 + (value * 22),
-                height: 68 + (value * 22),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.neonIndigo.withOpacity((1 - value) * 0.2),
-                ),
-              ),
-            // Middle Pulse Ring
-            if (!_isAnalyzing)
-              Container(
-                width: 68 + (value * 12),
-                height: 68 + (value * 12),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.neonIndigo.withOpacity((1 - value) * 0.3),
-                ),
-              ),
-            // The Button itself
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF06B6D4), Color(0xFFEC4899)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF6366F1).withOpacity(0.4),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 6),
+    return Container(
+      width: 68,
+      height: 68,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF06B6D4), Color(0xFFEC4899)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withOpacity(0.4),
+            blurRadius: 16,
+            spreadRadius: 2,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: const Color(0xFFEC4899).withOpacity(0.35),
+            blurRadius: 16,
+            spreadRadius: 2,
+            offset: const Offset(0, -2),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withOpacity(0.4),
+          width: 2.0,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: _isAnalyzing ? null : _showEntryOptions,
+          child: Center(
+            child: _isAnalyzing
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                  )
+                : const Icon(
+                    Icons.center_focus_strong_rounded, // scanning look
+                    color: Colors.white,
+                    size: 30,
                   ),
-                  BoxShadow(
-                    color: const Color(0xFFEC4899).withOpacity(0.35),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.4),
-                  width: 2.0,
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: _isAnalyzing ? null : _showEntryOptions,
-                  child: Center(
-                    child: _isAnalyzing
-                        ? const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                          )
-                        : const Icon(
-                            Icons.center_focus_strong_rounded, // scanning look
-                            color: Colors.white,
-                            size: 30,
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildProgressIcon() {
     final isSelected = _currentIndex == 2;
-    final color = isSelected ? AppTheme.neonIndigo : const Color(0xFF64748B);
+    final color = isSelected ? Colors.white : const Color(0xFF64748B);
     
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -898,10 +898,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Widget _buildNavItem(int index, IconData icon, String label, {Widget? customIcon, bool isProfile = false}) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? AppTheme.neonIndigo : const Color(0xFF64748B);
+    final color = isSelected ? Colors.white : const Color(0xFF64748B);
 
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _currentIndex = index);
+      },
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -930,7 +933,37 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 ),
               )
             else
-              customIcon ?? Icon(icon, color: color, size: 24),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: isSelected
+                      ? const LinearGradient(
+                          colors: [Color(0xFF00D4FF), Color(0xFF00FFA3)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF00D4FF).withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          )
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: customIcon ?? Icon(
+                    icon,
+                    color: color,
+                    size: isSelected ? 20 : 22,
+                  ),
+                ),
+              ),
             const SizedBox(height: 4),
             Text(
               label,
@@ -938,20 +971,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               overflow: TextOverflow.visible,
               softWrap: false,
               style: GoogleFonts.inter(
-                color: color,
-                fontSize: 11,
+                color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            // Tiny active indicator dot
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(top: 2),
-              width: isSelected ? 4 : 0,
-              height: isSelected ? 4 : 0,
-              decoration: const BoxDecoration(
-                color: AppTheme.neonIndigo,
-                shape: BoxShape.circle,
               ),
             ),
           ],

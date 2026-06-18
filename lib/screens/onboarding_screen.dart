@@ -2,8 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import 'login_screen.dart';
-import 'registration_screen.dart';
+import '../services/api_service.dart';
+import '../dashboard_screen.dart';
+import '../utils/preferences_helper.dart';
+import '../theme/sabtrack_logo.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -14,6 +16,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentStep = 0; // 0 to 4
+  bool _isLoading = false;
 
   // State Variables gathered during onboarding
   String _gender = ''; // 'Male' or 'Female'
@@ -51,27 +54,64 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _nextStep() {
+  void _nextStep() async {
     if (_currentStep < 4) {
       setState(() {
         _currentStep++;
       });
     } else {
-      // Navigate to Registration Screen, passing collected parameters
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RegistrationScreen(
-            gender: _gender,
-            age: int.tryParse(_ageController.text) ?? 24,
-            height: double.tryParse(_heightController.text) ?? 175.0,
-            heightUnit: _heightUnit,
-            weight: double.tryParse(_weightController.text) ?? 75.0,
-            weightUnit: _weightUnit,
-            goal: _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal,
-            allergies: _selectedAllergies,
-          ),
+      setState(() => _isLoading = true);
+
+      double heightCm = double.tryParse(_heightController.text) ?? 175.0;
+      if (_heightUnit == 'ft') {
+        heightCm = heightCm * 30.48;
+      }
+      double weightKg = double.tryParse(_weightController.text) ?? 75.0;
+      if (_weightUnit == 'lbs') {
+        weightKg = weightKg / 2.20462;
+      }
+
+      final displayName = await PreferencesHelper.readString('profile_name') ?? 'Fitness Enthusiast';
+
+      // Update backend profile
+      if (ApiService.isAuthenticated) {
+        final res = await ApiService.updateProfile(
+          name: displayName,
+          age: int.tryParse(_ageController.text) ?? 24,
+          weight: weightKg,
+          height: heightCm,
+          goals: _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal,
+        );
+        if (!res['success']) {
+          debugPrint('Failed to sync profile: ${res['error']}');
+        }
+      }
+
+      // Cache profile details locally in secure storage
+      await PreferencesHelper.saveString('profile_age', _ageController.text);
+      await PreferencesHelper.saveString('profile_gender', _gender);
+      await PreferencesHelper.saveDouble('profile_height', heightCm);
+      await PreferencesHelper.saveDouble('profile_weight', weightKg);
+      await PreferencesHelper.saveString('profile_goal', _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal);
+      await PreferencesHelper.saveStringList('profile_allergies', _selectedAllergies);
+      await PreferencesHelper.saveBool('onboarding_completed', true);
+
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Profile completed successfully! Welcome to SABTRACK AI 🚀'),
+          backgroundColor: AppTheme.neonEmerald,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        (route) => false,
       );
     }
   }
@@ -89,7 +129,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final double progress = (_currentStep + 1) / 5.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030712),
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           _buildMeshBackground(),
@@ -115,6 +155,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
+          if (_isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white.withOpacity(0.6),
+                child: const Center(
+                  child: CircularProgressIndicator(color: AppTheme.accent),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -125,7 +174,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       width: 140,
       height: 5,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: AppTheme.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Stack(
@@ -135,11 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: 140 * progress,
             height: 5,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF06B6D4)],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
+              gradient: AppTheme.primaryGradient,
               borderRadius: BorderRadius.circular(10),
             ),
           ),
@@ -151,7 +196,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _buildMeshBackground() {
     return Stack(
       children: [
-        Container(color: const Color(0xFF030712)),
+        Container(
+          decoration: const BoxDecoration(
+            gradient: AppTheme.backgroundGradient,
+          ),
+        ),
         Positioned(
           top: -100,
           left: -100,
@@ -160,7 +209,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             height: 300,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF6366F1).withOpacity(0.15),
+              color: const Color(0xFF6366F1).withOpacity(0.06),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
@@ -176,7 +225,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             height: 320,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFEC4899).withOpacity(0.1),
+              color: const Color(0xFFEC4899).withOpacity(0.04),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 85, sigmaY: 85),
@@ -213,13 +262,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 12),
         // App Logo at the top of welcome onboarding
         Center(
-          child: Image.asset(
-            'assets/images/logo.png',
-            height: 60,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.fitness_center_rounded, color: AppTheme.accent, size: 48);
-            },
+          child: Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black,
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: SabtrackLogo(size: 48, color: AppTheme.primary),
+            ),
           ),
         ),
         const SizedBox(height: 28),
@@ -289,23 +349,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
           color: isSelected 
-              ? const Color(0xFF6366F1).withOpacity(0.15) 
-              : Colors.white.withOpacity(0.03),
+              ? const Color(0xFF6366F1).withOpacity(0.08) 
+              : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected 
                 ? const Color(0xFF6366F1) 
-                : Colors.white.withOpacity(0.08),
+                : Colors.black.withOpacity(0.06),
             width: 1.5,
           ),
-          boxShadow: isSelected 
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF6366F1).withOpacity(0.25),
-                    blurRadius: 16,
-                  )
-                ] 
-              : null,
+          boxShadow: isSelected ? AppTheme.glowShadow : AppTheme.cardShadow,
         ),
         child: Row(
           children: [
@@ -318,7 +371,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Text(
                 'Your Gender ($genderLabel)',
                 style: GoogleFonts.inter(
-                  color: isSelected ? Colors.white : Colors.white70,
+                  color: AppTheme.primary,
                   fontSize: 15,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
@@ -330,7 +383,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF6366F1) : Colors.white24,
+                  color: isSelected ? const Color(0xFF6366F1) : Colors.black26,
                   width: 2,
                 ),
                 color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
@@ -378,7 +431,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           onUnitChange: (val) {
             setState(() {
               _heightUnit = val;
-              // Simple converter for demonstration
               if (val == 'ft') {
                 double cm = double.tryParse(_heightController.text) ?? 175;
                 double ft = cm / 30.48;
@@ -420,9 +472,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF3B82F6).withOpacity(0.05),
+            color: const Color(0xFF3B82F6).withOpacity(0.06),
             border: Border.all(
-              color: const Color(0xFF3B82F6).withOpacity(0.2),
+              color: const Color(0xFF3B82F6).withOpacity(0.15),
               width: 1.5,
             ),
             borderRadius: BorderRadius.circular(16),
@@ -436,7 +488,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Text(
                   'Tip: Your measurements help us calculate accurate active calories and macronutrient targets.',
                   style: GoogleFonts.inter(
-                    color: const Color(0xFF93C5FD),
+                    color: const Color(0xFF1E3A8A),
                     fontSize: 13,
                     height: 1.4,
                     fontWeight: FontWeight.w500,
@@ -460,9 +512,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+        border: Border.all(color: Colors.black.withOpacity(0.05), width: 1.5),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,7 +526,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: Colors.white70,
+                  color: AppTheme.primary.withOpacity(0.8),
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
                 ),
@@ -483,7 +536,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 height: 32,
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.black.withOpacity(0.04),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -501,7 +554,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Text(
                             unit,
                             style: GoogleFonts.inter(
-                              color: isSelected ? Colors.white : Colors.white38,
+                              color: isSelected ? Colors.white : Colors.black45,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -519,7 +572,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: GoogleFonts.plusJakartaSans(
-              color: Colors.white,
+              color: AppTheme.primary,
               fontSize: 32,
               fontWeight: FontWeight.w800,
             ),
@@ -573,23 +626,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isSelected 
-                    ? const Color(0xFF6366F1).withOpacity(0.15) 
-                    : Colors.white.withOpacity(0.03),
+                    ? const Color(0xFF6366F1).withOpacity(0.08) 
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected 
                       ? const Color(0xFF6366F1) 
-                      : Colors.white.withOpacity(0.08),
+                      : Colors.black.withOpacity(0.05),
                   width: 1.5,
                 ),
-                boxShadow: isSelected 
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withOpacity(0.25),
-                          blurRadius: 16,
-                        )
-                      ]
-                    : null,
+                boxShadow: isSelected ? AppTheme.glowShadow : AppTheme.cardShadow,
               ),
               child: Row(
                 children: [
@@ -600,7 +646,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         Text(
                           goal['title']!,
                           style: GoogleFonts.inter(
-                            color: Colors.white,
+                            color: AppTheme.primary,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -609,7 +655,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         Text(
                           goal['desc']!,
                           style: GoogleFonts.inter(
-                            color: Colors.white38,
+                            color: Colors.black45,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -618,7 +664,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Render flexing arm or other goal emojis when active
                   if (isSelected)
                     Text(
                       goal['emoji']!,
@@ -631,7 +676,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: isSelected ? const Color(0xFF6366F1) : Colors.white24,
+                        color: isSelected ? const Color(0xFF6366F1) : Colors.black26,
                         width: 2,
                       ),
                       color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
@@ -677,7 +722,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF59E0B).withOpacity(0.05),
+            color: const Color(0xFFF59E0B).withOpacity(0.08),
             border: Border.all(
               color: const Color(0xFFF59E0B).withOpacity(0.2),
               width: 1.5,
@@ -693,7 +738,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Text(
                   'Select all that apply. You can skip this step if you don\'t have any allergies.',
                   style: GoogleFonts.inter(
-                    color: const Color(0xFFFDE047),
+                    color: const Color(0xFF78350F),
                     fontSize: 13,
                     height: 1.4,
                     fontWeight: FontWeight.w500,
@@ -715,7 +760,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Grid of common allergies (2 columns)
+        // Grid of common allergies (3 columns)
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -746,15 +791,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   color: isSelected 
-                      ? const Color(0xFF6366F1).withOpacity(0.15) 
-                      : Colors.white.withOpacity(0.03),
+                      ? const Color(0xFF6366F1).withOpacity(0.08) 
+                      : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isSelected 
                         ? const Color(0xFF6366F1) 
-                        : Colors.white.withOpacity(0.08),
+                        : Colors.black.withOpacity(0.06),
                     width: 1.5,
                   ),
+                  boxShadow: AppTheme.cardShadow,
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -764,7 +810,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     Text(
                       name,
                       style: GoogleFonts.inter(
-                        color: Colors.white,
+                        color: AppTheme.primary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -792,9 +838,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.02),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.06)),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              boxShadow: AppTheme.cardShadow,
             ),
             child: Wrap(
               spacing: 8,
@@ -803,9 +850,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(0.12),
+                    color: const Color(0xFF6366F1).withOpacity(0.08),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.5)),
+                    border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -813,7 +860,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Text(
                         allergy,
                         style: GoogleFonts.inter(
-                          color: const Color(0xFF818CF8),
+                          color: const Color(0xFF4F46E5),
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -828,7 +875,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: const Icon(
                           Icons.close_rounded,
                           size: 14,
-                          color: Color(0xFF818CF8),
+                          color: Color(0xFF4F46E5),
                         ),
                       ),
                     ],
@@ -855,17 +902,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.03),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+                  border: Border.all(color: Colors.black.withOpacity(0.06), width: 1.5),
+                  boxShadow: AppTheme.cardShadow,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: _customAllergyController,
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                  style: GoogleFonts.inter(color: AppTheme.primary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'e.g., Peanuts, Sesame',
-                    hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 13),
+                    hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
                     border: InputBorder.none,
                   ),
                 ),
@@ -890,7 +938,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                      color: const Color(0xFF6366F1).withOpacity(0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     )
@@ -919,7 +967,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Column(
       children: [
         const SizedBox(height: 36),
-        // Pulsing Checkmark graphic as requested
         Center(
           child: Stack(
             alignment: Alignment.center,
@@ -929,7 +976,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF6366F1).withOpacity(0.12),
+                  color: const Color(0xFF6366F1).withOpacity(0.08),
                 ),
               ),
               Container(
@@ -940,7 +987,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   gradient: AppTheme.primaryGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.4),
+                      color: const Color(0xFF6366F1).withOpacity(0.3),
                       blurRadius: 20,
                       spreadRadius: 2,
                     )
@@ -952,16 +999,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   size: 42,
                 ),
               ),
-              // Little sparkles floating overlays
               const Positioned(
                 top: 8,
                 right: 8,
-                child: Icon(Icons.star_rounded, color: Colors.cyanAccent, size: 16),
+                child: Icon(Icons.star_rounded, color: Colors.cyan, size: 16),
               ),
               const Positioned(
                 bottom: 12,
                 left: 6,
-                child: Icon(Icons.star_border_purple500_rounded, color: Colors.pinkAccent, size: 14),
+                child: Icon(Icons.star_border_purple500_rounded, color: Colors.pink, size: 14),
               ),
             ],
           ),
@@ -983,18 +1029,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13,
-            color: Colors.white54,
+            color: Colors.white70,
             height: 1.4,
           ),
         ),
         const SizedBox(height: 32),
 
-        // Progress List Cards matching PDF
         _buildAllSetCard(
           title: 'Profile Complete',
           desc: 'All information saved locally and prepared',
           icon: Icons.check_circle_rounded,
-          iconColor: Colors.greenAccent,
+          iconColor: Colors.green,
         ),
         const SizedBox(height: 14),
 
@@ -1010,7 +1055,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           title: 'Ready to Start',
           desc: 'Workouts and meal tracking spaces synchronized',
           icon: Icons.emoji_events_rounded,
-          iconColor: Colors.amberAccent,
+          iconColor: Colors.amber,
         ),
       ],
     );
@@ -1025,16 +1070,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.06), width: 1.2),
+        border: Border.all(color: Colors.black.withOpacity(0.04), width: 1.2),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withOpacity(0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: iconColor, size: 24),
@@ -1047,7 +1093,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Text(
                   title,
                   style: GoogleFonts.inter(
-                    color: Colors.white,
+                    color: AppTheme.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 14.5,
                   ),
@@ -1056,7 +1102,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Text(
                   desc,
                   style: GoogleFonts.inter(
-                    color: Colors.white38,
+                    color: Colors.black45,
                     fontSize: 11.5,
                   ),
                 ),
@@ -1076,19 +1122,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+        border: Border.all(color: Colors.black.withOpacity(0.05), width: 1.5),
+        boxShadow: AppTheme.cardShadow,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: GoogleFonts.inter(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+        style: GoogleFonts.inter(color: AppTheme.primary, fontSize: 15, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.4), size: 20),
+          prefixIcon: Icon(icon, color: Colors.black38, size: 20),
           hintText: hintText,
-          hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 14),
+          hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 14),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
@@ -1102,41 +1149,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Step progress action
           Row(
             children: [
-              // Show Back or Log-in
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    if (_currentStep == 0) {
-                      // Navigate to Log-In screen
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      );
-                    } else {
-                      _prevStep();
-                    }
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.white.withOpacity(0.12), width: 1.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    minimumSize: const Size(double.infinity, 54),
-                  ),
-                  child: Text(
-                    _currentStep == 0 ? 'Log in' : 'Back',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+              if (_currentStep > 0) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _prevStep,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.white24, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      minimumSize: const Size(double.infinity, 54),
+                    ),
+                    child: Text(
+                      'Back',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
+              ],
               
-              // Continue button
               Expanded(
                 child: Container(
                   height: 54,
@@ -1145,7 +1181,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     gradient: AppTheme.primaryGradient,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6366F1).withOpacity(0.3),
+                        color: const Color(0xFF6366F1).withOpacity(0.2),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       )
@@ -1211,7 +1247,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Text(
               'You can always update your preferences in Settings',
               style: GoogleFonts.inter(
-                color: Colors.white30,
+                color: Colors.white38,
                 fontSize: 10,
               ),
             ),

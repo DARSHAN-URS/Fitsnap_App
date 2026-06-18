@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'activity_tracker_screen.dart';
+import '../widgets/staggered_animation.dart';
 
 class ActivityTab extends StatefulWidget {
   const ActivityTab({super.key});
@@ -12,7 +14,7 @@ class ActivityTab extends StatefulWidget {
   State<ActivityTab> createState() => _ActivityTabState();
 }
 
-class _ActivityTabState extends State<ActivityTab> {
+class _ActivityTabState extends State<ActivityTab> with TickerProviderStateMixin {
   List<Map<String, dynamic>> _workoutHistory = [];
   bool _isLoading = true;
 
@@ -20,21 +22,33 @@ class _ActivityTabState extends State<ActivityTab> {
   int _totalCalories = 0;
   int _totalDurationSeconds = 0;
 
+  late AnimationController _entryAnimController;
+
   @override
   void initState() {
     super.initState();
+    _entryAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _entryAnimController.forward();
     _loadWorkoutHistory();
+  }
+
+  @override
+  void dispose() {
+    _entryAnimController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadWorkoutHistory() async {
     setState(() => _isLoading = true);
-    final prefs = await SharedPreferences.getInstance();
     
     double tempDistance = 0.0;
     int tempCalories = 0;
     int tempDuration = 0;
     List<Map<String, dynamic>> parsedHistory = [];
-
+ 
     if (ApiService.isAuthenticated) {
       final res = await ApiService.getWorkouts();
       if (res['success']) {
@@ -45,11 +59,11 @@ class _ActivityTabState extends State<ActivityTab> {
           final int dur = (w['duration_seconds'] as num?)?.toInt() ?? 0;
           final int cal = (w['calories'] as num?)?.toInt() ?? 0;
           final String dateStr = w['completed_at'] ?? DateTime.now().toIso8601String();
-
+ 
           tempDistance += dist;
           tempCalories += cal;
           tempDuration += dur;
-
+ 
           parsedHistory.add({
             'type': type,
             'distance': dist,
@@ -60,9 +74,9 @@ class _ActivityTabState extends State<ActivityTab> {
         }
       }
     }
-
+ 
     if (parsedHistory.isEmpty) {
-      final List<String> rawWorkouts = prefs.getStringList('workout_history') ?? [];
+      final List<String> rawWorkouts = await PreferencesHelper.readStringList('workout_history') ?? [];
       for (var raw in rawWorkouts.reversed) {
         final parts = raw.split('|');
         if (parts.length >= 4) {
@@ -151,7 +165,10 @@ class _ActivityTabState extends State<ActivityTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(
+          StaggeredListItem(
+            index: 0,
+            animationController: _entryAnimController,
+            child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
@@ -179,26 +196,26 @@ class _ActivityTabState extends State<ActivityTab> {
               ),
             ],
           ),
+          ),
           const SizedBox(height: 24),
 
           // Start live workout launcher card
-          Container(
+          StaggeredListItem(
+            index: 1,
+            animationController: _entryAnimController,
+            child: Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.primary, AppTheme.primaryLight],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
               borderRadius: AppTheme.cardRadius,
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withOpacity(0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                )
-              ],
+              image: DecorationImage(
+                image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1486218119243-13883505764c?q=80&w=600&auto=format&fit=crop'),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.65),
+                  BlendMode.darken,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,8 +226,9 @@ class _ActivityTabState extends State<ActivityTab> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white24),
                       ),
                       child: Row(
                         children: [
@@ -235,9 +253,9 @@ class _ActivityTabState extends State<ActivityTab> {
                         ],
                       ),
                     ),
-                    Icon(
+                    const Icon(
                       Icons.insights_rounded,
-                      color: AppTheme.accentLight,
+                      color: Colors.white70,
                       size: 24,
                     ),
                   ],
@@ -256,7 +274,7 @@ class _ActivityTabState extends State<ActivityTab> {
                 Text(
                   'Analyze GPS routes, real-time pace, and live active energy burn metrics.',
                   style: GoogleFonts.inter(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withOpacity(0.7),
                     fontSize: 13,
                     height: 1.4,
                   ),
@@ -299,10 +317,14 @@ class _ActivityTabState extends State<ActivityTab> {
               ],
             ),
           ),
+          ),
           const SizedBox(height: 28),
 
           // Stats Overview Cards
-          Text(
+          StaggeredListItem(
+            index: 2,
+            animationController: _entryAnimController,
+            child: Text(
             'Weekly Statistics',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
@@ -310,8 +332,12 @@ class _ActivityTabState extends State<ActivityTab> {
               color: AppTheme.primary,
             ),
           ),
+          ),
           const SizedBox(height: 16),
-          Row(
+          StaggeredListItem(
+            index: 3,
+            animationController: _entryAnimController,
+            child: Row(
             children: [
               Expanded(
                 child: _buildSummaryCard(
@@ -341,16 +367,21 @@ class _ActivityTabState extends State<ActivityTab> {
               ),
             ],
           ),
+          ),
           const SizedBox(height: 32),
 
           // Workout history header
-          Text(
+          StaggeredListItem(
+            index: 4,
+            animationController: _entryAnimController,
+            child: Text(
             'Workout History',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               color: AppTheme.primary,
             ),
+          ),
           ),
           const SizedBox(height: 16),
 
@@ -362,38 +393,77 @@ class _ActivityTabState extends State<ActivityTab> {
               ),
             )
           else if (_workoutHistory.isEmpty)
-            Container(
+            StaggeredListItem(
+              index: 5,
+              animationController: _entryAnimController,
+              child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: AppTheme.cardRadius,
-                boxShadow: AppTheme.cardShadow,
-                border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+                image: DecorationImage(
+                  image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=600&auto=format&fit=crop'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.7),
+                    BlendMode.darken,
+                  ),
+                ),
               ),
               child: Column(
                 children: [
-                  Icon(Icons.directions_run_rounded, color: Colors.grey.shade300, size: 48),
-                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Icon(Icons.directions_run_rounded, color: Colors.white70, size: 40),
+                  ),
+                  const SizedBox(height: 20),
                   Text(
-                    'No workouts recorded yet',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primary,
-                      fontSize: 14,
+                    'No Workouts Yet',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      fontSize: 18,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
-                    'Complete a live workout session to see it here.',
+                    'Complete your first live workout\nto see it tracked here.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
-                      color: Colors.black38,
-                      fontSize: 12,
+                      color: Colors.white60,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ActivityTrackerScreen()),
+                      ).then((_) => _loadWorkoutHistory());
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                    label: Text(
+                      'Start First Workout',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppTheme.primary,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     ),
                   ),
                 ],
               ),
+            ),
             )
           else
             ListView.builder(
@@ -496,17 +566,16 @@ class _ActivityTabState extends State<ActivityTab> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF0F172A).withOpacity(0.8),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
+              color: color.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -515,9 +584,9 @@ class _ActivityTabState extends State<ActivityTab> {
           Text(
             val,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w900,
-              color: AppTheme.primary,
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 3),
@@ -525,7 +594,7 @@ class _ActivityTabState extends State<ActivityTab> {
             title,
             style: GoogleFonts.inter(
               fontSize: 10,
-              color: Colors.black38,
+              color: Colors.white70,
               fontWeight: FontWeight.w600,
             ),
           ),

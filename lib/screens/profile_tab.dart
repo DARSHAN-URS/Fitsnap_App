@@ -3,41 +3,67 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../auth_screen.dart';
 import '../services/api_service.dart';
+import '../services/health_sync_service.dart';
 import '../utils/preferences_helper.dart';
+import '../widgets/staggered_animation.dart';
 import 'personal_details_screen.dart';
 import 'preferences_screen.dart';
 import 'language_screen.dart';
 import 'nutrition_goals_screen.dart';
 import 'fasting_screen.dart';
-import 'weight_logs_screen.dart';
+import 'measurement_logs_screen.dart';
 import 'help_support_screen.dart';
 import 'terms_privacy_screen.dart';
 import 'referral_screen.dart';
 import 'workout_library_screen.dart';
 import '../services/notification_service.dart';
 
-class ProfileTab extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/profile_provider.dart';
+
+class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
 
   @override
-  State<ProfileTab> createState() => _ProfileTabState();
+  ConsumerState<ProfileTab> createState() => _ProfileTabState();
 }
 
-class _ProfileTabState extends State<ProfileTab> {
-  String _name = 'Darshan Urs';
-  int _age = 25;
-  String? _profilePictureUrl;
+class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStateMixin {
   TimeOfDay? _reminderTime;
-  bool _isLoading = false;
+  String _language = 'English';
+  
+  late AnimationController _entryAnimController;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _entryAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _entryAnimController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(profileProvider.notifier).loadProfile();
+    });
     _loadReminderTime();
+    _loadLanguage();
+  }
+
+  @override
+  void dispose() {
+    _entryAnimController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLanguage() async {
+    final langTemp = await PreferencesHelper.readString('selected_language_name') ?? 'English';
+    setState(() {
+      _language = langTemp;
+    });
   }
 
   Future<void> _loadReminderTime() async {
@@ -86,38 +112,6 @@ class _ProfileTabState extends State<ProfileTab> {
     }
   }
 
-  Future<void> _loadProfile() async {
-    setState(() => _isLoading = true);
-    String nameTemp = await PreferencesHelper.readString('profile_name') ?? 'Darshan Urs';
-    int ageTemp = await PreferencesHelper.readInt('profile_age') ?? 25;
-    String? picTemp = await PreferencesHelper.readString('profile_pic_url');
- 
-    if (ApiService.isAuthenticated) {
-      final res = await ApiService.getProfile();
-      if (res['success']) {
-        final data = res['data'];
-        nameTemp = data['name'] ?? nameTemp;
-        ageTemp = data['age'] ?? ageTemp;
-        picTemp = data['profile_picture_url'] ?? picTemp;
- 
-        await PreferencesHelper.saveString('profile_name', nameTemp);
-        await PreferencesHelper.saveInt('profile_age', ageTemp);
-        if (picTemp != null) {
-          await PreferencesHelper.saveString('profile_pic_url', picTemp);
-        }
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _name = nameTemp;
-        _age = ageTemp;
-        _profilePictureUrl = picTemp;
-        _isLoading = false;
-      });
-    }
-  }
-
   Future<void> _pickAndUploadProfilePicture() async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -130,34 +124,17 @@ class _ProfileTabState extends State<ProfileTab> {
 
       if (image == null) return;
 
-      setState(() => _isLoading = true);
+      await ref.read(profileProvider.notifier).updateProfilePicture(image.path);
 
-      if (ApiService.isAuthenticated) {
-        final res = await ApiService.updateProfilePicture(image.path);
-        if (res['success']) {
-          setState(() {
-            _profilePictureUrl = res['url'];
-          });
-          await PreferencesHelper.saveString('profile_pic_url', res['url']);
-
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Profile picture updated successfully!'),
-              backgroundColor: AppTheme.neonEmerald,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-          );
-        } else {
-          throw Exception(res['error'] ?? 'Upload failed');
-        }
-      } else {
-        setState(() {
-          _profilePictureUrl = image.path;
-        });
-        await PreferencesHelper.saveString('profile_pic_url', image.path);
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Profile picture updated successfully!'),
+          backgroundColor: AppTheme.neonEmerald,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,10 +145,6 @@ class _ProfileTabState extends State<ProfileTab> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
@@ -231,13 +204,18 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
+    final profileState = ref.watch(profileProvider);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Screen Title
-          Text(
+          StaggeredListItem(
+            index: 0,
+            animationController: _entryAnimController,
+            child: Text(
             'Profile',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 32,
@@ -246,10 +224,14 @@ class _ProfileTabState extends State<ProfileTab> {
               letterSpacing: -1,
             ),
           ),
+          ),
           const SizedBox(height: 24),
           
           // User Card
-          _buildCard(
+          StaggeredListItem(
+            index: 1,
+            animationController: _entryAnimController,
+            child: _buildCard(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -262,21 +244,21 @@ class _ProfileTabState extends State<ProfileTab> {
                           width: 68,
                           height: 68,
                           decoration: BoxDecoration(
-                            gradient: _profilePictureUrl == null ? AppTheme.primaryGradient : null,
+                            gradient: profileState.profilePictureUrl == null ? AppTheme.primaryGradient : null,
                             shape: BoxShape.circle,
-                            image: _profilePictureUrl != null
+                            image: profileState.profilePictureUrl != null
                                 ? DecorationImage(
-                                    image: _profilePictureUrl!.startsWith('http')
-                                        ? NetworkImage(_profilePictureUrl!)
-                                        : FileImage(File(_profilePictureUrl!)) as ImageProvider,
+                                    image: profileState.profilePictureUrl!.startsWith('http')
+                                        ? CachedNetworkImageProvider(profileState.profilePictureUrl!)
+                                        : FileImage(File(profileState.profilePictureUrl!)) as ImageProvider,
                                     fit: BoxFit.cover,
                                   )
                                 : null,
                           ),
-                          child: _profilePictureUrl == null
+                          child: profileState.profilePictureUrl == null
                               ? Center(
                                   child: Text(
-                                    _name.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                    profileState.name.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
                                     style: GoogleFonts.inter(
                                       color: Colors.white,
                                       fontSize: 24,
@@ -302,7 +284,7 @@ class _ProfileTabState extends State<ProfileTab> {
                             ),
                           ),
                         ),
-                        if (_isLoading)
+                        if (profileState.isLoading)
                           Positioned.fill(
                             child: Container(
                               decoration: BoxDecoration(
@@ -310,17 +292,17 @@ class _ProfileTabState extends State<ProfileTab> {
                                 shape: BoxShape.circle,
                               ),
                               child: const Center(
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -329,7 +311,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         Row(
                           children: [
                             Text(
-                              _name,
+                              profileState.name,
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w800,
@@ -342,7 +324,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Premium Member • $_age years old',
+                          'Premium Member • ${profileState.age} years old',
                           style: GoogleFonts.inter(
                             color: Colors.black45,
                             fontWeight: FontWeight.w500,
@@ -356,22 +338,30 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
           ),
+          ),
           const SizedBox(height: 20),
 
           // Stats Grid Widget
-          Row(
+          StaggeredListItem(
+            index: 2,
+            animationController: _entryAnimController,
+            child: Row(
             children: [
-              Expanded(child: _buildStatWidget('Active Days', '45', Icons.calendar_today_rounded, AppTheme.accent)),
+              Expanded(child: _buildStatWidget('Active Days', '${profileState.activeDays}', Icons.calendar_today_rounded, AppTheme.accent)),
               const SizedBox(width: 12),
-              Expanded(child: _buildStatWidget('Meals Scanned', '112', Icons.center_focus_strong_rounded, AppTheme.neonPink)),
+              Expanded(child: _buildStatWidget('Meals Scanned', '${profileState.mealsScanned}', Icons.center_focus_strong_rounded, AppTheme.neonPink)),
               const SizedBox(width: 12),
-              Expanded(child: _buildStatWidget('Avg. Target', '94%', Icons.check_circle_outline_rounded, AppTheme.neonEmerald)),
+              Expanded(child: _buildStatWidget('Avg. Target', profileState.avgTarget, Icons.check_circle_outline_rounded, AppTheme.neonEmerald)),
             ],
+          ),
           ),
           const SizedBox(height: 28),
 
           // Invite Friends Banner (marketing style)
-          GestureDetector(
+          StaggeredListItem(
+            index: 3,
+            animationController: _entryAnimController,
+            child: GestureDetector(
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ReferralScreen()),
@@ -429,12 +419,20 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
           ),
+          ),
           const SizedBox(height: 28),
 
           // Account Settings Section
-          _buildSectionHeader('Account Settings'),
+          StaggeredListItem(
+            index: 4,
+            animationController: _entryAnimController,
+            child: _buildSectionHeader('Account Settings'),
+          ),
           const SizedBox(height: 8),
-          _buildCard(
+          StaggeredListItem(
+            index: 5,
+            animationController: _entryAnimController,
+            child: _buildCard(
             child: Column(
               children: [
                 ListTile(
@@ -458,7 +456,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const PersonalDetailsScreen()),
-                  ).then((_) => _loadProfile()),
+                  ).then((_) => ref.read(profileProvider.notifier).loadProfile()),
                 ),
                 _buildDivider(),
                 _buildListTile(
@@ -470,23 +468,40 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                 ),
                 _buildDivider(),
-                _buildListTile(
-                  Icons.language_rounded,
-                  'Language',
-                  () => Navigator.push(
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  leading: const Icon(Icons.language_rounded, color: AppTheme.accent),
+                  title: Text(
+                    'Language',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.primary),
+                  ),
+                  subtitle: Text(
+                    _language,
+                    style: GoogleFonts.inter(fontSize: 13, color: Colors.black45),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+                  onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const LanguageScreen()),
-                  ),
+                  ).then((_) => ref.read(profileProvider.notifier).loadProfile()),
                 ),
               ],
             ),
           ),
+          ),
           const SizedBox(height: 24),
 
           // Goals & Tracking Section
-          _buildSectionHeader('Goals & Tracking'),
+          StaggeredListItem(
+            index: 6,
+            animationController: _entryAnimController,
+            child: _buildSectionHeader('Goals & Tracking'),
+          ),
           const SizedBox(height: 8),
-          _buildCard(
+          StaggeredListItem(
+            index: 7,
+            animationController: _entryAnimController,
+            child: _buildCard(
             child: Column(
               children: [
                 _buildListTile(
@@ -518,10 +533,10 @@ class _ProfileTabState extends State<ProfileTab> {
                 _buildDivider(),
                 _buildListTile(
                   Icons.monitor_weight_outlined,
-                  'Weight & Goal logs',
+                  'Body & Weight Logs',
                   () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const WeightLogsScreen()),
+                    MaterialPageRoute(builder: (_) => const MeasurementLogsScreen()),
                   ),
                 ),
                 _buildDivider(),
@@ -532,13 +547,36 @@ class _ProfileTabState extends State<ProfileTab> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Syncing with Health/Google Fit...')),
                     );
-                    // Import HealthSyncService first, we'll do it later or just simulate
-                    await Future.delayed(const Duration(seconds: 1));
-                    if (context.mounted) {
+                    
+                    final result = await HealthSyncService.fetchTodayData();
+                    if (!mounted) return;
+                    
+                    if (result['success'] == true) {
+                      final healthData = result['data'] as Map<String, dynamic>;
+                      final int steps = healthData['steps'] ?? 0;
+                      final double water = healthData['water'] ?? 0.0;
+                      
+                      // Save to preferences so HomeTab can reload them
+                      await PreferencesHelper.saveInt('home_steps', steps);
+                      await PreferencesHelper.saveInt('home_water', water.toInt());
+                      
+                      // Sync to backend if authenticated
+                      if (ApiService.isAuthenticated) {
+                        await ApiService.updateDailyStats(steps: steps, waterMl: water.toInt());
+                      }
+                      
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Health Data Synced Successfully!'),
+                        SnackBar(
+                          content: Text('Synced: $steps steps and ${water.toInt()}ml water!'),
                           backgroundColor: Colors.green,
+                        ),
+                      );
+                      ref.read(profileProvider.notifier).loadProfile();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Sync failed: ${result['error'] ?? 'Unknown error'}'),
+                          backgroundColor: Colors.red.shade600,
                         ),
                       );
                     }
@@ -547,12 +585,20 @@ class _ProfileTabState extends State<ProfileTab> {
               ],
             ),
           ),
+          ),
           const SizedBox(height: 24),
 
           // Support & Legal Section
-          _buildSectionHeader('Support & Legal'),
+          StaggeredListItem(
+            index: 8,
+            animationController: _entryAnimController,
+            child: _buildSectionHeader('Support & Legal'),
+          ),
           const SizedBox(height: 8),
-          _buildCard(
+          StaggeredListItem(
+            index: 9,
+            animationController: _entryAnimController,
+            child: _buildCard(
             child: Column(
               children: [
                 _buildListTile(
@@ -575,10 +621,14 @@ class _ProfileTabState extends State<ProfileTab> {
               ],
             ),
           ),
+          ),
           const SizedBox(height: 24),
 
           // Log Out Section
-          _buildCard(
+          StaggeredListItem(
+            index: 10,
+            animationController: _entryAnimController,
+            child: _buildCard(
             child: ListTile(
               leading: const Icon(Icons.logout_rounded, color: AppTheme.caloriesColor),
               title: Text(
@@ -592,6 +642,7 @@ class _ProfileTabState extends State<ProfileTab> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               onTap: () => _showLogoutDialog(context),
             ),
+          ),
           ),
         ],
       ),

@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../theme/app_theme.dart';
 import 'activity_report_screen.dart';
+
 
 class ActiveWorkoutScreen extends StatefulWidget {
   final String activityType;
@@ -35,57 +38,361 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
   final List<Offset> _routePoints = [];
   final math.Random _random = math.Random();
 
+  // State variables that can be mutated
+  late String _activityType;
+  late IconData _icon;
+  late Color _color;
+  late int _avgPaceSeconds;
+  late int _kcalPerKm;
+
+  // Geolocator variables
+  bool _isMockSimulation = false;
+  Position? _lastPosition;
+  double? _startLatitude;
+  double? _startLongitude;
+  double _speedKmH = 0.0;
+  bool _isSpeedLimitAlertShowing = false;
+  StreamSubscription<Position>? _gpsSubscription;
+  bool _simulateSpeeding = false;
+
   @override
   void initState() {
     super.initState();
+    _activityType = widget.activityType;
+    _icon = widget.icon;
+    _color = widget.color;
+    _avgPaceSeconds = widget.avgPaceSeconds;
+    _kcalPerKm = widget.kcalPerKm;
     _currentPaceSeconds = widget.avgPaceSeconds;
     
     // Initialize starting route point in center of screen coordinates
     _routePoints.add(const Offset(150, 150));
 
+    // Request permissions and initialize GPS stream
+    _initGPSTracking();
+
+    // Setup active duration timer (ticks every second)
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
       setState(() {
         _secondsElapsed++;
-        
-        // Accumulate distance realistically
-        // distance (km) = elapsed seconds / pace per km
-        _distance = _secondsElapsed / widget.avgPaceSeconds;
-        
-        // Estimate calories
-        _calories = (_distance * widget.kcalPerKm).toInt();
-
-        // Introduce minor pace fluctuations for high fidelity feel
-        if (_secondsElapsed % 5 == 0) {
-          final fluctuation = _random.nextInt(31) - 15; // ±15 seconds
-          _currentPaceSeconds = (widget.avgPaceSeconds + fluctuation).clamp(120, 1200);
-        }
-
-        // Add coordinate trace every 2 seconds
-        if (_secondsElapsed % 2 == 0) {
-          final Offset lastPt = _routePoints.last;
-          
-          // Generate a semi-random walking path (Brownian motion style with velocity direction bias)
-          double dxDir = math.sin(_secondsElapsed * 0.05) * 8;
-          double dyDir = math.cos(_secondsElapsed * 0.03) * 8;
-          
-          // Add random jitter
-          dxDir += (_random.nextDouble() - 0.5) * 5;
-          dyDir += (_random.nextDouble() - 0.5) * 5;
-          
-          // Constrain coordinates to stay inside the view screen limits
-          final nextPt = Offset(
-            (lastPt.dx + dxDir).clamp(20.0, 280.0),
-            (lastPt.dy + dyDir).clamp(20.0, 280.0),
-          );
-          _routePoints.add(nextPt);
+        if (_isMockSimulation) {
+          _runMockSimulationStep();
         }
       });
+      // Check speed limit status periodically
+      if (_secondsElapsed % 2 == 0) {
+        _checkSpeedLimit();
+      }
     });
+  }
+
+  Future<void> _initGPSTracking() async {
+    // Check and request location permission using permission_handler
+    final status = await Permission.location.request();
+    
+    if (status.isGranted) {
+      final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!isServiceEnabled) {
+        debugPrint("Location services are disabled.");
+        setState(() {
+          _isMockSimulation = true;
+        });
+        return;
+      }
+
+      const locationSettings = LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 3, // meters
+      );
+
+      _gpsSubscription = Geolocator.getPositionStream(locationSettings: locationSettings)
+          .listen((Position position) {
+        if (!mounted) return;
+        setState(() {
+          _handleNewPosition(position);
+        });
+      }, onError: (error) {
+        debugPrint("Geolocator stream error: $error. Falling back to mock.");
+        setState(() {
+          _isMockSimulation = true;
+        });
+      });
+    } else {
+      debugPrint("Location permission denied. Running in mock simulation mode.");
+      setState(() {
+        _isMockSimulation = true;
+      });
+    }
+  }
+
+  void _handleNewPosition(Position position) {
+    if (_simulateSpeeding) {
+      _speedKmH = 45.0;
+    } else {
+      _speedKmH = position.speed * 3.6;
+      if (_speedKmH < 0.0) _speedKmH = 0.0;
+    }
+
+    if (_lastPosition == null) {
+      _startLatitude = position.latitude;
+      _startLongitude = position.longitude;
+      _lastPosition = position;
+    } else {
+      final double distanceInMeters = Geolocator.distanceBetween(
+        _lastPosition!.latitude,
+        _lastPosition!.longitude,
+        position.latitude,
+        position.longitude,
+      );
+
+      _distance += distanceInMeters / 1000.0;
+      _calories = (_distance * _kcalPerKm).toInt();
+      _lastPosition = position;
+
+      if (_speedKmH > 0.5) {
+        _currentPaceSeconds = (3600.0 / _speedKmH).round().clamp(120, 1200);
+      } else {
+        _currentPaceSeconds = _avgPaceSeconds;
+      }
+
+      if (_startLatitude != null && _startLongitude != null) {
+        final double dx = (position.longitude - _startLongitude!) * 90000.0;
+        final double dy = -(position.latitude - _startLatitude!) * 90000.0;
+        final double px = (150.0 + dx).clamp(20.0, 280.0);
+        final double py = (150.0 + dy).clamp(20.0, 280.0);
+        _routePoints.add(Offset(px, py));
+      }
+    }
+  }
+
+  void _runMockSimulationStep() {
+    if (_simulateSpeeding) {
+      _speedKmH = 45.0;
+      _currentPaceSeconds = (3600.0 / _speedKmH).round().clamp(120, 1200);
+      _distance += (_speedKmH / 3600.0);
+      _calories = (_distance * _kcalPerKm).toInt();
+    } else {
+      _distance = _secondsElapsed / _avgPaceSeconds;
+      _calories = (_distance * _kcalPerKm).toInt();
+
+      if (_secondsElapsed % 5 == 0) {
+        final fluctuation = _random.nextInt(31) - 15;
+        _currentPaceSeconds = (_avgPaceSeconds + fluctuation).clamp(120, 1200);
+        _speedKmH = 3600.0 / _currentPaceSeconds;
+      }
+    }
+
+    if (_secondsElapsed % 2 == 0) {
+      final Offset lastPt = _routePoints.last;
+      double dxDir = math.sin(_secondsElapsed * 0.05) * 8;
+      double dyDir = math.cos(_secondsElapsed * 0.03) * 8;
+      dxDir += (_random.nextDouble() - 0.5) * 5;
+      dyDir += (_random.nextDouble() - 0.5) * 5;
+      final nextPt = Offset(
+        (lastPt.dx + dxDir).clamp(20.0, 280.0),
+        (lastPt.dy + dyDir).clamp(20.0, 280.0),
+      );
+      _routePoints.add(nextPt);
+    }
+  }
+
+  void _checkSpeedLimit() {
+    if (_isSpeedLimitAlertShowing) return;
+
+    double limit = 7.5;
+    if (_activityType.toLowerCase() == 'running') {
+      limit = 18.0;
+    } else if (_activityType.toLowerCase() == 'cycling') {
+      limit = 35.0;
+    }
+
+    if (_speedKmH > limit) {
+      _isSpeedLimitAlertShowing = true;
+      _showSpeedLimitDialog();
+    }
+  }
+
+  void _showSpeedLimitDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _color.withOpacity(0.4), width: 1.5),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 28),
+              const SizedBox(width: 8),
+              Text(
+                "Speed Limit Exceeded",
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "You are exceeding the limit! Currently moving at ${_speedKmH.toStringAsFixed(1)} km/h.",
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Please confirm if you are running or cycling so we can track your activity accurately:",
+                style: GoogleFonts.inter(
+                  color: Colors.white70,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actions: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildActivityOptionButton(
+                  context: context,
+                  name: 'Walking',
+                  icon: Icons.directions_walk_rounded,
+                  color: AppTheme.neonCyan,
+                  pace: '10:00',
+                  kcal: 60,
+                ),
+                const SizedBox(height: 8),
+                _buildActivityOptionButton(
+                  context: context,
+                  name: 'Running',
+                  icon: Icons.directions_run_rounded,
+                  color: AppTheme.neonPink,
+                  pace: '5:30',
+                  kcal: 75,
+                ),
+                const SizedBox(height: 8),
+                _buildActivityOptionButton(
+                  context: context,
+                  name: 'Cycling',
+                  icon: Icons.directions_bike_rounded,
+                  color: AppTheme.neonEmerald,
+                  pace: '2:45',
+                  kcal: 50,
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isSpeedLimitAlertShowing = false;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(
+                    "Ignore Warning",
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withOpacity(0.5),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActivityOptionButton({
+    required BuildContext context,
+    required String name,
+    required IconData icon,
+    required Color color,
+    required String pace,
+    required int kcal,
+  }) {
+    final isCurrent = _activityType.toLowerCase() == name.toLowerCase();
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isCurrent ? color.withOpacity(0.15) : Colors.transparent,
+        side: BorderSide(
+          color: isCurrent ? color : Colors.white24,
+          width: 1.5,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      ),
+      onPressed: () {
+        setState(() {
+          _activityType = name;
+          _icon = icon;
+          _color = color;
+          _avgPaceSeconds = _parsePaceString(pace);
+          _kcalPerKm = kcal;
+          _isSpeedLimitAlertShowing = false;
+        });
+        Navigator.of(context).pop();
+      },
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  "Est. Pace: $pace/km • $kcal kcal/km",
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isCurrent)
+            Icon(Icons.check_circle_rounded, color: color, size: 18)
+          else
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white30, size: 14),
+        ],
+      ),
+    );
+  }
+
+  int _parsePaceString(String pace) {
+    final parts = pace.split(':');
+    final minutes = int.parse(parts[0]);
+    final seconds = int.parse(parts[1]);
+    return (minutes * 60) + seconds;
   }
 
   @override
   void dispose() {
     _timer.cancel();
+    _gpsSubscription?.cancel();
     super.dispose();
   }
 
@@ -108,19 +415,20 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
 
   void _finishWorkout() {
     _timer.cancel();
+    _gpsSubscription?.cancel();
     
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (context) => ActivityReportScreen(
-          activityType: widget.activityType,
+          activityType: _activityType,
           distance: _distance,
           durationSeconds: _secondsElapsed,
           calories: _calories,
-          avgPace: _formatPace(widget.avgPaceSeconds),
+          avgPace: _formatPace(_avgPaceSeconds),
           routePoints: _routePoints,
-          themeColor: widget.color,
-          icon: widget.icon,
+          themeColor: _color,
+          icon: _icon,
         ),
       ),
     );
@@ -147,10 +455,10 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(widget.icon, color: widget.color, size: 18),
+                        Icon(_icon, color: _color, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          widget.activityType.toUpperCase(),
+                          _activityType.toUpperCase(),
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
@@ -166,14 +474,14 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                       Container(
                         width: 10,
                         height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.redAccent,
+                        decoration: BoxDecoration(
+                          color: _isMockSimulation ? Colors.orangeAccent : Colors.redAccent,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'LIVE GPS',
+                        _isMockSimulation ? 'MOCK GPS' : 'LIVE GPS',
                         style: GoogleFonts.inter(
                           color: Colors.white60,
                           fontSize: 11,
@@ -261,29 +569,98 @@ class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
                           child: CustomPaint(
                             painter: _RoutePainter(
                               points: _routePoints,
-                              pathColor: widget.color,
+                              pathColor: _color,
                             ),
                           ),
                         ),
-                        // Overlay HUD instructions
+                        // Overlay HUD instructions (Signal strength & Current speed)
                         Positioned(
                           left: 16,
                           top: 16,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.black45,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.satellite_alt_rounded, color: Colors.cyanAccent, size: 12),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'SIGNAL STRENGTH: 98%',
-                                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                              ],
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.satellite_alt_rounded, color: Colors.cyanAccent, size: 12),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isMockSimulation ? 'GPS: MOCK MODE' : 'GPS: ACTIVE (98%)',
+                                      style: GoogleFonts.inter(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.speed_rounded, color: Colors.amberAccent, size: 12),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'SPEED: ${_speedKmH.toStringAsFixed(1)} KM/H',
+                                      style: GoogleFonts.inter(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Simulate Speeding developer shortcut
+                        Positioned(
+                          right: 16,
+                          top: 16,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _simulateSpeeding = !_simulateSpeeding;
+                                if (_simulateSpeeding) {
+                                  _speedKmH = 45.0; // Instantly trigger speed check
+                                } else {
+                                  _speedKmH = 0.0;
+                                }
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _simulateSpeeding ? Colors.redAccent.withOpacity(0.8) : Colors.black45,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _simulateSpeeding ? Colors.redAccent : Colors.transparent,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _simulateSpeeding ? Icons.speed_rounded : Icons.directions_run_rounded,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _simulateSpeeding ? 'STOP SPEEDING' : 'SIMULATE SPEEDING',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
