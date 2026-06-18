@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dashboard_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
+import 'providers/profile_provider.dart';
 import 'utils/preferences_helper.dart';
 import 'services/api_service.dart';
 import 'theme/app_theme.dart';
@@ -109,10 +110,29 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         throw Exception('Could not retrieve Google ID Token.');
       }
 
+      final String displayName = googleUser.displayName ?? '';
+      final String? photoUrl = googleUser.photoUrl;
+      final String email = googleUser.email;
+
       final authNotifier = ref.read(authProvider.notifier);
-      await authNotifier.authenticateWithGoogle(idToken);
+      await authNotifier.authenticateWithGoogle(
+        idToken,
+        displayName: displayName,
+        photoUrl: photoUrl,
+        email: email,
+      );
 
       if (authNotifier.state.success) {
+        if (displayName.isNotEmpty) {
+          await PreferencesHelper.saveString('profile_name', displayName);
+        }
+        if (photoUrl != null && photoUrl.isNotEmpty) {
+          await PreferencesHelper.saveString('profile_pic_url', photoUrl);
+        }
+
+        // Reload profile in provider to reflect Google details immediately
+        ref.read(profileProvider.notifier).loadProfile();
+
         if (!mounted) return;
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
       } else {

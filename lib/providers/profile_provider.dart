@@ -66,9 +66,16 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         final res = await ApiService.getProfile();
         if (res['success'] == true) {
           final data = res['data'];
-          nameTemp = data['name'] ?? nameTemp;
+          final String? serverName = data['name'];
+          final String? serverPic = data['profile_picture_url'];
+
+          if (serverName != null && serverName.isNotEmpty && serverName != 'Guest User') {
+            nameTemp = serverName;
+          }
+          if (serverPic != null && serverPic.isNotEmpty) {
+            picTemp = serverPic;
+          }
           ageTemp = data['age'] ?? ageTemp;
-          picTemp = data['profile_picture_url'] ?? picTemp;
 
           await PreferencesHelper.saveString('profile_name', nameTemp);
           await PreferencesHelper.saveInt('profile_age', ageTemp);

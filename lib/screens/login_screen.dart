@@ -9,6 +9,7 @@ import 'registration_screen.dart';
 import 'onboarding_screen.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
 import '../utils/preferences_helper.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/loading_overlay.dart';
@@ -40,15 +41,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (profileRes['success']) {
       final profileData = profileRes['data'];
+      
+      final String? serverName = profileData['name'];
+      final String? serverPic = profileData['profile_picture_url'];
+      if (serverName != null && serverName.isNotEmpty && serverName != 'Guest User') {
+        await PreferencesHelper.saveString('profile_name', serverName);
+      } else if (username.isNotEmpty) {
+        await PreferencesHelper.saveString('profile_name', username);
+      }
+      if (serverPic != null && serverPic.isNotEmpty) {
+        await PreferencesHelper.saveString('profile_pic_url', serverPic);
+      }
+
       if (profileData['age'] != null && profileData['weight'] != null && profileData['height'] != null) {
         onboardingCompleted = true;
-        await PreferencesHelper.saveString('profile_name', profileData['name'] ?? username);
         await PreferencesHelper.saveString('profile_age', (profileData['age'] ?? 24).toString());
         await PreferencesHelper.saveDouble('profile_height', (profileData['height'] as num?)?.toDouble() ?? 175.0);
         await PreferencesHelper.saveDouble('profile_weight', (profileData['weight'] as num?)?.toDouble() ?? 75.0);
         await PreferencesHelper.saveString('profile_goal', profileData['goals'] ?? 'Build Muscle');
-      } else {
-        await PreferencesHelper.saveString('profile_name', profileData['name'] ?? username);
       }
     }
 
@@ -114,7 +124,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         throw Exception('Could not retrieve Google ID Token.');
       }
 
-      ref.read(authProvider.notifier).authenticateWithGoogle(idToken);
+      final String displayName = googleUser.displayName ?? '';
+      final String? photoUrl = googleUser.photoUrl;
+      final String email = googleUser.email;
+
+      if (displayName.isNotEmpty) {
+        await PreferencesHelper.saveString('profile_name', displayName);
+      }
+      if (photoUrl != null && photoUrl.isNotEmpty) {
+        await PreferencesHelper.saveString('profile_pic_url', photoUrl);
+      }
+
+      // Reload profile to reflect Google details immediately in state
+      ref.read(profileProvider.notifier).loadProfile();
+
+      ref.read(authProvider.notifier).authenticateWithGoogle(
+        idToken,
+        displayName: displayName,
+        photoUrl: photoUrl,
+        email: email,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

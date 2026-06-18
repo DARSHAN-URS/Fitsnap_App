@@ -54,7 +54,8 @@ class ApiService {
       
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        if (data['token'] != null) setToken(data['token']);
+        final token = data['token'] ?? data['data']?['token'];
+        if (token != null) setToken(token);
         return {'success': true, 'data': data};
       }
       return {'success': false, 'error': 'Invalid credentials'};
@@ -73,7 +74,8 @@ class ApiService {
       
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        if (data['token'] != null) setToken(data['token']);
+        final token = data['token'] ?? data['data']?['token'];
+        if (token != null) setToken(token);
         return {'success': true, 'data': data};
       }
       return {'success': false, 'error': 'Signup failed'};
@@ -82,17 +84,28 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> googleLogin(String idToken) async {
+  static Future<Map<String, dynamic>> googleLogin(
+    String idToken, {
+    String? displayName,
+    String? photoUrl,
+    String? email,
+  }) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/google-login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'idToken': idToken}),
+        body: jsonEncode({
+          'idToken': idToken,
+          if (displayName != null) 'displayName': displayName,
+          if (photoUrl != null) 'photoUrl': photoUrl,
+          if (email != null) 'email': email,
+        }),
       );
       
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        if (data['token'] != null) setToken(data['token']);
+        final token = data['token'] ?? data['data']?['token'];
+        if (token != null) setToken(token);
         return {'success': true, 'data': data};
       }
       try {

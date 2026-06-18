@@ -54,13 +54,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   // Google login flow
-  Future<void> authenticateWithGoogle(String idToken) async {
+  Future<void> authenticateWithGoogle(
+    String idToken, {
+    String? displayName,
+    String? photoUrl,
+    String? email,
+  }) async {
     state = state.copyWith(isLoading: true, errorMessage: null, success: false);
     try {
-      final result = await ApiService.googleLogin(idToken);
+      final result = await ApiService.googleLogin(
+        idToken,
+        displayName: displayName,
+        photoUrl: photoUrl,
+        email: email,
+      );
       if (result['success'] == true) {
-        if (result['data'] != null && result['data']['token'] != null) {
-          await _secureStorage.write(key: 'auth_token', value: result['data']['token'] as String);
+        final token = result['data']?['token'] ?? result['data']?['data']?['token'];
+        if (token != null) {
+          await _secureStorage.write(key: 'auth_token', value: token as String);
         }
         state = state.copyWith(isLoading: false, success: true);
       } else {
