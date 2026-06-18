@@ -2,7 +2,7 @@
 # Automates building the release APK and copying it to the final signed release location.
 
 Write-Host "Building release APKs with split-per-abi, R8, and obfuscation enabled..." -ForegroundColor Cyan
-flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/app/outputs/debug-info
+flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/app/outputs/debug-info --no-tree-shake-icons
 
 # Define paths (using arm64-v8a as the primary optimized release target)
 $apkSource = "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
