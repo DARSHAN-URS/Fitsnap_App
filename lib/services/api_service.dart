@@ -409,6 +409,52 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> saveStrengthWorkout({
+    required String workoutName,
+    required String category,
+    required List<Map<String, dynamic>> exercises,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/workouts'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'workout_name': workoutName,
+          'workout_type': 'strength',
+          'category': category,
+          'exercises': exercises,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to save strength workout'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteWorkout(String id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/workouts/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to delete workout'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   // --- Daily Stats Sync (Steps & Water) ---
   static Future<Map<String, dynamic>> getDailyStats({String? date}) async {
     try {
