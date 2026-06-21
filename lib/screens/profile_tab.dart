@@ -322,6 +322,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                             const Icon(Icons.verified_rounded, color: AppTheme.accent, size: 18),
                           ],
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '@${profileState.username}',
+                          style: GoogleFonts.inter(
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(
                           'Premium Member • ${profileState.age} years old',

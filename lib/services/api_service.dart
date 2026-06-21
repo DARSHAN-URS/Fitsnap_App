@@ -267,6 +267,7 @@ class ApiService {
     required double weight,
     required double height,
     required String goals,
+    String? username,
   }) async {
     try {
       final response = await http.put(
@@ -281,6 +282,7 @@ class ApiService {
           'weight': weight,
           'height': height,
           'goals': goals,
+          if (username != null) 'username': username,
         }),
       );
       if (response.statusCode == 200) {

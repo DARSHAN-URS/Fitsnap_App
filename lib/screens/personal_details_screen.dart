@@ -15,6 +15,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   
   late TextEditingController _nameController;
+  late TextEditingController _usernameController;
   late TextEditingController _ageController;
   final TextEditingController _customAllergyController = TextEditingController();
   
@@ -34,6 +35,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: 'Guest User');
+    _usernameController = TextEditingController(text: 'guest_user');
     _ageController = TextEditingController(text: '25');
     _loadPersonalDetails();
   }
@@ -41,6 +43,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _ageController.dispose();
     _customAllergyController.dispose();
     super.dispose();
@@ -48,6 +51,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
 
   Future<void> _loadPersonalDetails() async {
     final name = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
+    final username = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
     final age = await PreferencesHelper.readString('profile_age') ?? '25';
     final weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
     final height = await PreferencesHelper.readDouble('profile_height') ?? 178.0;
@@ -57,6 +61,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
  
     setState(() {
       _nameController.text = name;
+      _usernameController.text = username;
       _ageController.text = age;
       _weight = weight;
       _height = height;
@@ -66,12 +71,28 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     });
   }
 
-  Future<void> _savePersonalDetails() async {
+  Future<String?> _savePersonalDetails() async {
     final name = _nameController.text.trim();
+    final username = _usernameController.text.trim();
     final ageStr = _ageController.text.trim();
     final age = int.tryParse(ageStr) ?? 25;
     
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.updateProfile(
+        name: name,
+        username: username,
+        age: age,
+        weight: _weight,
+        height: _height,
+        goals: _selectedGoal,
+      );
+      if (res['success'] != true) {
+        return res['error'] ?? 'Failed to sync profile';
+      }
+    }
+
     await PreferencesHelper.saveString('profile_name', name);
+    await PreferencesHelper.saveString('profile_username', username);
     await PreferencesHelper.saveString('profile_age', ageStr);
     await PreferencesHelper.saveDouble('profile_weight', _weight);
     await PreferencesHelper.saveDouble('profile_height', _height);
@@ -80,25 +101,47 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     await PreferencesHelper.saveString('profile_gender', _gender);
     await PreferencesHelper.saveStringList('profile_allergies', _selectedAllergies);
 
-    if (ApiService.isAuthenticated) {
-      final res = await ApiService.updateProfile(
-        name: name,
-        age: age,
-        weight: _weight,
-        height: _height,
-        goals: _selectedGoal,
-      );
-      if (!res['success']) {
-        debugPrint('Failed to sync profile: ${res['error']}');
-      }
-    }
+    return null;
   }
 
   void _saveDetails() async {
     if (_formKey.currentState!.validate()) {
-      await _savePersonalDetails();
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: AppTheme.accent),
+        ),
+      );
+
+      final error = await _savePersonalDetails();
       
       if (!mounted) return;
+      Navigator.pop(context); // Dismiss loading dialog
+
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red.shade600,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        );
+        return;
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -178,6 +221,43 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Username input
+                    Text(
+                      'Unique Username',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: TextFormField(
+                        controller: _usernameController,
+                        style: GoogleFonts.inter(fontSize: 14, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.alternate_email_rounded, color: Colors.black38, size: 20),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Username cannot be empty';
+                          }
+                          final trimmed = value.trim();
+                          if (trimmed.length < 3) {
+                            return 'Username must be at least 3 characters long';
+                          }
+                          final regex = RegExp(r'^[a-zA-Z0-9_]+$');
+                          if (!regex.hasMatch(trimmed)) {
+                            return 'Username can only contain letters, numbers, and underscores';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
                     // Name input
                     Text(
                       'Display Name',
