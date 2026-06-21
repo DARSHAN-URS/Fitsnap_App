@@ -171,27 +171,20 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   }
 
   Future<void> _addFriend() async {
-    final email = _friendEmailController.text.trim();
-    if (email.isEmpty) return;
-
-    if (!email.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email address.')),
-      );
-      return;
-    }
+    final query = _friendEmailController.text.trim();
+    if (query.isEmpty) return;
 
     setState(() => _isAddingFriend = true);
 
-    final res = await ApiService.addFriend(email);
+    final res = await ApiService.addFriend(query);
     if (res['success'] == true) {
       _friendEmailController.clear();
       await _fetchData();
       
       NotificationService.showNotification(
-        id: email.hashCode,
+        id: query.hashCode,
         title: 'Friend Request Accepted! 🤝',
-        body: 'You and $email are now connected.',
+        body: 'You and $query are now connected.',
       );
 
       if (mounted) {
@@ -414,7 +407,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                   controller: _friendEmailController,
                   style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.primary),
                   decoration: InputDecoration(
-                    hintText: 'Enter email to add friend...',
+                    hintText: 'Enter username or email to add friend...',
                     hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
                     border: InputBorder.none,
                   ),
@@ -493,7 +486,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Search your friends\' email to add them\nand share your fitness goals!',
+                      'Search your friends\' username or email to add them\nand share your fitness goals!',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12, height: 1.4),
                     ),
