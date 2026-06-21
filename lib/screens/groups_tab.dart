@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
@@ -123,6 +124,10 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   bool _isAddingFriend = false;
   bool _isLoading = true;
 
+  List<dynamic> _searchSuggestions = [];
+  String _lastSearchQuery = '';
+  bool _isSearching = false;
+
   @override
   void initState() {
     super.initState();
@@ -173,12 +178,19 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   Future<void> _addFriend() async {
     final query = _friendEmailController.text.trim();
     if (query.isEmpty) return;
+    await _addFriendWithUsername(query);
+  }
 
+  Future<void> _addFriendWithUsername(String query) async {
     setState(() => _isAddingFriend = true);
 
     final res = await ApiService.addFriend(query);
     if (res['success'] == true) {
       _friendEmailController.clear();
+      setState(() {
+        _searchSuggestions.clear();
+        _lastSearchQuery = '';
+      });
       await _fetchData();
       
       NotificationService.showNotification(
@@ -189,8 +201,8 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Friend request accepted!'),
+          SnackBar(
+            content: Text('Added friend: $query'),
             backgroundColor: Colors.green,
           ),
         );
@@ -208,6 +220,34 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     
     if (mounted) {
       setState(() => _isAddingFriend = false);
+    }
+  }
+
+  void _onSearchTextChanged(String val) {
+    final query = val.trim();
+    setState(() {
+      _lastSearchQuery = query;
+    });
+
+    if (query.length < 2) {
+      setState(() {
+        _searchSuggestions.clear();
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    _fetchSearchSuggestions(query);
+  }
+
+  Future<void> _fetchSearchSuggestions(String query) async {
+    final res = await ApiService.searchUsers(query);
+    if (mounted && query == _lastSearchQuery) {
+      setState(() {
+        _searchSuggestions = res['data'] ?? [];
+        _isSearching = false;
+      });
     }
   }
 
@@ -405,11 +445,21 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
               Expanded(
                 child: TextField(
                   controller: _friendEmailController,
+                  onChanged: _onSearchTextChanged,
                   style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.primary),
                   decoration: InputDecoration(
                     hintText: 'Enter username or email to add friend...',
                     hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
                     border: InputBorder.none,
+                    suffixIcon: _friendEmailController.text.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () {
+                              _friendEmailController.clear();
+                              _onSearchTextChanged('');
+                            },
+                            child: const Icon(Icons.cancel_rounded, color: Colors.black26, size: 20),
+                          )
+                        : null,
                   ),
                   onSubmitted: (_) => _addFriend(),
                 ),
@@ -441,6 +491,209 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
             ],
           ),
         ),
+        
+        if (_isSearching || _searchSuggestions.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 300),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: AppTheme.cardShadow,
+              border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isSearching)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                if (!_isSearching && _searchSuggestions.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Text(
+                        'No matching users found',
+                        style: GoogleFonts.inter(
+                          color: Colors.black38,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (!_isSearching && _searchSuggestions.isNotEmpty)
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: _searchSuggestions.length,
+                      separatorBuilder: (context, index) => const Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: Color(0xFFF1F5F9),
+                      ),
+                      itemBuilder: (context, index) {
+                        final user = _searchSuggestions[index];
+                        final String displayName = user['name'] ?? 'User';
+                        final String username = user['username'] ?? '';
+                        final String email = user['email'] ?? '';
+                        final String? picUrl = user['profile_picture_url'];
+                        
+                        // Check if already friends
+                        final isAlreadyFriend = _friends.any((f) => 
+                          f.friendId.toString() == user['id'].toString() || 
+                          (email.isNotEmpty && f.email.toLowerCase() == email.toLowerCase())
+                        );
+
+                        final List<Color> gradients = [
+                          AppTheme.accent,
+                          AppTheme.neonPink,
+                          AppTheme.neonEmerald,
+                          AppTheme.neonAmber,
+                        ];
+                        final Color placeholderColor = gradients[index % gradients.length];
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                    width: 1,
+                                  ),
+                                  gradient: picUrl == null
+                                      ? LinearGradient(
+                                          colors: [
+                                            placeholderColor.withOpacity(0.12),
+                                            placeholderColor.withOpacity(0.04),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        )
+                                      : null,
+                                  image: picUrl != null
+                                      ? DecorationImage(
+                                          image: picUrl.startsWith('http')
+                                              ? CachedNetworkImageProvider(picUrl)
+                                              : FileImage(File(picUrl)) as ImageProvider,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: picUrl == null
+                                    ? Center(
+                                        child: Text(
+                                          displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                          style: GoogleFonts.inter(
+                                            color: placeholderColor,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      username.isNotEmpty ? '@$username' : email,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.primary,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.black45,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              if (isAlreadyFriend)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.check_rounded, color: Colors.grey.shade600, size: 14),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Friends',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                ElevatedButton(
+                                  onPressed: () => _addFriendWithUsername(username.isNotEmpty ? username : email),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.accent,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: Text(
+                                    'Add',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
         const SizedBox(height: 24),
 
         Row(

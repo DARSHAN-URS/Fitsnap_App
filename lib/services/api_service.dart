@@ -857,6 +857,25 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> searchUsers(String query) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/search?q=${Uri.encodeComponent(query)}'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to search users'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   static Future<Map<String, dynamic>> addFriend(String email) async {
     try {
       final response = await http.post(
