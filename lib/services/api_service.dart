@@ -58,7 +58,12 @@ class ApiService {
         if (token != null) setToken(token);
         return {'success': true, 'data': data};
       }
-      return {'success': false, 'error': 'Invalid credentials'};
+      try {
+        final data = jsonDecode(response.body);
+        return {'success': false, 'error': data['error'] ?? 'Invalid credentials'};
+      } catch (_) {
+        return {'success': false, 'error': 'Invalid credentials (Status: ${response.statusCode})'};
+      }
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -78,7 +83,12 @@ class ApiService {
         if (token != null) setToken(token);
         return {'success': true, 'data': data};
       }
-      return {'success': false, 'error': 'Signup failed'};
+      try {
+        final data = jsonDecode(response.body);
+        return {'success': false, 'error': data['error'] ?? 'Signup failed'};
+      } catch (_) {
+        return {'success': false, 'error': 'Signup failed (Status: ${response.statusCode})'};
+      }
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
