@@ -11,18 +11,25 @@ import '../services/api_service.dart';
 class StrengthExercise {
   final String name;
   final double weight;
+  final int reps;
 
-  StrengthExercise({required this.name, required this.weight});
+  StrengthExercise({
+    required this.name,
+    required this.weight,
+    required this.reps,
+  });
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'weight': weight,
+        'reps': reps,
       };
 
   factory StrengthExercise.fromJson(Map<String, dynamic> json) {
     return StrengthExercise(
       name: json['name'] as String? ?? '',
       weight: (json['weight'] as num?)?.toDouble() ?? 0.0,
+      reps: json['reps'] as int? ?? 10,
     );
   }
 }
@@ -131,6 +138,7 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
               final List<StrengthExercise> exercises = exercisesRaw.map((e) => StrengthExercise(
                 name: e['name']?.toString() ?? '',
                 weight: (e['weight'] as num?)?.toDouble() ?? 0.0,
+                reps: e['reps'] as int? ?? 10,
               )).toList();
 
               parsed.add(StrengthWorkout(
@@ -197,6 +205,7 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         final exercisesPayload = workout.exercises.map((e) => {
           'name': e.name,
           'weight': e.weight,
+          'reps': e.reps,
         }).toList();
 
         final res = await ApiService.saveStrengthWorkout(
@@ -260,9 +269,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         category: 'Chest',
         date: now.subtract(const Duration(days: 7)),
         exercises: [
-          StrengthExercise(name: 'Bench Press', weight: 75.0),
-          StrengthExercise(name: 'Incline Dumbbell Press', weight: 26.0),
-          StrengthExercise(name: 'Chest Flys', weight: 14.0),
+          StrengthExercise(name: 'Bench Press', weight: 75.0, reps: 10),
+          StrengthExercise(name: 'Incline Dumbbell Press', weight: 26.0, reps: 12),
+          StrengthExercise(name: 'Chest Flys', weight: 14.0, reps: 15),
         ],
       ),
       StrengthWorkout(
@@ -271,9 +280,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         category: 'Legs',
         date: now.subtract(const Duration(days: 6)),
         exercises: [
-          StrengthExercise(name: 'Squats', weight: 90.0),
-          StrengthExercise(name: 'Leg Press', weight: 180.0),
-          StrengthExercise(name: 'Calf Raises', weight: 45.0),
+          StrengthExercise(name: 'Squats', weight: 90.0, reps: 8),
+          StrengthExercise(name: 'Leg Press', weight: 180.0, reps: 12),
+          StrengthExercise(name: 'Calf Raises', weight: 45.0, reps: 20),
         ],
       ),
       StrengthWorkout(
@@ -282,9 +291,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         category: 'Back',
         date: now.subtract(const Duration(days: 4)),
         exercises: [
-          StrengthExercise(name: 'Deadlift', weight: 110.0),
-          StrengthExercise(name: 'Lat Pulldown', weight: 60.0),
-          StrengthExercise(name: 'Seated Cable Row', weight: 55.0),
+          StrengthExercise(name: 'Deadlift', weight: 110.0, reps: 5),
+          StrengthExercise(name: 'Lat Pulldown', weight: 60.0, reps: 10),
+          StrengthExercise(name: 'Seated Cable Row', weight: 55.0, reps: 12),
         ],
       ),
       StrengthWorkout(
@@ -293,9 +302,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         category: 'Shoulders',
         date: now.subtract(const Duration(days: 3)),
         exercises: [
-          StrengthExercise(name: 'Overhead Press', weight: 45.0),
-          StrengthExercise(name: 'Dumbbell Lateral Raise', weight: 12.0),
-          StrengthExercise(name: 'Front Raise', weight: 10.0),
+          StrengthExercise(name: 'Overhead Press', weight: 45.0, reps: 8),
+          StrengthExercise(name: 'Dumbbell Lateral Raise', weight: 12.0, reps: 15),
+          StrengthExercise(name: 'Front Raise', weight: 10.0, reps: 12),
         ],
       ),
       StrengthWorkout(
@@ -304,9 +313,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         category: 'Arms',
         date: now.subtract(const Duration(days: 1)),
         exercises: [
-          StrengthExercise(name: 'Bicep Barbell Curl', weight: 30.0),
-          StrengthExercise(name: 'Tricep Pushdowns', weight: 35.0),
-          StrengthExercise(name: 'Hammer Curls', weight: 14.0),
+          StrengthExercise(name: 'Bicep Barbell Curl', weight: 30.0, reps: 12),
+          StrengthExercise(name: 'Tricep Pushdowns', weight: 35.0, reps: 15),
+          StrengthExercise(name: 'Hammer Curls', weight: 14.0, reps: 12),
         ],
       ),
     ];
@@ -786,7 +795,7 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
                                 ),
                               ),
                               Text(
-                                '${e.weight.toStringAsFixed(1)} kg',
+                                '${e.weight.toStringAsFixed(1)} kg • ${e.reps} reps',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   color: AppTheme.primary,
@@ -1308,9 +1317,10 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
   final _titleController = TextEditingController();
   String _selectedCategory = 'Chest';
 
-  // State to hold lists of controllers for name and weights
+  // State to hold lists of controllers for name, weights, and reps
   final List<TextEditingController> _nameControllers = [];
   final List<TextEditingController> _weightControllers = [];
+  final List<TextEditingController> _repsControllers = [];
 
   @override
   void initState() {
@@ -1328,6 +1338,9 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
     for (var c in _weightControllers) {
       c.dispose();
     }
+    for (var c in _repsControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1335,6 +1348,7 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
     setState(() {
       _nameControllers.add(TextEditingController());
       _weightControllers.add(TextEditingController());
+      _repsControllers.add(TextEditingController()..text = '10');
     });
   }
 
@@ -1343,8 +1357,10 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
       setState(() {
         _nameControllers[index].dispose();
         _weightControllers[index].dispose();
+        _repsControllers[index].dispose();
         _nameControllers.removeAt(index);
         _weightControllers.removeAt(index);
+        _repsControllers.removeAt(index);
       });
     }
   }
@@ -1364,8 +1380,9 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
       for (int i = 0; i < _nameControllers.length; i++) {
         final name = _nameControllers[i].text.trim();
         final weight = double.tryParse(_weightControllers[i].text) ?? 0.0;
+        final reps = int.tryParse(_repsControllers[i].text) ?? 10;
         if (name.isNotEmpty && weight > 0) {
-          exercises.add(StrengthExercise(name: name, weight: weight));
+          exercises.add(StrengthExercise(name: name, weight: weight, reps: reps));
         }
       }
 
@@ -1554,16 +1571,16 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
                         children: [
                           // Exercise Name
                           Expanded(
-                            flex: 5,
+                            flex: 4,
                             child: TextFormField(
                               controller: _nameControllers[idx],
                               style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
                               decoration: InputDecoration(
-                                hintText: 'e.g. Bench Press',
+                                hintText: 'Exercise',
                                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
                                 filled: true,
                                 fillColor: Colors.white.withOpacity(0.04),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
@@ -1577,7 +1594,7 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
                                   val == null || val.trim().isEmpty ? 'Required' : null,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
 
                           // Weight (kg)
                           Expanded(
@@ -1587,11 +1604,11 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
                               decoration: InputDecoration(
-                                hintText: 'Weight (kg)',
+                                hintText: 'Wt (kg)',
                                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
                                 filled: true,
                                 fillColor: Colors.white.withOpacity(0.04),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
@@ -1607,6 +1624,42 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
                                 }
                                 final w = double.tryParse(val);
                                 if (w == null || w <= 0) {
+                                  return 'Invalid';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Reps
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller: _repsControllers[idx],
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Reps',
+                                hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.04),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: themeColor),
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return 'Required';
+                                }
+                                final r = int.tryParse(val);
+                                if (r == null || r <= 0) {
                                   return 'Invalid';
                                 }
                                 return null;
