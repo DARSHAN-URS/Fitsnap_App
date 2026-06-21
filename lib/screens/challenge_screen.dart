@@ -1,11 +1,114 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-
 import 'active_workout_screen.dart';
+import '../services/api_service.dart';
 
-class ChallengeScreen extends StatelessWidget {
+class ChallengeScreen extends StatefulWidget {
   const ChallengeScreen({super.key});
+
+  @override
+  State<ChallengeScreen> createState() => _ChallengeScreenState();
+}
+
+class _ChallengeScreenState extends State<ChallengeScreen> {
+  bool _isLoading = true;
+  String? _challengeId;
+  String _title = '7-Day Core Crusher';
+  String _description = 'Complete 5 core workouts this week to earn the exclusive Golden Abs badge.';
+  int _targetWorkouts = 5;
+  int _completedWorkouts = 0;
+  bool _isJoined = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChallengeData();
+  }
+
+  Future<void> _loadChallengeData() async {
+    if (mounted) setState(() => _isLoading = true);
+    
+    final challengesRes = await ApiService.getChallenges();
+    final userChallengesRes = await ApiService.getUserChallenges();
+    
+    if (challengesRes['success'] == true) {
+      final List<dynamic> list = challengesRes['data'] ?? [];
+      if (list.isNotEmpty) {
+        final ch = list.first;
+        _challengeId = ch['id'].toString();
+        _title = ch['title'] ?? _title;
+        _description = ch['description'] ?? _description;
+        _targetWorkouts = ch['target_workouts'] ?? _targetWorkouts;
+      }
+    }
+    
+    if (userChallengesRes['success'] == true && _challengeId != null) {
+      final List<dynamic> userList = userChallengesRes['data'] ?? [];
+      final enrollment = userList.firstWhere(
+        (uc) {
+          final cid = uc['challenge_id']?.toString() ?? uc['challenges']?['id']?.toString();
+          return cid == _challengeId;
+        },
+        orElse: () => null,
+      );
+      
+      if (enrollment != null) {
+        _isJoined = true;
+        _completedWorkouts = enrollment['completed_workouts'] ?? 0;
+      } else {
+        _isJoined = false;
+        _completedWorkouts = 0;
+      }
+    }
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _joinChallenge() async {
+    if (_challengeId == null) return;
+    if (mounted) setState(() => _isLoading = true);
+    final res = await ApiService.joinChallenge(_challengeId!);
+    if (res['success'] == true) {
+      await _loadChallengeData();
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['error'] ?? 'Failed to join challenge')),
+        );
+      }
+    }
+  }
+
+  Future<void> _startTask(String taskTitle) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ActiveWorkoutScreen(
+          activityType: taskTitle,
+          icon: Icons.star_rounded,
+          color: AppTheme.accent,
+          avgPaceSeconds: 300,
+          kcalPerKm: 120,
+        ),
+      ),
+    );
+    if (_challengeId != null) {
+      if (mounted) setState(() => _isLoading = true);
+      final res = await ApiService.updateChallengeProgress(_challengeId!);
+      if (res['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Completed task: $taskTitle! Progress updated.')),
+          );
+        }
+      }
+      await _loadChallengeData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,91 +126,111 @@ class ChallengeScreen extends StatelessWidget {
         ),
         iconTheme: const IconThemeData(color: AppTheme.primary),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.accent, AppTheme.neonCyan],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: AppTheme.cardRadius,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.accent.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.star_rounded, color: Colors.white, size: 48),
-                  const SizedBox(height: 16),
-                  Text(
-                    '7-Day Core Crusher',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.accent, AppTheme.neonCyan],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: AppTheme.cardRadius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.star_rounded, color: Colors.white, size: 48),
+                        const SizedBox(height: 16),
+                        Text(
+                          _title,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _description,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (_isJoined) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: _targetWorkouts > 0 ? (_completedWorkouts / _targetWorkouts) : 0.0,
+                              backgroundColor: Colors.black26,
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              minHeight: 8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$_completedWorkouts/$_targetWorkouts Workouts Completed',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ] else ...[
+                          ElevatedButton(
+                            onPressed: _joinChallenge,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppTheme.accent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                            ),
+                            child: Text(
+                              'Join Challenge Now',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Complete 5 core workouts this week to earn the exclusive Golden Abs badge.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
-                      height: 1.4,
+                  if (_isJoined) ...[
+                    const SizedBox(height: 32),
+                    Text(
+                      'Challenge Tasks',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: const LinearProgressIndicator(
-                      value: 0.4, // 2 out of 5
-                      backgroundColor: Colors.black26,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      minHeight: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '2/5 Workouts Completed',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                    const SizedBox(height: 16),
+                    _buildTaskTile(context, '15-Min Core Blast', _completedWorkouts >= 1),
+                    _buildTaskTile(context, 'HIIT Cardio Burn (Core focus)', _completedWorkouts >= 2),
+                    _buildTaskTile(context, 'Plank Challenge', _completedWorkouts >= 3),
+                    _buildTaskTile(context, 'Russian Twists', _completedWorkouts >= 4),
+                    _buildTaskTile(context, 'Leg Raises', _completedWorkouts >= 5),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 32),
-            Text(
-              'Challenge Tasks',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildTaskTile(context, '15-Min Core Blast', true),
-            _buildTaskTile(context, 'HIIT Cardio Burn (Core focus)', true),
-            _buildTaskTile(context, 'Plank Challenge', false),
-            _buildTaskTile(context, 'Russian Twists', false),
-            _buildTaskTile(context, 'Leg Raises', false),
-          ],
-        ),
-      ),
     );
   }
 
@@ -124,20 +247,7 @@ class ChallengeScreen extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ActiveWorkoutScreen(
-                    activityType: title,
-                    icon: Icons.star_rounded,
-                    color: AppTheme.accent,
-                    avgPaceSeconds: 300,
-                    kcalPerKm: 120,
-                  ),
-                ),
-              );
-            },
+            onTap: isCompleted ? null : () => _startTask(title),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Row(

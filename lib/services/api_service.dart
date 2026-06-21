@@ -610,4 +610,332 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // --- Fasting ---
+  static Future<Map<String, dynamic>> getActiveFast() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/fasting/active'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to retrieve active fast'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> startFast(String protocol) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/fasting/start'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'protocol': protocol}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to start fast'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> stopFast(String id) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/fasting/stop'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'id': id}),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to stop fast'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getFastingHistory() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/fasting/history'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve fasting history'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Leaderboard ---
+  static Future<Map<String, dynamic>> getLeaderboard() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/leaderboard'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve leaderboard'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Groups ---
+  static Future<Map<String, dynamic>> getGroups() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve groups'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createGroup(String name, String description, {bool isPublic = true}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'name': name,
+          'description': description,
+          'is_public': isPublic,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to create group'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> joinGroup(String groupId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/join'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to join group'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> leaveGroup(String groupId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/leave'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to leave group'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Group Messages ---
+  static Future<Map<String, dynamic>> getGroupMessages(String groupId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve messages'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> sendGroupMessage(String groupId, String message) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'message': message}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to send message'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Friends ---
+  static Future<Map<String, dynamic>> getFriends() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve friends'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> addFriend(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/friends/add'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'email': email}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to add friend'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Challenges ---
+  static Future<Map<String, dynamic>> getChallenges() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/challenges'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve challenges'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getUserChallenges() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/challenges/user'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve user challenges'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> joinChallenge(String challengeId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/challenges/$challengeId/join'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to join challenge'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateChallengeProgress(String challengeId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/challenges/$challengeId/progress'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to update challenge progress'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }

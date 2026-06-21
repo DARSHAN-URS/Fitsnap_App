@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 
 class FastingScreen extends StatefulWidget {
   const FastingScreen({super.key});
@@ -17,6 +18,9 @@ class _FastingScreenState extends State<FastingScreen> {
   Duration _elapsedTime = Duration.zero;
   Timer? _timer;
   DateTime? _fastStart;
+  String? _activeFastId;
+  bool _isLoading = true;
+  List<dynamic> _history = [];
 
   final Map<String, int> _protocols = {
     '12:12': 12,
@@ -29,7 +33,7 @@ class _FastingScreenState extends State<FastingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFastingState();
+    _loadFastingData();
   }
 
   @override
@@ -38,106 +42,201 @@ class _FastingScreenState extends State<FastingScreen> {
     super.dispose();
   }
 
-  Future<void> _loadFastingState() async {
+  Future<void> _loadFastingData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _selectedProtocol = prefs.getString('fasting_selected_protocol') ?? '16:8';
-      _isFasting = prefs.getBool('fasting_is_fasting') ?? false;
-      final String? startStr = prefs.getString('fasting_start_time');
+    _selectedProtocol = prefs.getString('fasting_selected_protocol') ?? '16:8';
+    
+    final activeRes = await ApiService.getActiveFast();
+    final historyRes = await ApiService.getFastingHistory();
+    
+    if (activeRes['success'] == true && activeRes['data'] != null) {
+      final active = activeRes['data'];
+      _isFasting = true;
+      _activeFastId = active['id'].toString();
+      _selectedProtocol = active['protocol'] ?? _selectedProtocol;
+      final startStr = active['start_time'];
       if (startStr != null) {
         _fastStart = DateTime.tryParse(startStr);
       }
       
-      if (_isFasting && _fastStart != null) {
+      _timer?.cancel();
+      if (_fastStart != null) {
         _elapsedTime = DateTime.now().difference(_fastStart!);
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _elapsedTime = DateTime.now().difference(_fastStart!);
-          });
+          if (mounted) {
+            setState(() {
+              _elapsedTime = DateTime.now().difference(_fastStart!);
+            });
+          }
         });
       }
-    });
-  }
-
-  Future<void> _saveFastingState() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('fasting_is_fasting', _isFasting);
-    await prefs.setString('fasting_selected_protocol', _selectedProtocol);
-    if (_fastStart != null) {
-      await prefs.setString('fasting_start_time', _fastStart!.toIso8601String());
     } else {
-      await prefs.remove('fasting_start_time');
+      _isFasting = false;
+      _activeFastId = null;
+      _fastStart = null;
+      _timer?.cancel();
+      _elapsedTime = Duration.zero;
+    }
+    
+    if (historyRes['success'] == true) {
+      _history = historyRes['data'] ?? [];
+    }
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
 
-  void _toggleFasting() {
-    setState(() {
-      if (_isFasting) {
-        // Stop Fasting
+  Future<void> _saveSelectedProtocol(String proto) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('fasting_selected_protocol', proto);
+    if (mounted) {
+      setState(() {
+        _selectedProtocol = proto;
+      });
+    }
+  }
+
+  Future<void> _toggleFasting() async {
+    if (_isFasting) {
+      if (_activeFastId == null) return;
+      if (mounted) setState(() => _isLoading = true);
+      
+      final res = await ApiService.stopFast(_activeFastId!);
+      if (res['success'] == true) {
         _timer?.cancel();
         _isFasting = false;
-        
         final durationStr = "${_elapsedTime.inHours}h ${_elapsedTime.inMinutes.remainder(60)}m";
         _elapsedTime = Duration.zero;
         _fastStart = null;
+        _activeFastId = null;
         
-        // Show completion modal
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: Row(
-              children: [
-                const Icon(Icons.star_rounded, color: AppTheme.neonAmber, size: 28),
-                const SizedBox(width: 8),
-                Text(
-                  'Fast Completed!',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.primary,
+        await _loadFastingData();
+        
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: AppTheme.neonAmber, size: 28),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Fast Completed!',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                    ),
                   ),
+                ],
+              ),
+              content: Text(
+                'Great job! You completed a fast of $durationStr. Your eating window has now started.',
+                style: GoogleFonts.inter(color: Colors.black54),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('Perfect', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
-            content: Text(
-              'Great job! You completed a fast of $durationStr. Your eating window has now started.',
-              style: GoogleFonts.inter(color: Colors.black54),
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text('Perfect', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        );
+          );
+        }
       } else {
-        // Start Fasting
-        _isFasting = true;
-        _fastStart = DateTime.now();
-        _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _elapsedTime = DateTime.now().difference(_fastStart!);
-          });
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Fasting timer started! Stay hydrated.'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppTheme.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error'] ?? 'Failed to end fast')),
+          );
+        }
       }
-    });
-    _saveFastingState();
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } else {
+      if (mounted) setState(() => _isLoading = true);
+      final res = await ApiService.startFast(_selectedProtocol);
+      if (res['success'] == true && res['data'] != null) {
+        final active = res['data'];
+        _isFasting = true;
+        _activeFastId = active['id'].toString();
+        final startStr = active['start_time'];
+        if (startStr != null) {
+          _fastStart = DateTime.tryParse(startStr);
+        }
+        
+        _timer?.cancel();
+        if (_fastStart != null) {
+          _elapsedTime = DateTime.now().difference(_fastStart!);
+          _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (mounted) {
+              setState(() {
+                _elapsedTime = DateTime.now().difference(_fastStart!);
+              });
+            }
+          });
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Fasting timer started! Stay hydrated.'),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppTheme.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error'] ?? 'Failed to start fast')),
+          );
+        }
+      }
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  int calculateStreak(List<dynamic> history) {
+    if (history.isEmpty) return 0;
+    final dates = history.map((h) {
+      final endTime = DateTime.tryParse(h['end_time'] ?? '');
+      if (endTime == null) return '';
+      return "${endTime.year}-${endTime.month.toString().padLeft(2, '0')}-${endTime.day.toString().padLeft(2, '0')}";
+    }).where((d) => d.isNotEmpty).toSet().toList();
+    dates.sort((a, b) => b.compareTo(a));
+    
+    if (dates.isEmpty) return 0;
+    
+    int streak = 0;
+    DateTime checkDate = DateTime.now();
+    final todayStr = "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+    final yesterday = checkDate.subtract(const Duration(days: 1));
+    final yesterdayStr = "${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}";
+    
+    if (!dates.contains(todayStr) && !dates.contains(yesterdayStr)) {
+      return 0;
+    }
+    
+    String currentTarget = dates.contains(todayStr) ? todayStr : yesterdayStr;
+    while (dates.contains(currentTarget)) {
+      streak++;
+      checkDate = checkDate.subtract(const Duration(days: 1));
+      currentTarget = "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+    }
+    return streak;
   }
 
   String _formatDuration(Duration d) {
@@ -153,6 +252,23 @@ class _FastingScreenState extends State<FastingScreen> {
     final double percentage = _isFasting
         ? (_elapsedTime.inSeconds / (totalFastHours * 3600)).clamp(0.0, 1.0)
         : 0.0;
+
+    final totalFasts = _history.length;
+    double avgDuration = 0.0;
+    if (_history.isNotEmpty) {
+      double totalHours = 0;
+      int count = 0;
+      for (final h in _history) {
+        final start = DateTime.tryParse(h['start_time'] ?? '');
+        final end = DateTime.tryParse(h['end_time'] ?? '');
+        if (start != null && end != null) {
+          totalHours += end.difference(start).inMinutes / 60.0;
+          count++;
+        }
+      }
+      avgDuration = count > 0 ? (totalHours / count) : 0.0;
+    }
+    final streakDays = calculateStreak(_history);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -173,20 +289,22 @@ class _FastingScreenState extends State<FastingScreen> {
         ),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            // Header stats
-            Row(
-              children: [
-                Expanded(child: _buildStatCard('Fasts Logged', '24', AppTheme.neonPink)),
-                const SizedBox(width: 12),
-                Expanded(child: _buildStatCard('Avg. Duration', '15.8h', AppTheme.neonCyan)),
-                const SizedBox(width: 12),
-                Expanded(child: _buildStatCard('Fasting Streak', '5 days', AppTheme.neonEmerald)),
-              ],
-            ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  // Header stats
+                  Row(
+                    children: [
+                      Expanded(child: _buildStatCard('Fasts Logged', '$totalFasts', AppTheme.neonPink)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildStatCard('Avg. Duration', '${avgDuration.toStringAsFixed(1)}h', AppTheme.neonCyan)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildStatCard('Fasting Streak', '$streakDays days', AppTheme.neonEmerald)),
+                    ],
+                  ),
             const SizedBox(height: 28),
 
             // Main circular timer widget
@@ -336,8 +454,7 @@ class _FastingScreenState extends State<FastingScreen> {
                           : const Icon(Icons.circle_outlined, color: Colors.black12, size: 22),
                       enabled: !_isFasting, // Disable changes while fast is running
                       onTap: () {
-                        setState(() => _selectedProtocol = proto);
-                        _saveFastingState();
+                        _saveSelectedProtocol(proto);
                       },
                     ),
                   );

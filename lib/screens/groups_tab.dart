@@ -7,8 +7,10 @@ import '../theme/app_theme.dart';
 import '../widgets/staggered_animation.dart';
 import '../utils/preferences_helper.dart';
 import 'group_details_screen.dart';
+import '../services/api_service.dart';
 
 class GroupItem {
+  final String id;
   final String title;
   int memberCount;
   final String desc;
@@ -22,6 +24,7 @@ class GroupItem {
   List<String> invitedFriends;
 
   GroupItem({
+    required this.id,
     required this.title,
     required this.memberCount,
     required this.desc,
@@ -35,40 +38,39 @@ class GroupItem {
     this.invitedFriends = const [],
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'title': title,
-      'memberCount': memberCount,
-      'desc': desc,
-      'iconCode': icon.codePoint,
-      'colorValue': color.value,
-      'avatars': avatars,
-      'extraMemberText': extraMemberText,
-      'tag': tag,
-      'isJoined': isJoined,
-      'isPrivate': isPrivate,
-      'invitedFriends': invitedFriends,
-    };
-  }
-
-  factory GroupItem.fromJson(Map<String, dynamic> json) {
+  factory GroupItem.fromBackendJson(Map<String, dynamic> json) {
+    final String name = json['name'] ?? json['title'] ?? '';
+    IconData iconData = Icons.group_rounded;
+    if (name.toLowerCase().contains('workout') || name.toLowerCase().contains('fitness')) {
+      iconData = Icons.fitness_center_rounded;
+    } else if (name.toLowerCase().contains('calorie') || name.toLowerCase().contains('diet')) {
+      iconData = Icons.track_changes_rounded;
+    } else if (name.toLowerCase().contains('muscle') || name.toLowerCase().contains('bulking')) {
+      iconData = Icons.accessibility_new_rounded;
+    } else if (name.toLowerCase().contains('fasting') || name.toLowerCase().contains('timer')) {
+      iconData = Icons.timer_outlined;
+    }
+    
     return GroupItem(
-      title: json['title'] as String,
-      memberCount: json['memberCount'] as int,
-      desc: json['desc'] as String,
-      icon: IconData(json['iconCode'] as int, fontFamily: 'MaterialIcons'),
-      color: Color(json['colorValue'] as int),
-      avatars: List<String>.from(json['avatars'] as List),
-      extraMemberText: json['extraMemberText'] as String,
-      tag: json['tag'] as String,
-      isJoined: json['isJoined'] as bool,
-      isPrivate: json['isPrivate'] as bool? ?? false,
-      invitedFriends: List<String>.from(json['invitedFriends'] as List? ?? []),
+      id: (json['id'] ?? '').toString(),
+      title: name,
+      memberCount: json['memberCount'] ?? 1,
+      desc: json['description'] ?? json['desc'] ?? '',
+      icon: iconData,
+      color: AppTheme.accent,
+      avatars: List<String>.from(json['avatars'] ?? []),
+      extraMemberText: json['extraMemberText'] ?? '',
+      tag: json['tag'] ?? 'Trending',
+      isJoined: json['isJoined'] ?? false,
+      isPrivate: !(json['is_public'] ?? true),
+      invitedFriends: [],
     );
   }
 }
 
 class FriendItem {
+  final String id;
+  final String friendId;
   final String name;
   final String email;
   final int steps;
@@ -77,6 +79,8 @@ class FriendItem {
   final String status;
 
   FriendItem({
+    required this.id,
+    required this.friendId,
     required this.name,
     required this.email,
     required this.steps,
@@ -85,25 +89,16 @@ class FriendItem {
     required this.status,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'email': email,
-      'steps': steps,
-      'calories': calories,
-      'avatar': avatar,
-      'status': status,
-    };
-  }
-
-  factory FriendItem.fromJson(Map<String, dynamic> json) {
+  factory FriendItem.fromBackendJson(Map<String, dynamic> json) {
     return FriendItem(
-      name: json['name'] as String,
-      email: json['email'] as String,
-      steps: json['steps'] as int? ?? 0,
-      calories: json['calories'] as int? ?? 0,
-      avatar: json['avatar'] as String,
-      status: json['status'] as String? ?? 'Offline',
+      id: (json['id'] ?? '').toString(),
+      friendId: (json['friend_id'] ?? '').toString(),
+      name: json['name'] ?? 'Friend User',
+      email: json['email'] ?? '',
+      steps: json['steps'] ?? 0,
+      calories: json['calories'] ?? 0,
+      avatar: json['avatar'] ?? 'FR',
+      status: json['status'] ?? 'Active',
     );
   }
 }
@@ -120,94 +115,23 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   final TextEditingController _friendEmailController = TextEditingController();
   late AnimationController _entryAnimController;
   
-  final List<GroupItem> _groups = [
-    GroupItem(
-      title: 'Fitness & Workouts',
-      memberCount: 114,
-      desc: 'Share daily workouts that match your calorie goals, keep each other accountable.',
-      icon: Icons.fitness_center_rounded,
-      color: AppTheme.carbsColor,
-      avatars: ['JD', 'RS', 'A'],
-      extraMemberText: '+11',
-      tag: 'Trending',
-    ),
-    GroupItem(
-      title: 'New to Calorie Tracking',
-      memberCount: 162,
-      desc: 'Beginner questions, quick meal tips, tracking shortcuts, and celebrating first wins.',
-      icon: Icons.track_changes_rounded,
-      color: AppTheme.accent,
-      avatars: ['M', 'TL', 'BK'],
-      extraMemberText: '+34',
-      tag: 'Popular',
-    ),
-    GroupItem(
-      title: 'Muscle Gain & Bulking',
-      memberCount: 199,
-      desc: 'Strategies for eating in a clean surplus, protein recipes, and heavy weight lifting.',
-      icon: Icons.accessibility_new_rounded,
-      color: AppTheme.neonEmerald,
-      avatars: ['P', 'SO', 'D'],
-      extraMemberText: '+18',
-      tag: 'Highly Active',
-    ),
-    GroupItem(
-      title: 'Clean Fasting Habits',
-      memberCount: 89,
-      desc: 'Share your intermittent fasting protocols, water fasting tips, and support.',
-      icon: Icons.timer_outlined,
-      color: AppTheme.neonPink,
-      avatars: ['E', 'W', 'CH'],
-      extraMemberText: '+4',
-      tag: 'New',
-    ),
-  ];
-
+  final List<GroupItem> _groups = [];
   List<GroupItem> _filteredGroups = [];
-  final List<FriendItem> _friends = [
-    FriendItem(name: 'Sarah Miller', email: 'sarah.m@fitflow.ai', steps: 8420, calories: 1850, avatar: 'SM', status: 'Active'),
-    FriendItem(name: 'Alex Johnson', email: 'alex.j@fitflow.ai', steps: 11200, calories: 2300, avatar: 'AJ', status: 'Active'),
-    FriendItem(name: 'John Doe', email: 'john.d@fitflow.ai', steps: 4320, calories: 1600, avatar: 'JD', status: 'Offline'),
-    FriendItem(name: 'Emma Wilson', email: 'emma.w@fitflow.ai', steps: 9800, calories: 1950, avatar: 'EW', status: 'Active'),
-  ];
+  final List<FriendItem> _friends = [];
   int _selectedTab = 0;
   bool _isAddingFriend = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _filteredGroups = List.from(_groups);
     _searchController.addListener(_filterGroups);
     _entryAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
     _entryAnimController.forward();
-    _loadGroups();
-    _loadFriends();
-  }
-
-  Future<void> _loadGroups() async {
-    final List<String>? groupsJsonList = await PreferencesHelper.readStringList('user_groups');
-    if (groupsJsonList != null && groupsJsonList.isNotEmpty) {
-      try {
-        final List<GroupItem> loaded = groupsJsonList.map((gJson) => GroupItem.fromJson(jsonDecode(gJson))).toList();
-        setState(() {
-          _groups.clear();
-          _groups.addAll(loaded);
-          _filterGroups();
-        });
-      } catch (e) {
-        debugPrint('Error loading user groups: $e');
-      }
-    } else {
-      _saveGroups();
-    }
-  }
-
-  Future<void> _saveGroups() async {
-    final List<String> groupsJsonList = _groups.map((group) => jsonEncode(group.toJson())).toList();
-    await PreferencesHelper.saveStringList('user_groups', groupsJsonList);
+    _fetchData();
   }
 
   @override
@@ -218,29 +142,34 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _loadFriends() async {
-    final List<String>? friendsJsonList = await PreferencesHelper.readStringList('user_friends');
-    if (friendsJsonList != null && friendsJsonList.isNotEmpty) {
-      try {
-        final List<FriendItem> loaded = friendsJsonList.map((fJson) => FriendItem.fromJson(jsonDecode(fJson))).toList();
-        setState(() {
-          _friends.clear();
-          _friends.addAll(loaded);
-        });
-      } catch (e) {
-        debugPrint('Error loading user friends: $e');
-      }
-    } else {
-      _saveFriends();
+  Future<void> _fetchData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    
+    final groupsRes = await ApiService.getGroups();
+    final friendsRes = await ApiService.getFriends();
+    
+    if (groupsRes['success'] == true) {
+      final List<dynamic> list = groupsRes['data'] ?? [];
+      _groups.clear();
+      _groups.addAll(list.map((g) => GroupItem.fromBackendJson(g)).toList());
+    }
+    
+    if (friendsRes['success'] == true) {
+      final List<dynamic> list = friendsRes['data'] ?? [];
+      _friends.clear();
+      _friends.addAll(list.map((f) => FriendItem.fromBackendJson(f)).toList());
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _filterGroups();
+      });
     }
   }
 
-  Future<void> _saveFriends() async {
-    final List<String> friendsJsonList = _friends.map((friend) => jsonEncode(friend.toJson())).toList();
-    await PreferencesHelper.saveStringList('user_friends', friendsJsonList);
-  }
-
-  void _addFriend() async {
+  Future<void> _addFriend() async {
     final email = _friendEmailController.text.trim();
     if (email.isEmpty) return;
 
@@ -251,51 +180,33 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       return;
     }
 
-    if (_friends.any((f) => f.email.toLowerCase() == email.toLowerCase())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$email is already in your friends list!')),
-      );
-      return;
-    }
-
     setState(() => _isAddingFriend = true);
 
-    await Future.delayed(const Duration(milliseconds: 1200));
-
-    final String namePart = email.split('@')[0];
-    final String friendName = namePart.split('.').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1);
-    }).join(' ');
-
-    final String initials = namePart.split('.').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase();
-    }).take(2).join();
-
-    final newFriend = FriendItem(
-      name: friendName,
-      email: email,
-      steps: 4000 + (1000 * (email.length % 7)),
-      calories: 1500 + (100 * (email.length % 5)),
-      avatar: initials.isNotEmpty ? initials : 'FR',
-      status: 'Active',
-    );
-
-    setState(() {
-      _friends.add(newFriend);
-      _isAddingFriend = false;
+    final res = await ApiService.addFriend(email);
+    if (res['success'] == true) {
       _friendEmailController.clear();
-    });
-    _saveFriends();
-
+      await _fetchData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Friend request accepted!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'User not found or already friends'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Friend request accepted! $friendName is now your friend.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      setState(() => _isAddingFriend = false);
     }
   }
 
@@ -313,26 +224,61 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     });
   }
 
-  void _toggleGroupJoin(GroupItem group) {
-    setState(() {
-      if (group.isJoined) {
-        group.isJoined = false;
-        group.memberCount--;
-      } else {
-        group.isJoined = true;
-        group.memberCount++;
+  Future<void> _toggleGroupJoin(GroupItem group) async {
+    if (mounted) setState(() => _isLoading = true);
+    
+    final res = group.isJoined 
+        ? await ApiService.leaveGroup(group.id)
+        : await ApiService.joinGroup(group.id);
+        
+    if (res['success'] == true) {
+      await _fetchData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(!group.isJoined ? 'Joined "${group.title}"!' : 'Left "${group.title}".'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: !group.isJoined ? Colors.green : AppTheme.primary,
+          ),
+        );
       }
-      _filterGroups();
-    });
-    _saveGroups();
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'Operation failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(group.isJoined ? 'Joined "${group.title}"!' : 'Left "${group.title}".'),
-        duration: const Duration(seconds: 1),
-        backgroundColor: group.isJoined ? Colors.green : AppTheme.primary,
-      ),
-    );
+  Future<void> _createGroupBackend(String name, String desc, bool isPrivate) async {
+    if (mounted) setState(() => _isLoading = true);
+    final res = await ApiService.createGroup(name, desc, isPublic: !isPrivate);
+    if (res['success'] == true) {
+      await _fetchData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Community "$name" created successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'Failed to create community'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showCreateGroupDialog() {
@@ -343,8 +289,6 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       context: context,
       builder: (context) {
         bool isPrivate = false;
-        final List<String> selectedFriends = [];
-        final friends = _friends.map((f) => f.name).toList();
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -406,51 +350,6 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                         });
                       },
                     ),
-                    if (isPrivate) ...[
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Invite Friends',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (friends.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Text(
-                            'No friends added yet. Go to Friends tab to add friends!',
-                            style: GoogleFonts.inter(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
-                          ),
-                        )
-                      else
-                        ...friends.map((friend) {
-                          final isSelected = selectedFriends.contains(friend);
-                          return CheckboxListTile(
-                            activeColor: AppTheme.accent,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              friend,
-                              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600),
-                            ),
-                            value: isSelected,
-                            onChanged: (val) {
-                              setDialogState(() {
-                                if (val == true) {
-                                  selectedFriends.add(friend);
-                                } else {
-                                  selectedFriends.remove(friend);
-                                }
-                              });
-                            },
-                          );
-                        }),
-                    ],
                   ],
                 ),
               ),
@@ -467,52 +366,8 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                     final name = nameController.text.trim();
                     final desc = descController.text.trim();
                     if (name.isNotEmpty && desc.isNotEmpty) {
-                      // Generate initials for avatars
-                      final List<String> invitedAvatars = ['ME'];
-                      for (var friend in selectedFriends) {
-                        final parts = friend.split(' ');
-                        String init = '';
-                        if (parts.isNotEmpty && parts[0].isNotEmpty) {
-                          init += parts[0][0];
-                        }
-                        if (parts.length > 1 && parts[1].isNotEmpty) {
-                          init += parts[1][0];
-                        }
-                        if (init.isNotEmpty) {
-                          invitedAvatars.add(init.toUpperCase());
-                        }
-                      }
-
-                      final displayAvatars = invitedAvatars.take(3).toList();
-                      final extraCountText = invitedAvatars.length > 3 ? "+${invitedAvatars.length - 3}" : "";
-
-                      setState(() {
-                        _groups.insert(
-                          0,
-                          GroupItem(
-                            title: name,
-                            memberCount: selectedFriends.length + 1,
-                            desc: desc,
-                            icon: isPrivate ? Icons.lock_outline_rounded : Icons.group_rounded,
-                            color: isPrivate ? AppTheme.accent : AppTheme.accent,
-                            avatars: displayAvatars,
-                            extraMemberText: extraCountText,
-                            tag: isPrivate ? 'Private' : 'New',
-                            isJoined: true,
-                            isPrivate: isPrivate,
-                            invitedFriends: selectedFriends,
-                          ),
-                        );
-                        _filterGroups();
-                      });
-                      _saveGroups();
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Community "$name" created successfully!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      _createGroupBackend(name, desc, isPrivate);
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -938,7 +793,14 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 24),
 
-          if (_selectedTab == 0) ...[
+          if (_isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 80.0),
+                child: CircularProgressIndicator(color: AppTheme.accent),
+              ),
+            )
+          else if (_selectedTab == 0) ...[
             // Communities tab content
             StaggeredListItem(
               index: 2,

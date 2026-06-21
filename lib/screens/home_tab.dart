@@ -25,6 +25,7 @@ class HomeTab extends ConsumerStatefulWidget {
   final ValueChanged<int> onStepsChanged;
   final ValueChanged<int> onWaterChanged;
   final ValueChanged<DateTime> onDateChanged;
+  final RefreshCallback onRefresh;
 
   const HomeTab({
     super.key,
@@ -39,6 +40,7 @@ class HomeTab extends ConsumerStatefulWidget {
     required this.onStepsChanged,
     required this.onWaterChanged,
     required this.onDateChanged,
+    required this.onRefresh,
   });
 
   @override
@@ -495,10 +497,15 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     
     // Nutrition metrics calculations
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      color: purpleAccent,
+      backgroundColor: Colors.white,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Row
           StaggeredListItem(
@@ -845,7 +852,8 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             }),
         ],
       ),
-    );
+    ),
+   );
   }
 
   int get _dailyCalorieGoal {

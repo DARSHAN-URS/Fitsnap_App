@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ import 'screens/progress_tab.dart';
 import 'screens/groups_tab.dart';
 import 'screens/profile_tab.dart';
 import 'services/api_service.dart';
+import 'services/health_sync_service.dart';
 import 'theme/app_theme.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -21,7 +23,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
 
   // Dynamic state for logged calories, macros, and meals list
@@ -32,6 +34,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   int _steps = 0;
   int _water = 0;
   DateTime _selectedDate = DateTime.now();
+
+  Timer? _resetTimer;
+  DateTime _lastDateCheck = DateTime.now();
 
   final List<Map<String, dynamic>> _meals = [];
 
@@ -58,6 +63,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           _selectedDate = newDate;
         });
         _loadLogs();
+      },
+      onRefresh: () async {
+        await _triggerBackgroundHealthSync();
+        await _loadLogs();
       },
     ),
     const ActivityTab(),
@@ -240,17 +249,99 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    HealthSyncService.initPedometer();
+    
     _loadLogs();
+    
     _pulseController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
+
+    // Check rollover and sync steps initially
+    _checkDailyReset();
+    _triggerBackgroundHealthSync();
+
+    // Periodic timer (every 30 seconds) to check for date rollover in the foreground
+    _resetTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _checkDailyReset();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _resetTimer?.cancel();
+    HealthSyncService.stopPedometer();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _checkDailyReset() async {
+    final now = DateTime.now();
+    if (now.day != _lastDateCheck.day || now.month != _lastDateCheck.month || now.year != _lastDateCheck.year) {
+      debugPrint("Date changed! Resetting for the day according to location timezone.");
+      _lastDateCheck = now;
+      
+      setState(() {
+        _selectedDate = now;
+      });
+      
+      final todayStr = now.toIso8601String().split('T')[0];
+      await HealthSyncService.resetBaselineForNewDay(todayStr);
+      _loadLogs();
+      _triggerBackgroundHealthSync();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkDailyReset();
+      _triggerBackgroundHealthSync();
+    }
+  }
+
+  Future<void> _triggerBackgroundHealthSync() async {
+    try {
+      final result = await HealthSyncService.fetchTodayData();
+      if (result['success'] == true) {
+        final data = result['data'];
+        final int stepsVal = data['steps'] ?? 0;
+        final double waterVal = (data['water'] as num?)?.toDouble() ?? 0.0;
+        
+        final prefs = await SharedPreferences.getInstance();
+        final String dateStr = _selectedDate.toIso8601String().split('T')[0];
+        final String todayStr = DateTime.now().toIso8601String().split('T')[0];
+        
+        if (dateStr == todayStr) {
+          setState(() {
+            _steps = stepsVal;
+            if (waterVal.toInt() > _water) {
+              _water = waterVal.toInt();
+            }
+          });
+          
+          await prefs.setInt('home_steps', _steps);
+          await prefs.setInt('home_steps_$dateStr', _steps);
+          if (waterVal.toInt() > _water) {
+            await prefs.setInt('home_water', _water);
+            await prefs.setInt('home_water_$dateStr', _water);
+          }
+          
+          if (ApiService.isAuthenticated) {
+            await ApiService.updateDailyStats(
+              date: dateStr,
+              steps: _steps,
+              waterMl: _water,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Background health sync error: $e");
+    }
   }
 
   void _showScanToast(String message) {

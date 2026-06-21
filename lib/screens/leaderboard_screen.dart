@@ -1,21 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 
-class LeaderboardScreen extends StatelessWidget {
+class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Mock data for the leaderboard
-    final List<Map<String, dynamic>> leaderboardData = [
-      {'name': 'Alex Johnson', 'points': 4500, 'avatar': 'AJ'},
-      {'name': 'Darshan Urs', 'points': 4200, 'avatar': 'DU', 'isMe': true},
-      {'name': 'Sarah Smith', 'points': 3900, 'avatar': 'SS'},
-      {'name': 'Mike Brown', 'points': 3500, 'avatar': 'MB'},
-      {'name': 'Emma Davis', 'points': 3100, 'avatar': 'ED'},
-    ];
+  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+}
 
+class _LeaderboardScreenState extends State<LeaderboardScreen> {
+  List<dynamic> _leaderboardData = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLeaderboard();
+  }
+
+  Future<void> _fetchLeaderboard() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    final res = await ApiService.getLeaderboard();
+    if (res['success'] == true) {
+      if (mounted) {
+        setState(() {
+          _leaderboardData = res['data'] ?? [];
+          _isLoading = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['error'] ?? 'Failed to load leaderboard')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -30,79 +57,98 @@ class LeaderboardScreen extends StatelessWidget {
         ),
         iconTheme: const IconThemeData(color: AppTheme.primary),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: leaderboardData.length,
-        itemBuilder: (context, index) {
-          final user = leaderboardData[index];
-          final isMe = user['isMe'] == true;
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
+          : RefreshIndicator(
+              onRefresh: _fetchLeaderboard,
+              color: AppTheme.accent,
+              child: _leaderboardData.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No leaderboard rankings yet.',
+                        style: GoogleFonts.inter(color: Colors.black45),
+                      ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(20),
+                      itemCount: _leaderboardData.length,
+                      itemBuilder: (context, index) {
+                        final user = _leaderboardData[index];
+                        final isMe = user['isMe'] == true;
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: isMe ? AppTheme.accent.withOpacity(0.1) : Colors.white,
-              borderRadius: AppTheme.cardRadius,
-              boxShadow: isMe ? [] : AppTheme.cardShadow,
-              border: isMe ? Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1.5) : null,
-            ),
-            child: ClipRRect(
-              borderRadius: AppTheme.cardRadius,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _showUserDetailDialog(context, user),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Text(
-                          '#${index + 1}',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: index < 3 ? AppTheme.neonPink : Colors.black45,
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: isMe ? AppTheme.accent.withOpacity(0.1) : Colors.white,
+                            borderRadius: AppTheme.cardRadius,
+                            boxShadow: isMe ? [] : AppTheme.cardShadow,
+                            border: isMe ? Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1.5) : null,
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        CircleAvatar(
-                          backgroundColor: AppTheme.primary.withOpacity(0.1),
-                          child: Text(
-                            user['avatar'],
-                            style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: AppTheme.primary),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            user['name'] + (isMe ? ' (You)' : ''),
-                            style: GoogleFonts.inter(
-                              fontWeight: isMe ? FontWeight.w800 : FontWeight.w600,
-                              fontSize: 16,
-                              color: AppTheme.primary,
+                          child: ClipRRect(
+                            borderRadius: AppTheme.cardRadius,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _showUserDetailDialog(context, user),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '#${index + 1}',
+                                        style: GoogleFonts.inter(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18,
+                                          color: index < 3 ? AppTheme.neonPink : Colors.black45,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      CircleAvatar(
+                                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                                        child: Text(
+                                          user['avatar'] ?? 'US',
+                                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: AppTheme.primary),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Text(
+                                          (user['name'] ?? 'User') + (isMe ? ' (You)' : ''),
+                                          style: GoogleFonts.inter(
+                                            fontWeight: isMe ? FontWeight.w800 : FontWeight.w600,
+                                            fontSize: 16,
+                                            color: AppTheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${user['points'] ?? 0} pts',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: AppTheme.accent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                        Text(
-                          '${user['points']} pts',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                            color: AppTheme.accent,
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  ),
-                ),
-              ),
             ),
-          );
-        },
-      ),
     );
   }
 
   void _showUserDetailDialog(BuildContext context, Map<String, dynamic> user) {
+    final int pts = (user['points'] ?? 0) as int;
+    final int workouts = pts ~/ 100 + 1;
+    final int streak = (pts ~/ 200).clamp(1, 15);
+    final String calories = "${(pts * 0.45).toStringAsFixed(0)} kcal";
+
     showDialog(
       context: context,
       builder: (context) {
@@ -117,7 +163,7 @@ class LeaderboardScreen extends StatelessWidget {
                 radius: 36,
                 backgroundColor: AppTheme.primary.withOpacity(0.1),
                 child: Text(
-                  user['avatar'],
+                  user['avatar'] ?? 'US',
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w800,
                     color: AppTheme.primary,
@@ -127,7 +173,7 @@ class LeaderboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                user['name'],
+                user['name'] ?? 'User',
                 style: GoogleFonts.plusJakartaSans(
                   fontWeight: FontWeight.w800,
                   fontSize: 20,
@@ -136,7 +182,7 @@ class LeaderboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Weekly Score: ${user['points']} pts',
+                'Weekly Score: ${user['points'] ?? 0} pts',
                 style: GoogleFonts.inter(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.accent,
@@ -149,9 +195,9 @@ class LeaderboardScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildProfileStat('Workouts', '14'),
-                  _buildProfileStat('Calories', '1.8k/d'),
-                  _buildProfileStat('Streak', '12 days'),
+                  _buildProfileStat('Workouts', '$workouts'),
+                  _buildProfileStat('Calories', calories),
+                  _buildProfileStat('Streak', '$streak days'),
                 ],
               ),
               const SizedBox(height: 24),

@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>We need access to your device motion sensors to track steps in real-time.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>We need permission to read steps and health data from HealthKit to sync with your daily goals.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>We need permission to write health logs to HealthKit to save your progress.</string>
 </dict>
 </plist>
