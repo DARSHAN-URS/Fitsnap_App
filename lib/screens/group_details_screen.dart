@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import 'groups_tab.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class GroupDetailsScreen extends StatefulWidget {
   final GroupItem group;
@@ -199,6 +200,20 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
         });
       }
       
+      if (silent && loadedMessages.length > _chatMessages.length) {
+        final oldIds = _chatMessages.map((m) => m['id']).toSet();
+        final newMsgs = loadedMessages.where((m) => !oldIds.contains(m['id']) && m['isMe'] == false).toList();
+        for (var m in newMsgs) {
+          final sender = m['sender'] ?? 'Member';
+          final msgText = m['message'] ?? '';
+          NotificationService.showNotification(
+            id: m['id'].hashCode,
+            title: '$sender (${widget.group.title}) 💬',
+            body: msgText,
+          );
+        }
+      }
+
       if (mounted) {
         setState(() {
           _chatMessages.clear();

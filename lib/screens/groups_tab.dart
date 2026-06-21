@@ -8,6 +8,7 @@ import '../widgets/staggered_animation.dart';
 import '../utils/preferences_helper.dart';
 import 'group_details_screen.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class GroupItem {
   final String id;
@@ -186,6 +187,13 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     if (res['success'] == true) {
       _friendEmailController.clear();
       await _fetchData();
+      
+      NotificationService.showNotification(
+        id: email.hashCode,
+        title: 'Friend Request Accepted! 🤝',
+        body: 'You and $email are now connected.',
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

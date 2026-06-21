@@ -14,6 +14,7 @@ import 'screens/groups_tab.dart';
 import 'screens/profile_tab.dart';
 import 'services/api_service.dart';
 import 'services/health_sync_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -379,6 +380,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         _fats += (data['fats'] as num).toInt();
       });
       _saveLogs();
+
+      NotificationService.showNotification(
+        id: 1,
+        title: 'Meal Logged! 🍳',
+        body: 'Added "${data['name'] ?? 'Meal'}" (${data['calories']} kcal) to your daily journal.',
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

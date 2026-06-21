@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../services/notification_service.dart';
 
 class BadgeState {
   final int streakDays;
@@ -60,12 +61,22 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
         if (!activeDates.contains(todayStr)) {
           activeDates.add(todayStr);
         }
+        NotificationService.showNotification(
+          id: 10,
+          title: 'Daily Streak Continued! 🔥',
+          body: 'You are on a $currentStreak active day streak. Keep pushing!',
+        );
       } else if (difference > 1) {
         // Streak broken
         currentStreak = 1;
         if (!activeDates.contains(todayStr)) {
           activeDates.add(todayStr);
         }
+        NotificationService.showNotification(
+          id: 10,
+          title: 'New Streak Started! ⚡',
+          body: 'Day 1 of your new fitness streak. Consistency is key!',
+        );
       }
       
       await prefs.setString('last_active_date', todayStr);
@@ -144,6 +155,14 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
     }
 
     if (newBadges.length != state.earnedBadges.length) {
+      final added = newBadges.where((b) => !state.earnedBadges.contains(b)).toList();
+      for (var badge in added) {
+        NotificationService.showNotification(
+          id: badge.hashCode,
+          title: 'Achievement Unlocked! 🏆',
+          body: 'You earned the "$badge" badge for your healthy progress!',
+        );
+      }
       state = state.copyWith(earnedBadges: newBadges);
       await prefs.setStringList('earned_badges', newBadges);
     }
