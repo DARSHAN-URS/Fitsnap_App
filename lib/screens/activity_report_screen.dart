@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../services/api_service.dart';
@@ -35,19 +37,38 @@ class ActivityReportScreen extends StatefulWidget {
 
 class _ActivityReportScreenState extends State<ActivityReportScreen> {
   String _displayName = 'Darshan Urs';
+  String? _profilePicUrl;
+  double _profileHeight = 175.0;
+  double _profileWeight = 75.0;
+  String _profileAge = '25';
+  String _profileGoal = 'Build Muscle';
   bool _isSaving = false;
   final GlobalKey _repaintKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _loadProfileName();
+    _loadProfileData();
   }
 
-  Future<void> _loadProfileName() async {
+  Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _displayName = prefs.getString('profile_name') ?? 'Darshan Urs';
+      _profilePicUrl = prefs.getString('profile_pic_url');
+      _profileHeight = prefs.getDouble('profile_height') ?? 175.0;
+      _profileWeight = prefs.getDouble('profile_weight') ?? 75.0;
+      
+      final ageVal = prefs.get('profile_age');
+      if (ageVal is int) {
+        _profileAge = ageVal.toString();
+      } else if (ageVal is String) {
+        _profileAge = ageVal;
+      } else {
+        _profileAge = '25';
+      }
+      
+      _profileGoal = prefs.getString('profile_goal') ?? 'Build Muscle';
     });
   }
 
@@ -285,22 +306,34 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                             width: 44,
                             height: 44,
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [widget.themeColor, widget.themeColor.withOpacity(0.5)],
-                              ),
+                              gradient: _profilePicUrl == null
+                                  ? LinearGradient(
+                                      colors: [widget.themeColor, widget.themeColor.withOpacity(0.5)],
+                                    )
+                                  : null,
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white24, width: 1.5),
+                              image: _profilePicUrl != null
+                                  ? DecorationImage(
+                                      image: _profilePicUrl!.startsWith('http')
+                                          ? CachedNetworkImageProvider(_profilePicUrl!)
+                                          : FileImage(File(_profilePicUrl!)) as ImageProvider,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
+                            child: _profilePicUrl == null
+                                ? Center(
+                                    child: Text(
+                                      initials,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -315,12 +348,23 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                                     fontSize: 15,
                                   ),
                                 ),
+                                const SizedBox(height: 2),
                                 Text(
-                                  'SabTrack Elite Athlete',
+                                  'SabTrack Elite Athlete • $_profileAge y/o • ${_profileHeight.toInt()}cm • ${_profileWeight.toInt()}kg',
                                   style: GoogleFonts.inter(
                                     color: Colors.white54,
-                                    fontSize: 11,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Goal: $_profileGoal',
+                                  style: GoogleFonts.inter(
+                                    color: widget.themeColor.withOpacity(0.9),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
                               ],
