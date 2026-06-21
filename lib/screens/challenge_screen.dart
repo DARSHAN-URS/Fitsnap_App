@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
+import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import 'active_workout_screen.dart';
 import '../services/api_service.dart';
@@ -23,48 +25,109 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadChallengeData();
+    _loadCachedChallengeData();
   }
 
-  Future<void> _loadChallengeData() async {
-    if (mounted) setState(() => _isLoading = true);
+  Future<void> _loadCachedChallengeData() async {
+    final cachedDetails = await PreferencesHelper.readString('cache_challenge_details');
+    final cachedEnrollment = await PreferencesHelper.readString('cache_challenge_enrollment');
+    
+    bool hasCached = false;
+    if (cachedDetails != null) {
+      try {
+        final ch = jsonDecode(cachedDetails);
+        _challengeId = ch['id'].toString();
+        _title = ch['title'] ?? _title;
+        _description = ch['description'] ?? _description;
+        _targetWorkouts = ch['target_workouts'] ?? _targetWorkouts;
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (cachedEnrollment != null) {
+      try {
+        final enrollment = jsonDecode(cachedEnrollment);
+        _isJoined = true;
+        _completedWorkouts = enrollment['completed_workouts'] ?? 0;
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (hasCached && mounted) {
+      setState(() {});
+    }
+    
+    await _fetchChallengeData();
+  }
+
+
+  Future<void> _fetchChallengeData() async {
+    if (!mounted) return;
+    if (_challengeId == null) {
+      setState(() => _isLoading = true);
+    }
     
     final challengesRes = await ApiService.getChallenges();
     final userChallengesRes = await ApiService.getUserChallenges();
+    
+    String? newChallengeId = _challengeId;
+    String newTitle = _title;
+    String newDescription = _description;
+    int newTargetWorkouts = _targetWorkouts;
     
     if (challengesRes['success'] == true) {
       final List<dynamic> list = challengesRes['data'] ?? [];
       if (list.isNotEmpty) {
         final ch = list.first;
-        _challengeId = ch['id'].toString();
-        _title = ch['title'] ?? _title;
-        _description = ch['description'] ?? _description;
-        _targetWorkouts = ch['target_workouts'] ?? _targetWorkouts;
+        newChallengeId = ch['id'].toString();
+        newTitle = ch['title'] ?? _title;
+        newDescription = ch['description'] ?? _description;
+        newTargetWorkouts = ch['target_workouts'] ?? _targetWorkouts;
+        await PreferencesHelper.saveString('cache_challenge_details', jsonEncode(ch));
       }
     }
     
-    if (userChallengesRes['success'] == true && _challengeId != null) {
+    bool newIsJoined = _isJoined;
+    int newCompletedWorkouts = _completedWorkouts;
+    
+    if (userChallengesRes['success'] == true && newChallengeId != null) {
       final List<dynamic> userList = userChallengesRes['data'] ?? [];
       final enrollment = userList.firstWhere(
         (uc) {
           final cid = uc['challenge_id']?.toString() ?? uc['challenges']?['id']?.toString();
-          return cid == _challengeId;
+          return cid == newChallengeId;
         },
         orElse: () => null,
       );
       
       if (enrollment != null) {
-        _isJoined = true;
-        _completedWorkouts = enrollment['completed_workouts'] ?? 0;
+        newIsJoined = true;
+        newCompletedWorkouts = enrollment['completed_workouts'] ?? 0;
+        await PreferencesHelper.saveString('cache_challenge_enrollment', jsonEncode(enrollment));
       } else {
-        _isJoined = false;
-        _completedWorkouts = 0;
+        newIsJoined = false;
+        newCompletedWorkouts = 0;
+        await PreferencesHelper.delete('cache_challenge_enrollment');
       }
     }
     
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _challengeId = newChallengeId;
+        _title = newTitle;
+        _description = newDescription;
+        _targetWorkouts = newTargetWorkouts;
+        _isJoined = newIsJoined;
+        _completedWorkouts = newCompletedWorkouts;
+        _isLoading = false;
+      });
     }
+  }
+
+  Future<void> _loadChallengeData() async {
+    await _fetchChallengeData();
   }
 
   Future<void> _joinChallenge() async {

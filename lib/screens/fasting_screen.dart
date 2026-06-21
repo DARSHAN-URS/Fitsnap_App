@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,7 +34,7 @@ class _FastingScreenState extends State<FastingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFastingData();
+    _loadCachedFastingData();
   }
 
   @override
@@ -42,51 +43,123 @@ class _FastingScreenState extends State<FastingScreen> {
     super.dispose();
   }
 
-  Future<void> _loadFastingData() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
+  Future<void> _loadCachedFastingData() async {
     final prefs = await SharedPreferences.getInstance();
     _selectedProtocol = prefs.getString('fasting_selected_protocol') ?? '16:8';
     
+    final cachedActive = prefs.getString('cache_fasting_active_fast');
+    final cachedHistory = prefs.getString('cache_fasting_history');
+    
+    bool hasCached = false;
+    if (cachedActive != null) {
+      try {
+        final active = jsonDecode(cachedActive);
+        _isFasting = true;
+        _activeFastId = active['id'].toString();
+        _selectedProtocol = active['protocol'] ?? _selectedProtocol;
+        final startStr = active['start_time'];
+        if (startStr != null) {
+          _fastStart = DateTime.tryParse(startStr);
+        }
+        
+        _timer?.cancel();
+        if (_fastStart != null) {
+          _elapsedTime = DateTime.now().difference(_fastStart!);
+          _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (mounted) {
+              setState(() {
+                _elapsedTime = DateTime.now().difference(_fastStart!);
+              });
+            }
+          });
+        }
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (cachedHistory != null) {
+      try {
+        _history = jsonDecode(cachedHistory);
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (hasCached && mounted) {
+      setState(() {});
+    }
+    
+    await _fetchFastingData();
+  }
+
+  Future<void> _fetchFastingData() async {
+    if (!mounted) return;
+    if (_history.isEmpty && !_isFasting) {
+      setState(() => _isLoading = true);
+    }
+    
+    final prefs = await SharedPreferences.getInstance();
     final activeRes = await ApiService.getActiveFast();
     final historyRes = await ApiService.getFastingHistory();
     
+    bool newIsFasting = false;
+    String? newActiveFastId;
+    DateTime? newFastStart;
+    String newProtocol = _selectedProtocol;
+    
     if (activeRes['success'] == true && activeRes['data'] != null) {
       final active = activeRes['data'];
-      _isFasting = true;
-      _activeFastId = active['id'].toString();
-      _selectedProtocol = active['protocol'] ?? _selectedProtocol;
+      await prefs.setString('cache_fasting_active_fast', jsonEncode(active));
+      
+      newIsFasting = true;
+      newActiveFastId = active['id'].toString();
+      newProtocol = active['protocol'] ?? _selectedProtocol;
       final startStr = active['start_time'];
       if (startStr != null) {
-        _fastStart = DateTime.tryParse(startStr);
-      }
-      
-      _timer?.cancel();
-      if (_fastStart != null) {
-        _elapsedTime = DateTime.now().difference(_fastStart!);
-        _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (mounted) {
-            setState(() {
-              _elapsedTime = DateTime.now().difference(_fastStart!);
-            });
-          }
-        });
+        newFastStart = DateTime.tryParse(startStr);
       }
     } else {
-      _isFasting = false;
-      _activeFastId = null;
-      _fastStart = null;
-      _timer?.cancel();
-      _elapsedTime = Duration.zero;
+      await prefs.remove('cache_fasting_active_fast');
+      newIsFasting = false;
+      newActiveFastId = null;
+      newFastStart = null;
     }
     
+    List<dynamic> newHistory = _history;
     if (historyRes['success'] == true) {
-      _history = historyRes['data'] ?? [];
+      newHistory = historyRes['data'] ?? [];
+      await prefs.setString('cache_fasting_history', jsonEncode(newHistory));
     }
     
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isFasting = newIsFasting;
+        _activeFastId = newActiveFastId;
+        _selectedProtocol = newProtocol;
+        _fastStart = newFastStart;
+        _history = newHistory;
+        _isLoading = false;
+        
+        _timer?.cancel();
+        if (_fastStart != null) {
+          _elapsedTime = DateTime.now().difference(_fastStart!);
+          _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (mounted) {
+              setState(() {
+                _elapsedTime = DateTime.now().difference(_fastStart!);
+              });
+            }
+          });
+        } else {
+          _elapsedTime = Duration.zero;
+        }
+      });
     }
+  }
+
+  Future<void> _loadFastingData() async {
+    await _fetchFastingData();
   }
 
   Future<void> _saveSelectedProtocol(String proto) async {

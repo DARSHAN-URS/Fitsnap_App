@@ -137,7 +137,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1200),
     );
     _entryAnimController.forward();
-    _fetchData();
+    _loadCachedDataAndFetch();
   }
 
   @override
@@ -148,27 +148,67 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _loadCachedDataAndFetch() async {
+    final cachedGroups = await PreferencesHelper.readString('cache_groups_list');
+    final cachedFriends = await PreferencesHelper.readString('cache_friends_list');
+    
+    bool hasCached = false;
+    if (cachedGroups != null) {
+      try {
+        final List<dynamic> list = jsonDecode(cachedGroups);
+        _groups.clear();
+        _groups.addAll(list.map((g) => GroupItem.fromBackendJson(g)).toList());
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (cachedFriends != null) {
+      try {
+        final List<dynamic> list = jsonDecode(cachedFriends);
+        _friends.clear();
+        _friends.addAll(list.map((f) => FriendItem.fromBackendJson(f)).toList());
+        _isLoading = false;
+        hasCached = true;
+      } catch (_) {}
+    }
+    
+    if (hasCached && mounted) {
+      setState(() {});
+    }
+    
+    await _fetchData();
+  }
+
   Future<void> _fetchData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (_groups.isEmpty && _friends.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     
     final groupsRes = await ApiService.getGroups();
     final friendsRes = await ApiService.getFriends();
     
+    List<GroupItem> newGroups = _groups;
     if (groupsRes['success'] == true) {
       final List<dynamic> list = groupsRes['data'] ?? [];
-      _groups.clear();
-      _groups.addAll(list.map((g) => GroupItem.fromBackendJson(g)).toList());
+      newGroups = list.map((g) => GroupItem.fromBackendJson(g)).toList();
+      await PreferencesHelper.saveString('cache_groups_list', jsonEncode(list));
     }
     
+    List<FriendItem> newFriends = _friends;
     if (friendsRes['success'] == true) {
       final List<dynamic> list = friendsRes['data'] ?? [];
-      _friends.clear();
-      _friends.addAll(list.map((f) => FriendItem.fromBackendJson(f)).toList());
+      newFriends = list.map((f) => FriendItem.fromBackendJson(f)).toList();
+      await PreferencesHelper.saveString('cache_friends_list', jsonEncode(list));
     }
     
     if (mounted) {
       setState(() {
+        _groups.clear();
+        _groups.addAll(newGroups);
+        _friends.clear();
+        _friends.addAll(newFriends);
         _isLoading = false;
         _filterGroups();
       });

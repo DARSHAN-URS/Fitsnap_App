@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
+import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
@@ -17,26 +19,46 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchLeaderboard();
+    _loadCachedAndFetch();
+  }
+
+  Future<void> _loadCachedAndFetch() async {
+    final cached = await PreferencesHelper.readString('cache_weekly_leaderboard');
+    if (cached != null) {
+      try {
+        final data = jsonDecode(cached);
+        setState(() {
+          _leaderboardData = data;
+          _isLoading = false;
+        });
+      } catch (_) {}
+    }
+    await _fetchLeaderboard();
   }
 
   Future<void> _fetchLeaderboard() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (_leaderboardData.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final res = await ApiService.getLeaderboard();
     if (res['success'] == true) {
+      final List<dynamic> data = res['data'] ?? [];
+      await PreferencesHelper.saveString('cache_weekly_leaderboard', jsonEncode(data));
       if (mounted) {
         setState(() {
-          _leaderboardData = res['data'] ?? [];
+          _leaderboardData = data;
           _isLoading = false;
         });
       }
     } else {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['error'] ?? 'Failed to load leaderboard')),
-        );
+        if (_leaderboardData.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error'] ?? 'Failed to load leaderboard')),
+          );
+        }
       }
     }
   }
