@@ -66,12 +66,19 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   Future<void> _loadUserStatsAndData() async {
     if (mounted) setState(() => _isLoading = true);
     
-    // Fetch today's stats from backend
+    // Fetch today's steps and calories from backend
     final todayStr = DateTime.now().toIso8601String().split('T')[0];
-    final statsRes = await ApiService.getDailyStats(date: todayStr);
-    if (statsRes['success'] == true && statsRes['data'] != null) {
-      _mySteps = statsRes['data']['steps'] ?? 0;
-      _myCalories = statsRes['data']['water_ml'] != null ? (statsRes['data']['water_ml'] as num).toInt() : (_mySteps * 0.04).toInt();
+    final stepsRes = await ApiService.getDailySteps(todayStr);
+    if (stepsRes['success'] == true && stepsRes['data'] != null) {
+      final stepsData = stepsRes['data'];
+      _mySteps = stepsData['final_steps'] ?? 0;
+      _myCalories = stepsData['calories'] ?? 0;
+    } else {
+      final statsRes = await ApiService.getDailyStats(date: todayStr);
+      if (statsRes['success'] == true && statsRes['data'] != null) {
+        _mySteps = statsRes['data']['steps'] ?? 0;
+        _myCalories = (_mySteps * 0.04).toInt();
+      }
     }
     
     // Fetch workouts

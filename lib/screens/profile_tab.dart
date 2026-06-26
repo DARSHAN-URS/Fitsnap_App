@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../auth_screen.dart';
 import '../services/api_service.dart';
 import '../services/health_sync_service.dart';
+import '../services/step_tracking_service.dart';
 import '../utils/preferences_helper.dart';
 import '../widgets/staggered_animation.dart';
 import 'personal_details_screen.dart';
@@ -557,12 +558,17 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                       const SnackBar(content: Text('Syncing with Health/Google Fit...')),
                     );
                     
+                    int steps = 0;
+                    final stepSyncRes = await StepTrackingService.syncSteps();
+                    if (stepSyncRes['success'] == true && stepSyncRes['data'] != null) {
+                      steps = stepSyncRes['data']['final_steps'] ?? 0;
+                    }
+
                     final result = await HealthSyncService.fetchTodayData();
                     if (!mounted) return;
                     
                     if (result['success'] == true) {
                       final healthData = result['data'] as Map<String, dynamic>;
-                      final int steps = healthData['steps'] ?? 0;
                       final double water = healthData['water'] ?? 0.0;
                       
                       // Save to preferences so HomeTab can reload them

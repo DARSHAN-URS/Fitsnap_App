@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'dart:async';
+import 'dart:io';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 import 'screens/home_tab.dart';
 import 'screens/activity_tab.dart';
 import 'screens/progress_tab.dart';
@@ -15,6 +17,7 @@ import 'screens/profile_tab.dart';
 import 'services/api_service.dart';
 import 'services/health_sync_service.dart';
 import 'services/notification_service.dart';
+import 'services/step_tracking_service.dart';
 import 'theme/app_theme.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -174,6 +177,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             'protein': proteinVal.toInt(),
             'carbs': carbsVal.toInt(),
             'fats': fatsVal.toInt(),
+            'description': meal['description'],
+            'image_url': meal['image_url'],
             'time': meal['logged_at'] != null 
                 ? '${DateTime.parse(meal['logged_at']).toLocal().hour.toString().padLeft(2, '0')}:${DateTime.parse(meal['logged_at']).toLocal().minute.toString().padLeft(2, '0')}'
                 : 'Just now',
@@ -191,13 +196,20 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         final stats = statsRes['data'];
         stepsTemp = (stats['steps'] as num?)?.toInt() ?? 0;
         waterTemp = (stats['water_ml'] as num?)?.toInt() ?? 0;
-        
-        await prefs.setInt('home_steps_$dateStr', stepsTemp);
-        await prefs.setInt('home_water_$dateStr', waterTemp);
-        if (dateStr == todayStr) {
-          await prefs.setInt('home_steps', stepsTemp);
-          await prefs.setInt('home_water', waterTemp);
-        }
+      }
+
+      // 3. Fetch steps metrics from daily_steps table
+      final stepsRes = await ApiService.getDailySteps(dateStr);
+      if (stepsRes['success'] && stepsRes['data'] != null) {
+        final stepsData = stepsRes['data'];
+        stepsTemp = (stepsData['final_steps'] as num?)?.toInt() ?? stepsTemp;
+      }
+      
+      await prefs.setInt('home_steps_$dateStr', stepsTemp);
+      await prefs.setInt('home_water_$dateStr', waterTemp);
+      if (dateStr == todayStr) {
+        await prefs.setInt('home_steps', stepsTemp);
+        await prefs.setInt('home_water', waterTemp);
       }
 
       setState(() {
@@ -251,7 +263,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    HealthSyncService.initPedometer();
+    
+    // Request steps permissions on startup
+    StepTrackingService.requestPermissions().then((granted) {
+      if (granted) {
+        debugPrint("Step tracking permissions initialized.");
+        _triggerBackgroundHealthSync();
+      }
+    });
     
     _loadLogs();
     
@@ -274,7 +293,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _resetTimer?.cancel();
-    HealthSyncService.stopPedometer();
     _pulseController.dispose();
     super.dispose();
   }
@@ -289,8 +307,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         _selectedDate = now;
       });
       
-      final todayStr = now.toIso8601String().split('T')[0];
-      await HealthSyncService.resetBaselineForNewDay(todayStr);
       _loadLogs();
       _triggerBackgroundHealthSync();
     }
@@ -306,15 +322,25 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   Future<void> _triggerBackgroundHealthSync() async {
     try {
+      final String dateStr = _selectedDate.toIso8601String().split('T')[0];
+      final String todayStr = DateTime.now().toIso8601String().split('T')[0];
+
+      // 1. Sync and fetch steps metrics using the new StepTrackingService
+      int stepsVal = _steps;
+      if (dateStr == todayStr) {
+        final stepSyncRes = await StepTrackingService.syncSteps();
+        if (stepSyncRes['success'] == true && stepSyncRes['data'] != null) {
+          stepsVal = stepSyncRes['data']['final_steps'] ?? _steps;
+        }
+      }
+
+      // 2. Fetch water and other health data from HealthSyncService
       final result = await HealthSyncService.fetchTodayData();
       if (result['success'] == true) {
         final data = result['data'];
-        final int stepsVal = data['steps'] ?? 0;
         final double waterVal = (data['water'] as num?)?.toDouble() ?? 0.0;
         
         final prefs = await SharedPreferences.getInstance();
-        final String dateStr = _selectedDate.toIso8601String().split('T')[0];
-        final String todayStr = DateTime.now().toIso8601String().split('T')[0];
         
         if (dateStr == todayStr) {
           setState(() {
@@ -339,6 +365,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             );
           }
         }
+      } else {
+        // Fallback: If HealthSyncService fails, at least update local steps
+        if (dateStr == todayStr) {
+          setState(() {
+            _steps = stepsVal;
+          });
+        }
       }
     } catch (e) {
       debugPrint("Background health sync error: $e");
@@ -357,7 +390,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  void _handleAnalysisResponse(Map<String, dynamic> result, String successMsg) {
+  void _handleAnalysisResponse(Map<String, dynamic> result, String successMsg, {String? imagePath, String? description}) {
     if (result['success']) {
       final data = result['data']['data'];
       
@@ -373,6 +406,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           'carbs': data['carbs'] ?? 0,
           'fats': data['fats'] ?? 0,
           'time': timeStr,
+          if (imagePath != null) 'imagePath': imagePath,
+          if (description != null) 'description': description,
+          if (result['data']['image_url'] != null) 'image_url': result['data']['image_url'],
         });
         _consumed += (data['calories'] as num).toInt();
         _protein += (data['protein'] as num).toInt();
@@ -409,26 +445,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
-  void _handleCameraScan({String? imagePath}) async {
+  void _handleCameraScan({String? imagePath, String? description}) async {
     setState(() => _isAnalyzing = true);
     _showScanToast('Uploading and analyzing food image...');
     
     final dateStr = _selectedDate.toIso8601String().split('T')[0];
-    final result = await ApiService.analyzeNutrition(imagePath: imagePath, date: dateStr);
+    final result = await ApiService.analyzeNutrition(imagePath: imagePath, date: dateStr, description: description);
     setState(() => _isAnalyzing = false);
     
-    _handleAnalysisResponse(result, 'Meal parsed successfully! Macros updated.');
+    _handleAnalysisResponse(result, 'Meal parsed successfully! Macros updated.', imagePath: imagePath, description: description);
   }
 
-  void _handleLabelScan({String? imagePath}) async {
+  void _handleLabelScan({String? imagePath, String? description}) async {
     setState(() => _isAnalyzing = true);
     _showScanToast('Uploading and analyzing nutrition label...');
     
     final dateStr = _selectedDate.toIso8601String().split('T')[0];
-    final result = await ApiService.analyzeNutritionLabel(imagePath: imagePath, date: dateStr);
+    final result = await ApiService.analyzeNutritionLabel(imagePath: imagePath, date: dateStr, description: description);
     setState(() => _isAnalyzing = false);
     
-    _handleAnalysisResponse(result, 'Nutrition facts parsed successfully!');
+    _handleAnalysisResponse(result, 'Nutrition facts parsed successfully!', imagePath: imagePath, description: description);
   }
 
   void _handleTextDescribe(String text) async {
@@ -439,7 +475,84 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final result = await ApiService.analyzeNutritionText(text, date: dateStr);
     setState(() => _isAnalyzing = false);
     
-    _handleAnalysisResponse(result, 'Text description parsed successfully!');
+    _handleAnalysisResponse(result, 'Text description parsed successfully!', description: text);
+  }
+
+  Future<String?> _showScanNoteDialog() async {
+    final TextEditingController noteController = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text(
+            'Add Note / Message (Optional)',
+            style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w800,
+              color: AppTheme.primary,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add any details (e.g. portion size, extra butter, specific brand) to help Gemini analyze accurately.',
+                style: GoogleFonts.inter(color: Colors.black45, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: noteController,
+                  maxLines: 2,
+                  style: GoogleFonts.inter(fontSize: 14, color: AppTheme.primary),
+                  decoration: InputDecoration(
+                    hintText: 'e.g., added 1 tbsp peanut butter, double portion...',
+                    hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.black38),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(
+                'Skip',
+                style: GoogleFonts.inter(color: Colors.black45, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final String text = noteController.text.trim();
+                Navigator.pop(context, text.isEmpty ? null : text);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              ),
+              child: Text(
+                'Submit & Scan',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _pickAndAnalyzeImage({required ImageSource source, required bool isLabelScan}) async {
@@ -456,10 +569,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         return;
       }
       
+      if (!mounted) return;
+      final description = await _showScanNoteDialog();
+
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = 'food_scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final cachedFile = File('${directory.path}/$fileName');
+      await File(image.path).copy(cachedFile.path);
+      final persistentImagePath = cachedFile.path;
+
       if (isLabelScan) {
-        _handleLabelScan(imagePath: image.path);
+        _handleLabelScan(imagePath: persistentImagePath, description: description);
       } else {
-        _handleCameraScan(imagePath: image.path);
+        _handleCameraScan(imagePath: persistentImagePath, description: description);
       }
     } catch (e) {
       if (!mounted) return;

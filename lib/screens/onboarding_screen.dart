@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../dashboard_screen.dart';
@@ -15,7 +16,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  int _currentStep = 0; // 0 to 4
+  int _currentStep = 0; // 0 to 5
   bool _isLoading = false;
 
   // State Variables gathered during onboarding
@@ -28,9 +29,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   
   String _weightUnit = 'kg'; // 'kg' or 'lbs'
   final TextEditingController _weightController = TextEditingController(text: '75');
+  final TextEditingController _targetWeightController = TextEditingController(text: '70');
 
   // Fitness Goal selection
   String _selectedGoal = ''; // 'Lose Weight', 'Build Muscle', 'Stay Fit', 'Improve Endurance'
+  String _selectedActivity = 'Moderately Active';
 
   // Allergies & Restrictions
   final List<String> _selectedAllergies = [];
@@ -50,12 +53,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _ageController.dispose();
     _heightController.dispose();
     _weightController.dispose();
+    _targetWeightController.dispose();
     _customAllergyController.dispose();
     super.dispose();
   }
 
   void _nextStep() async {
-    if (_currentStep < 4) {
+    if (_currentStep < 5) {
       setState(() {
         _currentStep++;
       });
@@ -70,10 +74,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (_weightUnit == 'lbs') {
         weightKg = weightKg / 2.20462;
       }
+      double targetWeightKg = double.tryParse(_targetWeightController.text) ?? 70.0;
+      if (_weightUnit == 'lbs') {
+        targetWeightKg = targetWeightKg / 2.20462;
+      }
 
       final displayName = await PreferencesHelper.readString('profile_name') ?? 'Fitness Enthusiast';
 
-      // Update backend profile
+      // Update backend profile and compute targets
       if (ApiService.isAuthenticated) {
         final res = await ApiService.updateProfile(
           name: displayName,
@@ -81,8 +89,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           weight: weightKg,
           height: heightCm,
           goals: _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal,
+          gender: _gender.isEmpty ? 'Male' : _gender,
+          activityLevel: _selectedActivity,
+          targetWeight: targetWeightKg,
+          goal: _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal,
         );
-        if (!res['success']) {
+        if (res['success'] && res['data'] != null) {
+          final data = res['data'];
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('profile_bmi', (data['bmi'] as num?)?.toDouble() ?? 0.0);
+          await prefs.setString('profile_bmi_category', data['bmi_category'] ?? 'Healthy');
+          await prefs.setDouble('profile_bmr', (data['bmr'] as num?)?.toDouble() ?? 0.0);
+          await prefs.setDouble('profile_tdee', (data['tdee'] as num?)?.toDouble() ?? 0.0);
+          
+          await prefs.setDouble('profile_calorie_goal', (data['target_calories'] as num?)?.toDouble() ?? 2000.0);
+          await prefs.setDouble('profile_protein_goal', (data['protein_target'] as num?)?.toDouble() ?? 130.0);
+          await prefs.setDouble('profile_carbs_goal', (data['carb_target'] as num?)?.toDouble() ?? 250.0);
+          await prefs.setDouble('profile_fats_goal', (data['fat_target'] as num?)?.toDouble() ?? 65.0);
+          await prefs.setDouble('profile_fiber_goal', (data['fiber_target'] as num?)?.toDouble() ?? 28.0);
+          await prefs.setDouble('profile_water_goal', (data['water_target'] as num?)?.toDouble() ?? 2500.0);
+        } else {
           debugPrint('Failed to sync profile: ${res['error']}');
         }
       }
@@ -92,7 +118,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await PreferencesHelper.saveString('profile_gender', _gender);
       await PreferencesHelper.saveDouble('profile_height', heightCm);
       await PreferencesHelper.saveDouble('profile_weight', weightKg);
+      await PreferencesHelper.saveDouble('profile_target_weight', targetWeightKg);
+      await PreferencesHelper.saveString('profile_activity_level', _selectedActivity);
       await PreferencesHelper.saveString('profile_goal', _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal);
+      await PreferencesHelper.saveString('profile_goals', _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal);
       await PreferencesHelper.saveStringList('profile_allergies', _selectedAllergies);
       await PreferencesHelper.saveBool('onboarding_completed', true);
 
@@ -126,7 +155,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final double progress = (_currentStep + 1) / 5.0;
+    final double progress = (_currentStep + 1) / 6.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -246,8 +275,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 2:
         return _buildStepFitnessGoal();
       case 3:
-        return _buildStepAllergies();
+        return _buildStepActivityLevel();
       case 4:
+        return _buildStepAllergies();
+      case 5:
         return _buildStepAllSet();
       default:
         return const SizedBox.shrink();
@@ -451,21 +482,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           controller: _weightController,
           unitOptions: const ['kg', 'lbs'],
           selectedUnit: _weightUnit,
-          onUnitChange: (val) {
-            setState(() {
-              _weightUnit = val;
-              if (val == 'lbs') {
-                double kg = double.tryParse(_weightController.text) ?? 75;
-                double lbs = kg * 2.20462;
-                _weightController.text = lbs.toInt().toString();
-              } else {
-                double lbs = double.tryParse(_weightController.text) ?? 165;
-                double kg = lbs / 2.20462;
-                _weightController.text = kg.toInt().toString();
-              }
-            });
-          },
+          onUnitChange: _toggleWeightUnit,
         ),
+        const SizedBox(height: 20),
+
+        // Target Weight Selection Card
+        _buildMeasurementCard(
+          label: 'Target Weight',
+          controller: _targetWeightController,
+          unitOptions: const ['kg', 'lbs'],
+          selectedUnit: _weightUnit,
+          onUnitChange: _toggleWeightUnit,
+        ),
+        const SizedBox(height: 28),
         const SizedBox(height: 28),
 
         // Tip alert container
@@ -693,7 +722,137 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ],
     );
   }
+  void _toggleWeightUnit(String val) {
+    if (val == _weightUnit) return;
+    setState(() {
+      _weightUnit = val;
+      if (val == 'lbs') {
+        double kg = double.tryParse(_weightController.text) ?? 75;
+        double lbs = kg * 2.20462;
+        _weightController.text = lbs.toInt().toString();
 
+        double tKg = double.tryParse(_targetWeightController.text) ?? 70;
+        double tLbs = tKg * 2.20462;
+        _targetWeightController.text = tLbs.toInt().toString();
+      } else {
+        double lbs = double.tryParse(_weightController.text) ?? 165;
+        double kg = lbs / 2.20462;
+        _weightController.text = kg.toInt().toString();
+
+        double tLbs = double.tryParse(_targetWeightController.text) ?? 154;
+        double tKg = tLbs / 2.20462;
+        _targetWeightController.text = tKg.toInt().toString();
+      }
+    });
+  }
+
+  // STEP 3: Activity Level
+  Widget _buildStepActivityLevel() {
+    final List<Map<String, String>> activities = [
+      {'title': 'Sedentary', 'desc': 'Little or no daily exercise', 'emoji': '🪑'},
+      {'title': 'Lightly Active', 'desc': 'Light exercise 1-3 days/week', 'emoji': '🚶'},
+      {'title': 'Moderately Active', 'desc': 'Moderate exercise 3-5 days/week', 'emoji': '🏃'},
+      {'title': 'Very Active', 'desc': 'Hard exercise 6-7 days/week', 'emoji': '🚴'},
+      {'title': 'Athlete', 'desc': 'Intense daily training / physical job', 'emoji': '🏋️'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'Your Activity Level',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'How active are you on a regular basis?',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+        const SizedBox(height: 28),
+        ...activities.map((activity) {
+          final isSelected = _selectedActivity == activity['title'];
+          return GestureDetector(
+            onTap: () => setState(() => _selectedActivity = activity['title']!),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? const Color(0xFF6366F1).withOpacity(0.08) 
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected 
+                      ? const Color(0xFF6366F1) 
+                      : Colors.black.withOpacity(0.05),
+                  width: 1.5,
+                ),
+                boxShadow: isSelected ? AppTheme.glowShadow : AppTheme.cardShadow,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          activity['title']!,
+                          style: GoogleFonts.inter(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          activity['desc']!,
+                          style: GoogleFonts.inter(
+                            color: Colors.black45,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (isSelected)
+                    Text(
+                      activity['emoji']!,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF6366F1) : Colors.black26,
+                        width: 2,
+                      ),
+                      color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
+                    ),
+                    child: isSelected
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
   // STEP 3: Allergies & Restrictions
   Widget _buildStepAllergies() {
     return Column(
@@ -1207,9 +1366,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             return;
                           }
                         } else if (_currentStep == 1) {
-                          if (_heightController.text.trim().isEmpty || _weightController.text.trim().isEmpty) {
+                          if (_heightController.text.trim().isEmpty || _weightController.text.trim().isEmpty || _targetWeightController.text.trim().isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please enter height and weight details.')),
+                              const SnackBar(content: Text('Please enter height, weight, and target weight details.')),
                             );
                             return;
                           }
@@ -1220,13 +1379,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             );
                             return;
                           }
+                        } else if (_currentStep == 3) {
+                          if (_selectedActivity.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please select your activity level.')),
+                            );
+                            return;
+                          }
                         }
                         
                         _nextStep();
                       },
                       child: Center(
                         child: Text(
-                          _currentStep == 4 ? 'Start My Fitness Journey 🚀' : 'Continue',
+                          _currentStep == 5 ? 'Start My Fitness Journey 🚀' : 'Continue',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.inter(
                             color: Colors.white,
@@ -1242,7 +1408,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ],
           ),
           
-          if (_currentStep == 4) ...[
+          if (_currentStep == 5) ...[
             const SizedBox(height: 12),
             Text(
               'You can always update your preferences in Settings',

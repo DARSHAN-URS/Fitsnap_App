@@ -130,7 +130,7 @@ class ApiService {
   }
 
   // --- Smart Nutrition (Cal AI Feature) ---
-  static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath, String? date}) async {
+  static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath, String? date, String? description}) async {
     try {
       if (imagePath != null) {
         final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze'));
@@ -141,6 +141,9 @@ class ApiService {
         request.files.add(file);
         if (date != null) {
           request.fields['date'] = date;
+        }
+        if (description != null) {
+          request.fields['description'] = description;
         }
         
         final streamedResponse = await request.send();
@@ -196,7 +199,7 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> analyzeNutritionLabel({String? imagePath, String? date}) async {
+  static Future<Map<String, dynamic>> analyzeNutritionLabel({String? imagePath, String? date, String? description}) async {
     try {
       if (imagePath != null) {
         final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze-label'));
@@ -207,6 +210,9 @@ class ApiService {
         request.files.add(file);
         if (date != null) {
           request.fields['date'] = date;
+        }
+        if (description != null) {
+          request.fields['description'] = description;
         }
         
         final streamedResponse = await request.send();
@@ -268,6 +274,10 @@ class ApiService {
     required double height,
     required String goals,
     String? username,
+    String? gender,
+    String? activityLevel,
+    double? targetWeight,
+    String? goal,
   }) async {
     try {
       final response = await http.put(
@@ -283,12 +293,34 @@ class ApiService {
           'height': height,
           'goals': goals,
           if (username != null) 'username': username,
+          if (gender != null) 'gender': gender,
+          if (activityLevel != null) 'activity_level': activityLevel,
+          if (targetWeight != null) 'target_weight': targetWeight,
+          if (goal != null) 'goal': goal,
         }),
       );
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};
       }
       return {'success': false, 'error': jsonDecode(response.body)['error'] ?? 'Failed to update profile'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getProfileHistory() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/profile/history'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to load weight history'};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -344,6 +376,8 @@ class ApiService {
     int? carbs,
     int? fats,
     String? date,
+    String? description,
+    String? imageUrl,
   }) async {
     try {
       final response = await http.post(
@@ -359,6 +393,8 @@ class ApiService {
           'carbs': carbs ?? 0,
           'fats': fats ?? 0,
           if (date != null) 'date': date,
+          if (description != null) 'description': description,
+          if (imageUrl != null) 'image_url': imageUrl,
         }),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -876,6 +912,25 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getFriendSuggestions() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends/suggestions'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve friend suggestions'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   static Future<Map<String, dynamic>> addFriend(String email) async {
     try {
       final response = await http.post(
@@ -969,4 +1024,80 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  static Future<Map<String, dynamic>> getDailyReport(String date) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/insights/daily?date=$date'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to retrieve daily report'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Step Tracking Endpoints ---
+  static Future<Map<String, dynamic>> syncSteps(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/steps/sync'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to sync steps (Status: ${response.statusCode})'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getDailySteps(String date) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/steps/daily?date=$date'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to retrieve daily steps'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getStepsHistory(int days) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/steps/history?days=$days'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve steps history'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
+

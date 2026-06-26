@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
@@ -20,8 +21,10 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   final TextEditingController _customAllergyController = TextEditingController();
   
   double _weight = 76.4; // kg
+  double _targetWeight = 70.0; // kg
   double _height = 178.0; // cm
   String _selectedGoal = 'Build Muscle';
+  String _selectedActivity = 'Moderately Active';
   String _gender = 'Male';
   List<String> _selectedAllergies = [];
 
@@ -54,8 +57,10 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     final username = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
     final age = await PreferencesHelper.readString('profile_age') ?? '25';
     final weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
+    final targetWeight = await PreferencesHelper.readDouble('profile_target_weight') ?? 70.0;
     final height = await PreferencesHelper.readDouble('profile_height') ?? 178.0;
     final goal = await PreferencesHelper.readString('profile_goal') ?? 'Build Muscle';
+    final activity = await PreferencesHelper.readString('profile_activity_level') ?? 'Moderately Active';
     final gender = await PreferencesHelper.readString('profile_gender') ?? 'Male';
     final allergies = await PreferencesHelper.readStringList('profile_allergies') ?? [];
  
@@ -64,8 +69,10 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
       _usernameController.text = username;
       _ageController.text = age;
       _weight = weight;
+      _targetWeight = targetWeight;
       _height = height;
       _selectedGoal = goal;
+      _selectedActivity = activity;
       _gender = gender;
       _selectedAllergies = allergies;
     });
@@ -85,19 +92,40 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
         weight: _weight,
         height: _height,
         goals: _selectedGoal,
+        gender: _gender,
+        activityLevel: _selectedActivity,
+        targetWeight: _targetWeight,
+        goal: _selectedGoal,
       );
       if (res['success'] != true) {
         return res['error'] ?? 'Failed to sync profile';
       }
+
+      // Save backend calculations to SharedPreferences
+      final data = res['data'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('profile_bmi', (data['bmi'] as num?)?.toDouble() ?? 0.0);
+      await prefs.setString('profile_bmi_category', data['bmi_category'] ?? 'Healthy');
+      await prefs.setDouble('profile_bmr', (data['bmr'] as num?)?.toDouble() ?? 0.0);
+      await prefs.setDouble('profile_tdee', (data['tdee'] as num?)?.toDouble() ?? 0.0);
+      
+      await prefs.setDouble('profile_calorie_goal', (data['target_calories'] as num?)?.toDouble() ?? 2000.0);
+      await prefs.setDouble('profile_protein_goal', (data['protein_target'] as num?)?.toDouble() ?? 130.0);
+      await prefs.setDouble('profile_carbs_goal', (data['carb_target'] as num?)?.toDouble() ?? 250.0);
+      await prefs.setDouble('profile_fats_goal', (data['fat_target'] as num?)?.toDouble() ?? 65.0);
+      await prefs.setDouble('profile_fiber_goal', (data['fiber_target'] as num?)?.toDouble() ?? 28.0);
+      await prefs.setDouble('profile_water_goal', (data['water_target'] as num?)?.toDouble() ?? 2500.0);
     }
 
     await PreferencesHelper.saveString('profile_name', name);
     await PreferencesHelper.saveString('profile_username', username);
     await PreferencesHelper.saveString('profile_age', ageStr);
     await PreferencesHelper.saveDouble('profile_weight', _weight);
+    await PreferencesHelper.saveDouble('profile_target_weight', _targetWeight);
     await PreferencesHelper.saveDouble('profile_height', _height);
     await PreferencesHelper.saveString('profile_goal', _selectedGoal);
     await PreferencesHelper.saveString('profile_goals', _selectedGoal);
+    await PreferencesHelper.saveString('profile_activity_level', _selectedActivity);
     await PreferencesHelper.saveString('profile_gender', _gender);
     await PreferencesHelper.saveStringList('profile_allergies', _selectedAllergies);
 
@@ -409,7 +437,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Weight',
+                          'Current Weight',
                           style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
                         ),
                         Text(
@@ -425,6 +453,30 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                       activeColor: AppTheme.accent,
                       inactiveColor: const Color(0xFFF1F5F9),
                       onChanged: (val) => setState(() => _weight = val),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Target Weight slider
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Target Weight',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                        ),
+                        Text(
+                          '${_targetWeight.toStringAsFixed(1)} kg',
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16, color: AppTheme.neonEmerald),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: _targetWeight,
+                      min: 40.0,
+                      max: 150.0,
+                      activeColor: AppTheme.neonEmerald,
+                      inactiveColor: const Color(0xFFF1F5F9),
+                      onChanged: (val) => setState(() => _targetWeight = val),
                     ),
                     const SizedBox(height: 12),
 
@@ -579,6 +631,53 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Activity Level Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppTheme.cardRadius,
+                  boxShadow: AppTheme.cardShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Activity Level',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _selectedActivity,
+                      decoration: InputDecoration(
+                        fillColor: const Color(0xFFF1F5F9),
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      style: GoogleFonts.inter(fontSize: 14, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                      dropdownColor: Colors.white,
+                      items: const [
+                        DropdownMenuItem(value: 'Sedentary', child: Text('Sedentary (No exercise)')),
+                        DropdownMenuItem(value: 'Lightly Active', child: Text('Lightly Active (1-3 days/wk)')),
+                        DropdownMenuItem(value: 'Moderately Active', child: Text('Moderately Active (3-5 days/wk)')),
+                        DropdownMenuItem(value: 'Very Active', child: Text('Very Active (6-7 days/wk)')),
+                        DropdownMenuItem(value: 'Athlete', child: Text('Athlete (Intense training)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedActivity = val);
+                        }
+                      },
                     ),
                   ],
                 ),

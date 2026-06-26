@@ -1348,7 +1348,7 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
     setState(() {
       _nameControllers.add(TextEditingController());
       _weightControllers.add(TextEditingController());
-      _repsControllers.add(TextEditingController()..text = '10');
+      _repsControllers.add(TextEditingController());
     });
   }
 

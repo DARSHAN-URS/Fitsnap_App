@@ -8,10 +8,16 @@ import '../services/api_service.dart';
 import 'activity_tracker_screen.dart';
 import 'challenge_screen.dart';
 import 'profile_tab.dart';
+import 'daily_report_screen.dart';
+import 'ai_food_logging_screen.dart';
+import '../services/ai_food_logging_service.dart';
+import '../services/step_tracking_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/profile_provider.dart';
 import '../widgets/staggered_animation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/preferences_helper.dart';
+import '../theme/app_theme.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   final int consumed;
@@ -49,10 +55,10 @@ class HomeTab extends ConsumerStatefulWidget {
 
 class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin {
   final int _stepGoal = 10000;
-  final int _waterGoal = 2500; // ml
   String? _aiInsight;
   double _height = 175.0;
   double _weight = 75.0;
+  double _targetWeight = 70.0;
   int _age = 25;
   String _gender = 'Male';
   String _goal = 'Build Muscle';
@@ -60,6 +66,15 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   double? _customProteinGoal;
   double? _customCarbsGoal;
   double? _customFatsGoal;
+  double? _customFiberGoal;
+  double? _customWaterGoal;
+  double? _customBmi;
+  String? _customBmiCategory;
+  double? _customBmr;
+  double? _customTdee;
+
+  List<Map<String, dynamic>> _weightHistory = [];
+  bool _isLoadingWeightHistory = false;
 
   // Carousel Controller
   late PageController _pageController;
@@ -70,6 +85,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
   String _profileName = 'Guest User';
   String? _profilePicUrl;
+
+  List<Map<String, dynamic>> _favoriteFoods = [];
+  List<Map<String, dynamic>> _recentFoods = [];
 
   // Colors based on spec
   final Color bgColor = const Color(0xFFF8FAFC);
@@ -85,7 +103,15 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     end: Alignment.bottomRight,
   );
 
-  int get _burnedCalories => (widget.steps * 0.04).toInt();
+  int get _burnedCalories {
+    return StepTrackingService.estimateActiveCalories(
+      steps: widget.steps,
+      weight: _weight,
+      height: _height,
+      age: _age,
+      gender: _gender,
+    );
+  }
 
   @override
   void initState() {
@@ -108,24 +134,36 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
   Future<void> _loadStats() async {
     final prefs = await SharedPreferences.getInstance();
-    final String nameTemp = prefs.getString('profile_name') ?? 'Guest User';
-    final String? picTemp = prefs.getString('profile_pic_url');
-    final double heightTemp = prefs.getDouble('profile_height') ?? 175.0;
-    final double weightTemp = prefs.getDouble('profile_weight') ?? 75.0;
-    final String ageStr = prefs.getString('profile_age') ?? '25';
+    
+    // Load personal details securely from PreferencesHelper to fix out-of-sync local values
+    final String nameTemp = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
+    final String? picTemp = await PreferencesHelper.readString('profile_pic_url');
+    final double heightTemp = await PreferencesHelper.readDouble('profile_height') ?? 175.0;
+    final double weightTemp = await PreferencesHelper.readDouble('profile_weight') ?? 75.0;
+    final double targetWeightTemp = await PreferencesHelper.readDouble('profile_target_weight') ?? 70.0;
+    final String ageStr = await PreferencesHelper.readString('profile_age') ?? '25';
     final int ageTemp = int.tryParse(ageStr) ?? 25;
-    final String genderTemp = prefs.getString('profile_gender') ?? 'Male';
-    final String goalTemp = prefs.getString('profile_goal') ?? 'Build Muscle';
+    final String genderTemp = await PreferencesHelper.readString('profile_gender') ?? 'Male';
+    final String goalTemp = await PreferencesHelper.readString('profile_goal') ?? 'Build Muscle';
+    
+    // Load calculated targets from SharedPreferences
     final double? customCalTemp = prefs.getDouble('profile_calorie_goal');
     final double? customProtTemp = prefs.getDouble('profile_protein_goal');
     final double? customCarbTemp = prefs.getDouble('profile_carbs_goal');
     final double? customFatTemp = prefs.getDouble('profile_fats_goal');
+    final double? customFiberTemp = prefs.getDouble('profile_fiber_goal');
+    final double? customWaterTemp = prefs.getDouble('profile_water_goal');
+    final double? customBmiTemp = prefs.getDouble('profile_bmi');
+    final String? customBmiCatTemp = prefs.getString('profile_bmi_category');
+    final double? customBmrTemp = prefs.getDouble('profile_bmr');
+    final double? customTdeeTemp = prefs.getDouble('profile_tdee');
 
     setState(() {
       _profileName = nameTemp;
       _profilePicUrl = picTemp;
       _height = heightTemp;
       _weight = weightTemp;
+      _targetWeight = targetWeightTemp;
       _age = ageTemp;
       _gender = genderTemp;
       _goal = goalTemp;
@@ -133,17 +171,42 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
       _customProteinGoal = customProtTemp;
       _customCarbsGoal = customCarbTemp;
       _customFatsGoal = customFatTemp;
+      _customFiberGoal = customFiberTemp;
+      _customWaterGoal = customWaterTemp;
+      _customBmi = customBmiTemp;
+      _customBmiCategory = customBmiCatTemp;
+      _customBmr = customBmrTemp;
+      _customTdee = customTdeeTemp;
     });
+
+    _loadWeightHistory();
     
     if (ApiService.isAuthenticated) {
-      final res = await ApiService.getWorkoutInsight();
-      if (res['success'] && res['data'] != null) {
-        if (mounted) {
+      ApiService.getWorkoutInsight().then((res) {
+        if (res['success'] && res['data'] != null) {
+          if (mounted) {
+            setState(() {
+              _aiInsight = res['data']['insight'];
+            });
+          }
+        }
+      });
+
+      AiFoodLoggingService.getFavoriteFoods().then((res) {
+        if (res['success'] && res['data'] != null && mounted) {
           setState(() {
-            _aiInsight = res['data']['insight'];
+            _favoriteFoods = List<Map<String, dynamic>>.from(res['data']);
           });
         }
-      }
+      });
+
+      AiFoodLoggingService.getRecentFoods().then((res) {
+        if (res['success'] && res['data'] != null && mounted) {
+          setState(() {
+            _recentFoods = List<Map<String, dynamic>>.from(res['data']);
+          });
+        }
+      });
     }
   }
 
@@ -239,7 +302,16 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
           return GestureDetector(
             onTap: () {
-              widget.onDateChanged(day);
+              if (!_isToday(day)) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailyReportScreen(date: day),
+                  ),
+                );
+              } else {
+                widget.onDateChanged(day);
+              }
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -386,6 +458,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                                 protein: meal['protein'] ?? 0,
                                 carbs: meal['carbs'] ?? 0,
                                 fats: meal['fats'] ?? 0,
+                                imagePath: meal['imagePath'],
+                                imageUrl: meal['image_url'],
+                                description: meal['description'],
                               );
                             },
                           ),
@@ -697,9 +772,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             animationController: _entryAnimController,
             child: _buildHeroCarousel(),
           ),
-          const SizedBox(height: 24),
-
-          // BMI Section
+          const SizedBox(height: 24),          // BMI Section
           StaggeredListItem(
             index: 3,
             animationController: _entryAnimController,
@@ -707,9 +780,17 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 24),
 
-          // Quick Actions Title
+          // Weight Progress Section
           StaggeredListItem(
             index: 4,
+            animationController: _entryAnimController,
+            child: _buildWeightProgressSection(),
+          ),
+          const SizedBox(height: 24),
+
+          // Quick Actions Title
+          StaggeredListItem(
+            index: 5,
             animationController: _entryAnimController,
             child: Text(
             'Quick Actions',
@@ -724,7 +805,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
           // Quick Actions horizontal list
           StaggeredListItem(
-            index: 5,
+            index: 6,
             animationController: _entryAnimController,
             child: SizedBox(
             height: 52,
@@ -747,9 +828,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                   label: 'Scan Food',
                   icon: Icons.camera_alt_rounded,
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Opening food camera scanner...')),
-                    );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AiFoodLoggingScreen()),
+                    ).then((_) => _loadStats());
                   },
                 ),
                 const SizedBox(width: 8),
@@ -777,7 +859,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
           // Challenge Section
           StaggeredListItem(
-            index: 6,
+            index: 7,
             animationController: _entryAnimController,
             child: Text(
             'Challenges',
@@ -790,17 +872,22 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 12),
           StaggeredListItem(
-            index: 7,
+            index: 8,
             animationController: _entryAnimController,
             child: _buildChallengeCard(),
           ),
           const SizedBox(height: 24),
 
-
+          // Favorites & Recents Quick Log Section
+          StaggeredListItem(
+            index: 9,
+            animationController: _entryAnimController,
+            child: _buildQuickFoodList(),
+          ),
 
           // Recently Uploaded Food Feed
           StaggeredListItem(
-            index: 8,
+            index: 10,
             animationController: _entryAnimController,
             child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -848,6 +935,9 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                 protein: meal['protein'] ?? 0,
                 carbs: meal['carbs'] ?? 0,
                 fats: meal['fats'] ?? 0,
+                imagePath: meal['imagePath'],
+                imageUrl: meal['image_url'],
+                description: meal['description'],
               );
             }),
         ],
@@ -856,49 +946,319 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
    );
   }
 
+  Future<void> _loadWeightHistory() async {
+    if (!ApiService.isAuthenticated) return;
+    setState(() {
+      _isLoadingWeightHistory = true;
+    });
+    final res = await ApiService.getProfileHistory();
+    if (res['success'] && res['data'] != null) {
+      if (mounted) {
+        setState(() {
+          _weightHistory = List<Map<String, dynamic>>.from(res['data']['history'] ?? []);
+          _isLoadingWeightHistory = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoadingWeightHistory = false;
+        });
+      }
+    }
+  }
+
+  String _formatRecordDate(String dateStr) {
+    try {
+      final DateTime dt = DateTime.parse(dateStr).toLocal();
+      final now = DateTime.now();
+      if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+        return 'Today';
+      }
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      if (dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day) {
+        return 'Yesterday';
+      }
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[dt.month - 1]} ${dt.day}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   int get _dailyCalorieGoal {
     if (_customCalorieGoal != null) {
       return _customCalorieGoal!.round();
     }
-    
-    // Mifflin-St Jeor recommendation
-    double bmr = 0;
-    if (_gender.toLowerCase() == 'male') {
-      bmr = 10 * _weight + 6.25 * _height - 5 * _age + 5;
-    } else {
-      bmr = 10 * _weight + 6.25 * _height - 5 * _age - 161;
-    }
-    
-    double tdee = bmr * 1.375;
-    double target = tdee;
-    if (_goal.toLowerCase().contains('lose')) {
-      target = tdee - 500;
-    } else if (_goal.toLowerCase().contains('build') || _goal.toLowerCase().contains('gain')) {
-      target = tdee + 300;
-    }
-    
-    return target.round().clamp(1200, 5000);
+    return 2000;
   }
 
   int get _dailyProteinGoal {
     if (_customProteinGoal != null) {
       return _customProteinGoal!.round();
     }
-    return (_dailyCalorieGoal * 0.30 ~/ 4);
+    return 130;
   }
 
   int get _dailyCarbsGoal {
     if (_customCarbsGoal != null) {
       return _customCarbsGoal!.round();
     }
-    return (_dailyCalorieGoal * 0.45 ~/ 4);
+    return 250;
   }
 
   int get _dailyFatsGoal {
     if (_customFatsGoal != null) {
       return _customFatsGoal!.round();
     }
-    return (_dailyCalorieGoal * 0.25 ~/ 9);
+    return 65;
+  }
+
+  int get _dailyFiberGoal {
+    if (_customFiberGoal != null) {
+      return _customFiberGoal!.round();
+    }
+    return 28;
+  }
+
+  int get _dailyWaterGoal {
+    if (_customWaterGoal != null) {
+      return _customWaterGoal!.round();
+    }
+    return 2500;
+  }
+
+  Widget _buildWeightProgressSection() {
+    if (_isLoadingWeightHistory) {
+      return Container(
+        height: 140,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppTheme.accent),
+        ),
+      );
+    }
+
+    if (_weightHistory.isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+              color: Colors.white.withOpacity(0.55),
+              boxShadow: AppTheme.cardShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.scale_rounded, color: AppTheme.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Weight Progress',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No weight updates logged yet.',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your weight history will appear here as you log changes to your weight in Profile settings.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final weights = _weightHistory.map((e) => (e['weight'] as num).toDouble()).toList();
+    
+    double firstWeight = weights.first;
+    double currentWeight = weights.last;
+    double diff = currentWeight - firstWeight;
+    String diffText = diff >= 0 ? '+${diff.toStringAsFixed(1)} kg' : '${diff.toStringAsFixed(1)} kg';
+    Color diffColor = diff <= 0 ? Colors.green.shade700 : Colors.orange.shade800;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+            color: Colors.white.withOpacity(0.55),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.scale_rounded, color: AppTheme.accent),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Weight Progress',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: diffColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: diffColor.withOpacity(0.2)),
+                    ),
+                    child: Text(
+                      diffText,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: diffColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    currentWeight.toStringAsFixed(1),
+                    style: GoogleFonts.inter(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      color: textPrimary,
+                      letterSpacing: -1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'kg',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Target: ${_targetWeight.toStringAsFixed(1)} kg',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 80,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _WeightSparklinePainter(
+                    weights: weights,
+                    lineColor: AppTheme.accent,
+                    fillGradientStart: AppTheme.accent.withOpacity(0.2),
+                    fillGradientEnd: AppTheme.accent.withOpacity(0.0),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Recent Logs',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ..._weightHistory.reversed.take(3).map((log) {
+                final double w = (log['weight'] as num).toDouble();
+                final double b = (log['bmi'] as num).toDouble();
+                final String dateStr = log['recorded_at'] ?? '';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatRecordDate(dateStr),
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: textSecondary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            '${w.toStringAsFixed(1)} kg',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'BMI: ${b.toStringAsFixed(1)}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildHeroCarousel() {
@@ -1028,6 +1388,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   }
 
   Widget _buildMacrosLeftCard(int proteinLeft, int carbsLeft, int fatsLeft) {
+    final int consumedFiber = widget.meals.fold(0, (sum, meal) => sum + ((meal['fiber'] as num?)?.toInt() ?? 0));
+    final int targetFiber = _dailyFiberGoal;
+    final int fiberLeft = (targetFiber - consumedFiber).clamp(0, targetFiber);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -1049,10 +1413,12 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           child: Row(
             children: [
               Expanded(child: _buildMacroSubColumn('${proteinLeft}g', 'Protein left', Icons.restaurant_rounded, Colors.red.shade700)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(child: _buildMacroSubColumn('${carbsLeft}g', 'Carbs left', Icons.bakery_dining_rounded, Colors.orange.shade800)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(child: _buildMacroSubColumn('${fatsLeft}g', 'Fats left', Icons.opacity_rounded, const Color(0xFF0284C7))),
+              const SizedBox(width: 6),
+              Expanded(child: _buildMacroSubColumn('${fiberLeft}g', 'Fiber left', Icons.eco_rounded, Colors.green.shade700)),
             ],
           ),
         ),
@@ -1317,7 +1683,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Water',
+                            'Water (Goal: ${_dailyWaterGoal} ml)',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
@@ -1390,22 +1756,18 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
   Widget _buildBmiSection() {
     final double heightM = _height / 100.0;
-    final double bmi = heightM > 0 ? _weight / (heightM * heightM) : 0.0;
+    final double bmi = _customBmi ?? (heightM > 0 ? _weight / (heightM * heightM) : 0.0);
     
-    String status = 'Normal';
+    final String status = _customBmiCategory ?? (bmi < 18.5 ? 'Underweight' : (bmi < 25 ? 'Normal' : (bmi < 30 ? 'Overweight' : 'Obese')));
     Color statusColor = Colors.green.shade700;
-    if (bmi < 18.5) {
-      status = 'Underweight';
+    if (status.toLowerCase().contains('under')) {
       statusColor = Colors.orange.shade800;
-    } else if (bmi < 25) {
-      status = 'Normal';
-      statusColor = Colors.green.shade700;
-    } else if (bmi < 30) {
-      status = 'Overweight';
+    } else if (status.toLowerCase().contains('over')) {
       statusColor = Colors.orange.shade800;
-    } else {
-      status = 'Obese';
+    } else if (status.toLowerCase().contains('obese')) {
       statusColor = Colors.red.shade700;
+    } else {
+      statusColor = Colors.green.shade700;
     }
 
     final double gaugeProgress = ((bmi - 15) / (35 - 15)).clamp(0.0, 1.0);
@@ -1729,7 +2091,13 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     required int protein,
     required int carbs,
     required int fats,
+    String? imagePath,
+    String? imageUrl,
+    String? description,
   }) {
+    final bool hasLocalImage = imagePath != null && File(imagePath).existsSync();
+    final bool hasRemoteImage = imageUrl != null && imageUrl.isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -1753,8 +2121,21 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(14),
+              image: hasLocalImage
+                  ? DecorationImage(
+                      image: FileImage(File(imagePath)),
+                      fit: BoxFit.cover,
+                    )
+                  : hasRemoteImage
+                      ? DecorationImage(
+                          image: CachedNetworkImageProvider(imageUrl),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
             ),
-            child: Icon(Icons.restaurant_rounded, color: textSecondary, size: 22),
+            child: (!hasLocalImage && !hasRemoteImage)
+                ? Icon(Icons.restaurant_rounded, color: textSecondary, size: 22)
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1778,9 +2159,22 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (description != null && description.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '💬 "$description"',
+                    style: GoogleFonts.inter(
+                      color: textSecondary.withOpacity(0.8),
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -1801,6 +2195,219 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
         ],
       ),
+    );
+  }
+
+  void _quickLogFood(Map<String, dynamic> food) {
+    final String foodName = food['food_name'] ?? food['name'] ?? 'Food';
+    final TextEditingController weightController = TextEditingController(text: '100');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          title: Text('Quick Log $foodName', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18, color: textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Enter portion weight (grams):', style: GoogleFonts.inter(fontSize: 13, color: textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: weightController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: GoogleFonts.inter(fontSize: 15, color: textPrimary, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  hintText: 'e.g. 100',
+                  suffixText: 'g',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary, fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF007AFF),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                final double weight = double.tryParse(weightController.text) ?? 100.0;
+                Navigator.pop(context);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Saving quick meal...'), duration: Duration(milliseconds: 500)),
+                );
+
+                // Run quick log calculation
+                final calories = (((food['calories'] as num?)?.toDouble() ?? 150.0) * (weight / 100.0)).round();
+                final protein = (((food['protein'] as num?)?.toDouble() ?? 4.0) * (weight / 100.0));
+                final carbs = (((food['carbs'] as num?)?.toDouble() ?? 20.0) * (weight / 100.0));
+                final fat = (((food['fat'] as num?)?.toDouble() ?? 3.0) * (weight / 100.0));
+                final fiber = (((food['fiber'] as num?)?.toDouble() ?? 1.0) * (weight / 100.0));
+
+                final payload = {
+                  "name": foodName,
+                  "total_calories": calories,
+                  "protein": double.parse(protein.toStringAsFixed(1)),
+                  "carbs": double.parse(carbs.toStringAsFixed(1)),
+                  "fat": double.parse(fat.toStringAsFixed(1)),
+                  "fiber": double.parse(fiber.toStringAsFixed(1)),
+                  "foods": [
+                    {
+                      "food_name": foodName,
+                      "weight_g": weight,
+                      "calories": calories,
+                      "protein": double.parse(protein.toStringAsFixed(1)),
+                      "carbs": double.parse(carbs.toStringAsFixed(1)),
+                      "fat": double.parse(fat.toStringAsFixed(1)),
+                      "fiber": double.parse(fiber.toStringAsFixed(1)),
+                      "confidence": 100.0,
+                      "cooking_method": "cooked",
+                      "ingredients": []
+                    }
+                  ]
+                };
+
+                final saveRes = await AiFoodLoggingService.saveMeal(payload);
+                if (saveRes['success'] == true) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Successfully logged $weight g of $foodName!'),
+                        backgroundColor: const Color(0xFF007AFF),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    widget.onRefresh(); // Refresh home tab stats
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to save: ${saveRes['error']}')),
+                    );
+                  }
+                }
+              },
+              child: Text('Log', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickFoodList() {
+    if (_favoriteFoods.isEmpty && _recentFoods.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final Color accentBlue = const Color(0xFF007AFF);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Favorites & Recents',
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 110,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _favoriteFoods.length + _recentFoods.length,
+            itemBuilder: (context, index) {
+              final isFav = index < _favoriteFoods.length;
+              final food = isFav ? _favoriteFoods[index] : _recentFoods[index - _favoriteFoods.length];
+              final String name = food['food_name'] ?? food['name'] ?? 'Food';
+              final int cal = (food['calories'] as num?)?.toInt() ?? 150;
+
+              return GestureDetector(
+                onTap: () => _quickLogFood(food),
+                child: Container(
+                  width: 140,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderColor, width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: textPrimary,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            isFav ? Icons.favorite_rounded : Icons.history_rounded,
+                            color: isFav ? Colors.redAccent : textSecondary,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$cal kcal',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: accentBlue,
+                            ),
+                          ),
+                          Text(
+                            'per 100g',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              color: textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }
@@ -1877,4 +2484,86 @@ class _RadialPainter extends CustomPainter {
   bool shouldRepaint(covariant _RadialPainter oldDelegate) {
     return oldDelegate.percentage != percentage;
   }
+}
+
+class _WeightSparklinePainter extends CustomPainter {
+  final List<double> weights;
+  final Color lineColor;
+  final Color fillGradientStart;
+  final Color fillGradientEnd;
+
+  _WeightSparklinePainter({
+    required this.weights,
+    required this.lineColor,
+    required this.fillGradientStart,
+    required this.fillGradientEnd,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (weights.length < 2) return;
+
+    final double minWeight = weights.reduce(min);
+    final double maxWeight = weights.reduce(max);
+    final double weightRange = maxWeight - minWeight;
+    final double rangeAdjustment = weightRange == 0 ? 1.0 : weightRange;
+
+    final double widthBetweenPoints = size.width / (weights.length - 1);
+
+    final Path path = Path();
+    final Path fillPath = Path();
+
+    double getX(int index) => index * widthBetweenPoints;
+    double getY(double weight) {
+      final double normalized = (weight - minWeight) / rangeAdjustment;
+      return size.height - (normalized * (size.height - 20) + 10);
+    }
+
+    path.moveTo(getX(0), getY(weights[0]));
+    fillPath.moveTo(getX(0), size.height);
+    fillPath.lineTo(getX(0), getY(weights[0]));
+
+    for (int i = 1; i < weights.length; i++) {
+      final double x = getX(i);
+      final double y = getY(weights[i]);
+      path.lineTo(x, y);
+      fillPath.lineTo(x, y);
+    }
+
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    final Paint fillPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [fillGradientStart, fillGradientEnd],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(fillPath, fillPaint);
+
+    final Paint linePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(path, linePaint);
+
+    final double lastX = getX(weights.length - 1);
+    final double lastY = getY(weights.last);
+    
+    final Paint glowPaint = Paint()
+      ..color = lineColor.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(lastX, lastY), 8.0, glowPaint);
+
+    final Paint dotPaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(lastX, lastY), 4.0, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WeightSparklinePainter oldDelegate) =>
+      oldDelegate.weights != weights;
 }

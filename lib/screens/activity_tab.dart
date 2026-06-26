@@ -5,6 +5,7 @@ import '../utils/preferences_helper.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'activity_tracker_screen.dart';
+import 'workout_logger_screen.dart';
 import '../widgets/staggered_animation.dart';
 import '../widgets/strength_chain_widget.dart';
 
@@ -644,6 +645,45 @@ class _ActivityTabState extends State<ActivityTab> with TickerProviderStateMixin
               animationController: _entryAnimController,
               child: StrengthChainWidget(
                 onWorkoutLogged: _loadWorkoutHistory,
+              ),
+            ),
+            const SizedBox(height: 24),
+            StaggeredListItem(
+              index: 3,
+              animationController: _entryAnimController,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const WorkoutLoggerScreen(),
+                    ),
+                  ).then((_) => _loadWorkoutHistory());
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  minimumSize: const Size(double.infinity, 54),
+                  elevation: 0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.flash_on_rounded, size: 20),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Quick Log Workout',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

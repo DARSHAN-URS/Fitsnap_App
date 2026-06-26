@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'dashboard_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
 import 'providers/profile_provider.dart';
@@ -55,6 +56,71 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  void _onAuthSuccess(String email, {bool isSignUp = false}) async {
+    bool onboardingCompleted = false;
+
+    if (!isSignUp) {
+      final profileRes = await ApiService.getProfile();
+      if (profileRes['success']) {
+        final profileData = profileRes['data'];
+        
+        final String? serverName = profileData['name'];
+        final String? serverPic = profileData['profile_picture_url'];
+        if (serverName != null && serverName.isNotEmpty && serverName != 'Guest User') {
+          await PreferencesHelper.saveString('profile_name', serverName);
+        } else if (email.isNotEmpty) {
+          final parts = email.split('@');
+          await PreferencesHelper.saveString('profile_name', parts[0]);
+        }
+        if (serverPic != null && serverPic.isNotEmpty) {
+          await PreferencesHelper.saveString('profile_pic_url', serverPic);
+        }
+
+        if (profileData['age'] != null && profileData['weight'] != null && profileData['height'] != null) {
+          onboardingCompleted = true;
+          await PreferencesHelper.saveString('profile_age', (profileData['age'] ?? 24).toString());
+          await PreferencesHelper.saveDouble('profile_height', (profileData['height'] as num?)?.toDouble() ?? 175.0);
+          await PreferencesHelper.saveDouble('profile_weight', (profileData['weight'] as num?)?.toDouble() ?? 75.0);
+          await PreferencesHelper.saveString('profile_goal', profileData['goals'] ?? 'Build Muscle');
+        }
+      }
+    } else {
+      if (email.isNotEmpty) {
+        final parts = email.split('@');
+        await PreferencesHelper.saveString('profile_name', parts[0]);
+      }
+    }
+
+    await PreferencesHelper.saveBool('onboarding_completed', onboardingCompleted);
+
+    // Reload profile provider state
+    ref.read(profileProvider.notifier).loadProfile();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isSignUp 
+          ? "Account registered successfully! Let's complete your profile setup." 
+          : 'Logged in successfully!'),
+        backgroundColor: AppTheme.neonEmerald,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+
+    if (onboardingCompleted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+      );
+    }
+  }
+
   Future<void> _handleAuth() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,13 +149,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
       password: _passwordController.text,
       isLogin: isLogin,
     );
-    if (authNotifier.state.success) {
+    final authState = ref.read(authProvider);
+    if (authState.success) {
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
+      _onAuthSuccess(_emailController.text, isSignUp: !isLogin);
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(authNotifier.state.errorMessage ?? 'Authentication failed'),
+        content: Text(authState.errorMessage ?? 'Authentication failed'),
         backgroundColor: Colors.redAccent,
       ));
     }
@@ -122,7 +189,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         email: email,
       );
 
-      if (authNotifier.state.success) {
+      final authState = ref.read(authProvider);
+      if (authState.success) {
         if (displayName.isNotEmpty) {
           await PreferencesHelper.saveString('profile_name', displayName);
         }
@@ -134,11 +202,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         ref.read(profileProvider.notifier).loadProfile();
 
         if (!mounted) return;
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
+        _onAuthSuccess(email, isSignUp: false);
       } else {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(authNotifier.state.errorMessage ?? 'Google Authentication failed'),
+          content: Text(authState.errorMessage ?? 'Google Authentication failed'),
           backgroundColor: Colors.redAccent,
         ));
       }

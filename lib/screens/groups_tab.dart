@@ -113,6 +113,45 @@ class GroupsTab extends StatefulWidget {
 }
 
 class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
+  Widget _buildMeshBackground() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -120,
+          left: -120,
+          child: Container(
+            width: 320,
+            height: 320,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.accent.withOpacity(0.08),
+            ),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 120,
+          right: -120,
+          child: Container(
+            width: 350,
+            height: 350,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.neonIndigo.withOpacity(0.06),
+            ),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _friendEmailController = TextEditingController();
   late AnimationController _entryAnimController;
@@ -125,6 +164,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   bool _isLoading = true;
 
   List<dynamic> _searchSuggestions = [];
+  final List<dynamic> _suggestions = [];
   String _lastSearchQuery = '';
   bool _isSearching = false;
 
@@ -188,6 +228,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     
     final groupsRes = await ApiService.getGroups();
     final friendsRes = await ApiService.getFriends();
+    final suggestionsRes = await ApiService.getFriendSuggestions();
     
     List<GroupItem> newGroups = _groups;
     if (groupsRes['success'] == true) {
@@ -202,6 +243,11 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       newFriends = list.map((f) => FriendItem.fromBackendJson(f)).toList();
       await PreferencesHelper.saveString('cache_friends_list', jsonEncode(list));
     }
+
+    List<dynamic> newSuggestions = [];
+    if (suggestionsRes['success'] == true) {
+      newSuggestions = suggestionsRes['data'] ?? [];
+    }
     
     if (mounted) {
       setState(() {
@@ -209,6 +255,8 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
         _groups.addAll(newGroups);
         _friends.clear();
         _friends.addAll(newFriends);
+        _suggestions.clear();
+        _suggestions.addAll(newSuggestions);
         _isLoading = false;
         _filterGroups();
       });
@@ -471,267 +519,430 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Add Friend Input Row
-        Container(
-          height: 54,
-          padding: const EdgeInsets.only(left: 16, right: 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: AppTheme.cardShadow,
-            border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _friendEmailController,
-                  onChanged: _onSearchTextChanged,
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.primary),
-                  decoration: InputDecoration(
-                    hintText: 'Enter username or email to add friend...',
-                    hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
-                    border: InputBorder.none,
-                    suffixIcon: _friendEmailController.text.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () {
-                              _friendEmailController.clear();
-                              _onSearchTextChanged('');
-                            },
-                            child: const Icon(Icons.cancel_rounded, color: Colors.black26, size: 20),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              height: 54,
+              padding: const EdgeInsets.only(left: 16, right: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: AppTheme.cardShadow,
+                border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _friendEmailController,
+                      onChanged: _onSearchTextChanged,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary),
+                      decoration: InputDecoration(
+                        hintText: 'Enter username or email to add friend...',
+                        hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
+                        border: InputBorder.none,
+                        suffixIcon: _friendEmailController.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () {
+                                  _friendEmailController.clear();
+                                  _onSearchTextChanged('');
+                                },
+                                child: const Icon(Icons.cancel_rounded, color: Colors.black26, size: 20),
+                              )
+                            : null,
+                      ),
+                      onSubmitted: (_) => _addFriend(),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _addFriend,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accent.withOpacity(0.25),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           )
-                        : null,
+                        ]
+                      ),
+                      child: _isAddingFriend
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
+                            )
+                          : Text(
+                              'Add',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                    ),
                   ),
-                  onSubmitted: (_) => _addFriend(),
-                ),
+                ],
               ),
-              GestureDetector(
-                onTap: _addFriend,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: _isAddingFriend
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
-                        )
-                      : Text(
-                          'Add',
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         
         if (_isSearching || _searchSuggestions.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 300),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: AppTheme.cardShadow,
-              border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isSearching)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2),
-                      ),
-                    ),
-                  ),
-                if (!_isSearching && _searchSuggestions.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: Text(
-                        'No matching users found',
-                        style: GoogleFonts.inter(
-                          color: Colors.black38,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 300),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: AppTheme.cardShadow,
+                  border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isSearching)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                if (!_isSearching && _searchSuggestions.isNotEmpty)
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: _searchSuggestions.length,
-                      separatorBuilder: (context, index) => const Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: Color(0xFFF1F5F9),
+                    if (!_isSearching && _searchSuggestions.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'No matching users found',
+                            style: GoogleFonts.inter(
+                              color: Colors.black38,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       ),
-                      itemBuilder: (context, index) {
-                        final user = _searchSuggestions[index];
-                        final String displayName = user['name'] ?? 'User';
-                        final String username = user['username'] ?? '';
-                        final String email = user['email'] ?? '';
-                        final String? picUrl = user['profile_picture_url'];
-                        
-                        // Check if already friends
-                        final isAlreadyFriend = _friends.any((f) => 
-                          f.friendId.toString() == user['id'].toString() || 
-                          (email.isNotEmpty && f.email.toLowerCase() == email.toLowerCase())
-                        );
+                    if (!_isSearching && _searchSuggestions.isNotEmpty)
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: _searchSuggestions.length,
+                          separatorBuilder: (context, index) => const Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: Color(0xFFF1F5F9),
+                          ),
+                          itemBuilder: (context, index) {
+                            final user = _searchSuggestions[index];
+                            final String displayName = user['name'] ?? 'User';
+                            final String username = user['username'] ?? '';
+                            final String email = user['email'] ?? '';
+                            final String? picUrl = user['profile_picture_url'];
+                            
+                            // Check if already friends
+                            final isAlreadyFriend = _friends.any((f) => 
+                              f.friendId.toString() == user['id'].toString() || 
+                              (email.isNotEmpty && f.email.toLowerCase() == email.toLowerCase())
+                            );
 
-                        final List<Color> gradients = [
-                          AppTheme.accent,
-                          AppTheme.neonPink,
-                          AppTheme.neonEmerald,
-                          AppTheme.neonAmber,
-                        ];
-                        final Color placeholderColor = gradients[index % gradients.length];
+                            final List<Color> gradients = [
+                              AppTheme.accent,
+                              AppTheme.neonPink,
+                              AppTheme.neonEmerald,
+                              AppTheme.neonAmber,
+                            ];
+                            final Color placeholderColor = gradients[index % gradients.length];
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.grey.shade200,
-                                    width: 1,
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.grey.shade200,
+                                        width: 1,
+                                      ),
+                                      gradient: picUrl == null
+                                          ? LinearGradient(
+                                              colors: [
+                                                placeholderColor.withOpacity(0.12),
+                                                placeholderColor.withOpacity(0.04),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            )
+                                          : null,
+                                      image: picUrl != null
+                                          ? DecorationImage(
+                                              image: picUrl.startsWith('http')
+                                                  ? CachedNetworkImageProvider(picUrl)
+                                                  : FileImage(File(picUrl)) as ImageProvider,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                    ),
+                                    child: picUrl == null
+                                        ? Center(
+                                            child: Text(
+                                              displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                              style: GoogleFonts.inter(
+                                                color: placeholderColor,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          )
+                                        : null,
                                   ),
-                                  gradient: picUrl == null
-                                      ? LinearGradient(
-                                          colors: [
-                                            placeholderColor.withOpacity(0.12),
-                                            placeholderColor.withOpacity(0.04),
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        )
-                                      : null,
-                                  image: picUrl != null
-                                      ? DecorationImage(
-                                          image: picUrl.startsWith('http')
-                                              ? CachedNetworkImageProvider(picUrl)
-                                              : FileImage(File(picUrl)) as ImageProvider,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                ),
-                                child: picUrl == null
-                                    ? Center(
-                                        child: Text(
-                                          displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          username.isNotEmpty ? '@$username' : email,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.inter(
-                                            color: placeholderColor,
                                             fontWeight: FontWeight.w800,
+                                            color: AppTheme.primary,
                                             fontSize: 14,
                                           ),
                                         ),
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      username.isNotEmpty ? '@$username' : email,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.w800,
-                                        color: AppTheme.primary,
-                                        fontSize: 14,
-                                      ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          displayName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            color: Colors.black45,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        color: Colors.black45,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              if (isAlreadyFriend)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.check_rounded, color: Colors.grey.shade600, size: 14),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Friends',
+                                  const SizedBox(width: 12),
+                                  if (isAlreadyFriend)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.check_rounded, color: Colors.grey.shade600, size: 14),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Friends',
+                                            style: GoogleFonts.inter(
+                                              color: Colors.grey.shade600,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    ElevatedButton(
+                                      onPressed: () => _addFriendWithUsername(username.isNotEmpty ? username : email),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.accent,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: Text(
+                                        'Add',
                                         style: GoogleFonts.inter(
-                                          color: Colors.grey.shade600,
                                           fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                )
-                              else
-                                ElevatedButton(
-                                  onPressed: () => _addFriendWithUsername(username.isNotEmpty ? username : email),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.accent,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: Text(
-                                    'Add',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),
+        ],
+
+        if (!_isSearching && _searchSuggestions.isEmpty && _suggestions.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            'Suggested Friends',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: AppTheme.primary,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 160,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _suggestions.length,
+              itemBuilder: (context, index) {
+                final user = _suggestions[index];
+                final String displayName = user['name'] ?? 'User';
+                final String username = user['username'] ?? '';
+                final String email = user['email'] ?? '';
+                final String? picUrl = user['profile_picture_url'];
+                
+                final List<Color> gradients = [
+                  AppTheme.accent,
+                  AppTheme.neonPink,
+                  AppTheme.neonEmerald,
+                  AppTheme.neonAmber,
+                ];
+                final Color placeholderColor = gradients[index % gradients.length];
+                
+                return Container(
+                  width: 140,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: AppTheme.cardShadow,
+                    border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.grey.shade200,
+                            width: 1,
+                          ),
+                          gradient: picUrl == null
+                              ? LinearGradient(
+                                  colors: [
+                                    placeholderColor.withOpacity(0.12),
+                                    placeholderColor.withOpacity(0.04),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          image: picUrl != null
+                              ? DecorationImage(
+                                  image: picUrl.startsWith('http')
+                                      ? CachedNetworkImageProvider(picUrl)
+                                      : FileImage(File(picUrl)) as ImageProvider,
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                        ),
+                        child: picUrl == null
+                            ? Center(
+                                child: Text(
+                                  displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    color: placeholderColor,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        username.isNotEmpty ? '@$username' : (email.isNotEmpty ? email : 'User'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: Colors.black45,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: () => _addFriendWithUsername(username.isNotEmpty ? username : email),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.primaryGradient,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.accent.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              )
+                            ]
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Add',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ],
 
         const SizedBox(height: 24),
@@ -743,8 +954,9 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
               'My Friends (${_friends.length})',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 18,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w900,
                 color: AppTheme.primary,
+                letterSpacing: -0.4,
               ),
             ),
           ],
@@ -755,33 +967,54 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
           ClipRRect(
             borderRadius: AppTheme.cardRadius,
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+                padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
                 decoration: BoxDecoration(
                   borderRadius: AppTheme.cardRadius,
-                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-                  color: Colors.white.withOpacity(0.55),
+                  border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                  color: Colors.white.withOpacity(0.6),
                   boxShadow: AppTheme.cardShadow,
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.people_outline_rounded, color: AppTheme.primary, size: 36),
-                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.accent.withOpacity(0.18),
+                            AppTheme.accent.withOpacity(0.04),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1.5),
+                      ),
+                      child: const Icon(Icons.people_outline_rounded, color: AppTheme.accent, size: 40),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
                       'No Friends Yet',
                       style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w900,
                         color: AppTheme.primary,
-                        fontSize: 16,
+                        fontSize: 18,
+                        letterSpacing: -0.4,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
-                      'Search your friends\' username or email to add them\nand share your fitness goals!',
+                      'Search your friends\' username or email above\nto connect, chat, and challenge each other!',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 12, height: 1.4),
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF64748B),
+                        fontSize: 13,
+                        height: 1.5,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -798,179 +1031,226 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
               final Color avatarCol = _getAvatarColor(index);
               final isOnline = friend.status.toLowerCase() == 'active';
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: AppTheme.cardRadius,
-                  boxShadow: AppTheme.cardShadow,
-                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
-                ),
-                child: Column(
-                  children: [
-                    Row(
+              return ClipRRect(
+                borderRadius: AppTheme.cardRadius,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.6),
+                      borderRadius: AppTheme.cardRadius,
+                      boxShadow: AppTheme.cardShadow,
+                      border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                    ),
+                    child: Column(
                       children: [
-                        // Avatar
-                        Stack(
+                        Row(
                           children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: avatarCol.withOpacity(0.12),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: avatarCol.withOpacity(0.25), width: 1.5),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  friend.avatar,
-                                  style: GoogleFonts.inter(
-                                    color: avatarCol,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                            // Avatar
+                            Stack(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: avatarCol.withOpacity(0.12),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: avatarCol.withOpacity(0.25), width: 1.5),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      friend.avatar,
+                                      style: GoogleFonts.inter(
+                                        color: avatarCol,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                                Positioned(
+                                  right: 1,
+                                  bottom: 1,
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                      color: isOnline ? Colors.green : Colors.grey.shade400,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 14),
+
+                            // Name/Email
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    friend.name,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.primary,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    friend.email,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.black45,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            Positioned(
-                              right: 1,
-                              bottom: 1,
-                              child: Container(
-                                width: 11,
-                                height: 11,
-                                decoration: BoxDecoration(
-                                  color: isOnline ? Colors.green : Colors.grey.shade400,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                ),
+
+                            // Status text
+                            Text(
+                              friend.status,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isOnline ? Colors.green.shade600 : Colors.black26,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(width: 14),
-
-                        // Name/Email
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                friend.name,
-                                style: GoogleFonts.inter(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.primary,
+                        const Divider(height: 24, thickness: 0.8, color: Color(0xFFF1F5F9)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Stats summary
+                            Row(
+                              children: [
+                                // Steps Badge
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.18)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.directions_walk_rounded, color: Color(0xFF10B981), size: 13),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${friend.steps}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: const Color(0xFF0F172A),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                friend.email,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  color: Colors.black38,
-                                  fontWeight: FontWeight.w500,
+                                const SizedBox(width: 8),
+                                // Calories Badge
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444).withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.18)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.local_fire_department_rounded, color: Color(0xFFEF4444), size: 13),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${friend.calories} kcal',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: const Color(0xFF0F172A),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
+                              ],
+                            ),
 
-                        // Status text
-                        Text(
-                          friend.status,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: isOnline ? Colors.green.shade600 : Colors.black26,
-                          ),
+                            // Actions Row
+                            Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Fitness challenge invite sent to ${friend.name}! 👟'),
+                                        backgroundColor: AppTheme.accent,
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      gradient: AppTheme.primaryGradient,
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppTheme.accent.withOpacity(0.2),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        )
+                                      ]
+                                    ),
+                                    child: Text(
+                                      'Challenge',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Opening chat with ${friend.name}... 💬'),
+                                        backgroundColor: AppTheme.primary,
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                                    ),
+                                    child: Text(
+                                      'Chat',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const Divider(height: 20, thickness: 0.8, color: Color(0xFFF1F5F9)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Stats summary
-                        Row(
-                          children: [
-                            Icon(Icons.directions_walk_rounded, color: Colors.orange.shade800, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${friend.steps} steps',
-                              style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.primary, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(Icons.local_fire_department_rounded, color: AppTheme.accent, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${friend.calories} kcal',
-                              style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.primary, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-
-                        // Actions Row
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Fitness challenge invite sent to ${friend.name}! 👟'),
-                                    backgroundColor: AppTheme.accent,
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accent.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppTheme.accent.withOpacity(0.15)),
-                                ),
-                                child: Text(
-                                  'Challenge',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppTheme.accent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Opening chat with ${friend.name}... 💬'),
-                                    backgroundColor: AppTheme.primary,
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primary.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppTheme.primary.withOpacity(0.12)),
-                                ),
-                                child: Text(
-                                  'Chat',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppTheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               );
             },
@@ -980,267 +1260,333 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   }
 
   Widget _buildTabControl() {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = 0),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: _selectedTab == 0 ? AppTheme.primary : Colors.transparent,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Communities',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _selectedTab == 0 ? Colors.white : AppTheme.primary,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: AppTheme.cardShadow,
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedTab = 0),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: _selectedTab == 0 ? AppTheme.primaryGradient : null,
+                      boxShadow: _selectedTab == 0 ? [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ] : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.forum_outlined,
+                          size: 16,
+                          color: _selectedTab == 0 ? Colors.white : AppTheme.primary.withOpacity(0.6),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Communities',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _selectedTab == 0 ? Colors.white : AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = 1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: _selectedTab == 1 ? AppTheme.primary : Colors.transparent,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Friends',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _selectedTab == 1 ? Colors.white : AppTheme.primary,
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedTab = 1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: _selectedTab == 1 ? AppTheme.primaryGradient : null,
+                      boxShadow: _selectedTab == 1 ? [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ] : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_outline_rounded,
+                          size: 16,
+                          color: _selectedTab == 1 ? Colors.white : AppTheme.primary.withOpacity(0.6),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Friends',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _selectedTab == 1 ? Colors.white : AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Row
-          StaggeredListItem(
-            index: 0,
-            animationController: _entryAnimController,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Groups',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.primary,
-                    letterSpacing: -1,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _showCreateGroupDialog,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: AppTheme.cardShadow,
+    return Stack(
+      children: [
+        _buildMeshBackground(),
+        SingleChildScrollView(
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row
+              StaggeredListItem(
+                index: 0,
+                animationController: _entryAnimController,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Groups',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                        letterSpacing: -1,
+                      ),
                     ),
-                    child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 24),
+                    GestureDetector(
+                      onTap: _showCreateGroupDialog,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.8),
+                          shape: BoxShape.circle,
+                          boxShadow: AppTheme.cardShadow,
+                          border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+                        ),
+                        child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 24),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Tab Control Bar
+              StaggeredListItem(
+                index: 1,
+                animationController: _entryAnimController,
+                child: _buildTabControl(),
+              ),
+              const SizedBox(height: 24),
+
+              if (_isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 80.0),
+                    child: CircularProgressIndicator(color: AppTheme.accent),
                   ),
                 )
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Tab Control Bar
-          StaggeredListItem(
-            index: 1,
-            animationController: _entryAnimController,
-            child: _buildTabControl(),
-          ),
-          const SizedBox(height: 24),
-
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: 80.0),
-                child: CircularProgressIndicator(color: AppTheme.accent),
-              ),
-            )
-          else if (_selectedTab == 0) ...[
-            // Communities tab content
-            StaggeredListItem(
-              index: 2,
-              animationController: _entryAnimController,
-              child: Container(
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: AppTheme.cardShadow,
-                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.primary),
-                  decoration: InputDecoration(
-                    hintText: 'Search communities, challenges...',
-                    hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Colors.black38, size: 22),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            
-            StaggeredListItem(
-              index: 3,
-              animationController: _entryAnimController,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Discover Communities',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _showCreateGroupDialog,
-                    child: Text(
-                      'Create Private',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: AppTheme.accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            if (_filteredGroups.isEmpty)
-              StaggeredListItem(
-                index: 4,
-                animationController: _entryAnimController,
-                child: ClipRRect(
-                  borderRadius: AppTheme.cardRadius,
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: AppTheme.cardRadius,
-                        border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-                        color: Colors.white.withOpacity(0.55),
-                        boxShadow: AppTheme.cardShadow,
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary.withOpacity(0.05),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppTheme.primary.withOpacity(0.1)),
-                            ),
-                            child: const Icon(Icons.groups_rounded, color: AppTheme.primary, size: 40),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No Communities Found',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primary,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Try a different search or\ncreate your own community.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFF64748B),
-                              fontSize: 13,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _showCreateGroupDialog,
-                            icon: const Icon(Icons.add_rounded, size: 20),
-                            label: Text(
-                              'Create Community',
-                              style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            else
-              ..._filteredGroups.asMap().entries.map((entry) {
-                final index = entry.key;
-                final group = entry.value;
-                return StaggeredListItem(
-                  index: 4 + index,
+              else if (_selectedTab == 0) ...[
+                // Communities tab content
+                StaggeredListItem(
+                  index: 2,
                   animationController: _entryAnimController,
-                  child: _buildGroupCard(group),
-                );
-              }),
-          ] else ...[
-            // Friends tab content
-            StaggeredListItem(
-              index: 2,
-              animationController: _entryAnimController,
-              child: _buildFriendsTab(),
-            ),
-          ],
-        ],
-      ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: AppTheme.cardShadow,
+                          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary),
+                          decoration: InputDecoration(
+                            hintText: 'Search communities, challenges...',
+                            hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.black38, fontWeight: FontWeight.w500),
+                            prefixIcon: const Icon(Icons.search_rounded, color: Colors.black38, size: 22),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                
+                StaggeredListItem(
+                  index: 3,
+                  animationController: _entryAnimController,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Discover Communities',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _showCreateGroupDialog,
+                        child: Text(
+                          'Create Private',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                if (_filteredGroups.isEmpty)
+                  StaggeredListItem(
+                    index: 4,
+                    animationController: _entryAnimController,
+                    child: ClipRRect(
+                      borderRadius: AppTheme.cardRadius,
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: AppTheme.cardRadius,
+                            border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                            color: Colors.white.withOpacity(0.6),
+                            boxShadow: AppTheme.cardShadow,
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.accent.withOpacity(0.18),
+                                      AppTheme.accent.withOpacity(0.04),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1.5),
+                                ),
+                                child: const Icon(Icons.groups_rounded, color: AppTheme.accent, size: 40),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'No Communities Found',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.primary,
+                                  fontSize: 18,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Try a different search or\ncreate your own community.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF64748B),
+                                  fontSize: 13,
+                                  height: 1.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: _showCreateGroupDialog,
+                                icon: const Icon(Icons.add_rounded, size: 20),
+                                label: Text(
+                                  'Create Community',
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 14),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primary,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ..._filteredGroups.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final group = entry.value;
+                    return StaggeredListItem(
+                      index: 4 + index,
+                      animationController: _entryAnimController,
+                      child: _buildGroupCard(group),
+                    );
+                  }),
+              ] else ...[
+                // Friends tab content
+                StaggeredListItem(
+                  index: 2,
+                  animationController: _entryAnimController,
+                  child: _buildFriendsTab(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1274,8 +1620,8 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               borderRadius: AppTheme.cardRadius,
-              border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-              color: Colors.white.withOpacity(0.55),
+              border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+              color: Colors.white.withOpacity(0.6),
               boxShadow: AppTheme.cardShadow,
             ),
             child: Column(
@@ -1285,12 +1631,19 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: 52,
+                      height: 52,
                       decoration: BoxDecoration(
-                        color: displayColor.withOpacity(0.1),
+                        gradient: LinearGradient(
+                          colors: [
+                            displayColor.withOpacity(0.18),
+                            displayColor.withOpacity(0.04),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: displayColor.withOpacity(0.2)),
+                        border: Border.all(color: displayColor.withOpacity(0.25), width: 1.5),
                       ),
                       child: Icon(group.icon, color: displayColor, size: 24),
                     ),
@@ -1317,17 +1670,22 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: displayColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: displayColor.withOpacity(0.25)),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      displayColor.withOpacity(0.12),
+                                      displayColor.withOpacity(0.04),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: displayColor.withOpacity(0.2)),
                                 ),
                                 child: Text(
                                   group.tag,
                                   style: GoogleFonts.inter(
                                     fontSize: 9,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w800,
                                     color: displayColor,
                                   ),
                                 ),
@@ -1337,7 +1695,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                           const SizedBox(height: 4),
                           Text(
                             '${group.memberCount} members',
-                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -1347,7 +1705,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                 const SizedBox(height: 14),
                 Text(
                   group.desc,
-                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B), height: 1.4),
+                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B), height: 1.4, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 20),
                 Row(
@@ -1362,17 +1720,28 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                         decoration: BoxDecoration(
-                          color: group.isJoined ? const Color(0xFFF1F5F9) : AppTheme.primary,
+                          gradient: group.isJoined ? null : AppTheme.primaryGradient,
+                          color: group.isJoined ? Colors.white.withOpacity(0.5) : null,
                           borderRadius: BorderRadius.circular(14),
-                          border: group.isJoined ? Border.all(color: const Color(0xFFE2E8F0)) : null,
+                          border: Border.all(
+                            color: group.isJoined ? const Color(0xFFE2E8F0) : AppTheme.accent.withOpacity(0.2),
+                            width: 1.5,
+                          ),
+                          boxShadow: group.isJoined ? null : [
+                            BoxShadow(
+                              color: AppTheme.accent.withOpacity(0.25),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
                         ),
                         child: Text(
-                          group.isJoined ? 'Leave Group' : 'Join Group',
+                          group.isJoined ? 'Leave' : 'Join Group',
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                             letterSpacing: -0.2,
-                            color: group.isJoined ? AppTheme.primary : Colors.white,
+                            color: group.isJoined ? AppTheme.primary.withOpacity(0.7) : Colors.white,
                           ),
                         ),
                       ),
@@ -1391,16 +1760,28 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     List<Widget> items = [];
     
     for (int i = 0; i < initials.length; i++) {
+      final color = _getAvatarColor(i);
       items.add(
         Positioned(
           left: i * 18.0,
           child: Container(
-            width: 26,
-            height: 26,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              color: _getAvatarColor(i),
+              gradient: LinearGradient(
+                colors: [color, color.withOpacity(0.8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                )
+              ]
             ),
             child: Center(
               child: Text(
@@ -1408,7 +1789,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                 style: GoogleFonts.inter(
                   color: Colors.white,
                   fontSize: 9,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
@@ -1423,19 +1804,26 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
         Positioned(
           left: initials.length * 18.0,
           child: Container(
-            width: 26,
-            height: 26,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: const Color(0xFFF1F5F9),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                )
+              ]
             ),
             child: Center(
               child: Text(
                 extraCount,
                 style: GoogleFonts.inter(
-                  color: Colors.black54,
-                  fontSize: 8,
+                  color: const Color(0xFF475569),
+                  fontSize: 9,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -1446,9 +1834,10 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     }
 
     return SizedBox(
-      width: (initials.length + (extraCount.isNotEmpty ? 1 : 0)) * 18.0 + 8.0,
-      height: 26,
+      width: (initials.length + (extraCount.isNotEmpty ? 1 : 0)) * 18.0 + 10.0,
+      height: 28,
       child: Stack(
+        clipBehavior: Clip.none,
         children: items,
       ),
     );
