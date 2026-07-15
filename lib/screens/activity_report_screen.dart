@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../services/api_service.dart';
 import '../utils/share_helper.dart';
+import '../utils/preferences_helper.dart';
 
 class ActivityReportScreen extends StatefulWidget {
   final String activityType;
@@ -52,24 +53,32 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
   }
 
   Future<void> _loadProfileData() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _displayName = prefs.getString('profile_name') ?? 'Darshan Urs';
-      _profilePicUrl = prefs.getString('profile_pic_url');
-      _profileHeight = prefs.getDouble('profile_height') ?? 175.0;
-      _profileWeight = prefs.getDouble('profile_weight') ?? 75.0;
-      
-      final ageVal = prefs.get('profile_age');
-      if (ageVal is int) {
-        _profileAge = ageVal.toString();
-      } else if (ageVal is String) {
-        _profileAge = ageVal;
-      } else {
-        _profileAge = '25';
-      }
-      
-      _profileGoal = prefs.getString('profile_goal') ?? 'Build Muscle';
-    });
+    final name = await PreferencesHelper.readString('profile_name') ?? 'Darshan Urs';
+    final picUrl = await PreferencesHelper.readString('profile_pic_url');
+    final height = await PreferencesHelper.readDouble('profile_height') ?? 175.0;
+    final weight = await PreferencesHelper.readDouble('profile_weight') ?? 75.0;
+    
+    String age = '25';
+    final ageVal = await PreferencesHelper.readInt('profile_age');
+    if (ageVal != null) {
+      age = ageVal.toString();
+    } else {
+      final ageStr = await PreferencesHelper.readString('profile_age');
+      if (ageStr != null) age = ageStr;
+    }
+    
+    final goal = await PreferencesHelper.readString('profile_goal') ?? 'Build Muscle';
+
+    if (mounted) {
+      setState(() {
+        _displayName = name;
+        _profilePicUrl = picUrl;
+        _profileHeight = height;
+        _profileWeight = weight;
+        _profileAge = age;
+        _profileGoal = goal;
+      });
+    }
   }
 
   String _formatDuration(int totalSeconds) {
