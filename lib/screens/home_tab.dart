@@ -230,19 +230,71 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     }
   }
 
-  void _addSteps() {
-    final newSteps = widget.steps + 1000;
-    widget.onStepsChanged(newSteps);
-    _saveStats(newSteps, widget.water);
+  Future<void> _addSteps() async {
+    // Show a loading overlay or temporary snackbar while fetching health data
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Logged 1,000 steps!'),
-        duration: const Duration(milliseconds: 1000),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Connecting to health tracker...',
+              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 1),
         behavior: SnackBarBehavior.floating,
         backgroundColor: purpleAccent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
+
+    try {
+      final bool granted = await StepTrackingService.requestPermissions();
+      if (granted) {
+        final Map<String, dynamic> result = await StepTrackingService.syncSteps();
+        if (result['success'] == true && result['data'] != null) {
+          final int actualSteps = (result['data']['final_steps'] as num?)?.toInt() ?? 0;
+          widget.onStepsChanged(actualSteps);
+          await _saveStats(actualSteps, widget.water);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Connected! Sync success. Steps: $actualSteps'),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Colors.green.shade600,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error connecting health steps: $e");
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Permission denied or failed to fetch health steps.'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade600,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   void _addWater() {

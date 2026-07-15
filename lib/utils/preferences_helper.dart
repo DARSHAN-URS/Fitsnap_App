@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class PreferencesHelper {
@@ -10,70 +11,123 @@ class PreferencesHelper {
 
   // Save a string securely (all keys are stored securely per user request)
   static Future<void> saveString(String key, String value) async {
-    await _secureStorage.write(key: key, value: value);
+    try {
+      await _secureStorage.write(key: key, value: value);
+    } catch (e) {
+      debugPrint('Error writing secure string key $key: $e');
+    }
   }
 
   static Future<String?> readString(String key) async {
-    return await _secureStorage.read(key: key);
+    try {
+      return await _secureStorage.read(key: key);
+    } catch (e) {
+      debugPrint('Error reading secure string key $key: $e');
+      return null;
+    }
   }
 
   // StringList helpers
   static Future<void> saveStringList(String key, List<String> value) async {
-    await _secureStorage.write(key: key, value: jsonEncode(value));
+    try {
+      await _secureStorage.write(key: key, value: jsonEncode(value));
+    } catch (e) {
+      debugPrint('Error writing secure string list key $key: $e');
+    }
   }
 
   static Future<List<String>?> readStringList(String key) async {
-    final value = await _secureStorage.read(key: key);
-    if (value == null) return null;
     try {
-      final List<dynamic> decoded = jsonDecode(value);
-      return decoded.map((e) => e.toString()).toList();
-    } catch (_) {
+      final value = await _secureStorage.read(key: key);
+      if (value == null) return null;
+      try {
+        final List<dynamic> decoded = jsonDecode(value);
+        return decoded.map((e) => e.toString()).toList();
+      } catch (_) {
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error reading secure string list key $key: $e');
       return null;
     }
   }
 
   // Save/read boolean values securely
   static Future<void> saveBool(String key, bool value) async {
-    await _secureStorage.write(key: key, value: value.toString());
+    try {
+      await _secureStorage.write(key: key, value: value.toString());
+    } catch (e) {
+      debugPrint('Error writing secure bool key $key: $e');
+    }
   }
 
   static Future<bool?> readBool(String key) async {
-    final val = await _secureStorage.read(key: key);
-    if (val == null) return null;
-    return val == 'true';
+    try {
+      final val = await _secureStorage.read(key: key);
+      if (val == null) return null;
+      return val == 'true';
+    } catch (e) {
+      debugPrint('Error reading secure bool key $key: $e');
+      return null;
+    }
   }
 
   // Save/read integer values securely
   static Future<void> saveInt(String key, int value) async {
-    await _secureStorage.write(key: key, value: value.toString());
+    try {
+      await _secureStorage.write(key: key, value: value.toString());
+    } catch (e) {
+      debugPrint('Error writing secure int key $key: $e');
+    }
   }
 
   static Future<int?> readInt(String key) async {
-    final value = await _secureStorage.read(key: key);
-    if (value == null) return null;
-    return int.tryParse(value);
+    try {
+      final value = await _secureStorage.read(key: key);
+      if (value == null) return null;
+      return int.tryParse(value);
+    } catch (e) {
+      debugPrint('Error reading secure int key $key: $e');
+      return null;
+    }
   }
 
   // Double helpers
   static Future<void> saveDouble(String key, double value) async {
-    await _secureStorage.write(key: key, value: value.toString());
+    try {
+      await _secureStorage.write(key: key, value: value.toString());
+    } catch (e) {
+      debugPrint('Error writing secure double key $key: $e');
+    }
   }
 
   static Future<double?> readDouble(String key) async {
-    final value = await _secureStorage.read(key: key);
-    if (value == null) return null;
-    return double.tryParse(value);
+    try {
+      final value = await _secureStorage.read(key: key);
+      if (value == null) return null;
+      return double.tryParse(value);
+    } catch (e) {
+      debugPrint('Error reading secure double key $key: $e');
+      return null;
+    }
   }
 
   // Deletion helper
   static Future<void> delete(String key) async {
-    await _secureStorage.delete(key: key);
+    try {
+      await _secureStorage.delete(key: key);
+    } catch (e) {
+      debugPrint('Error deleting secure key $key: $e');
+    }
   }
 
   // Clear all helper
   static Future<void> clear() async {
-    await _secureStorage.deleteAll();
+    try {
+      await _secureStorage.deleteAll();
+    } catch (e) {
+      debugPrint('Error clearing secure storage: $e');
+    }
   }
 
   // --- Growth Features Helpers ---

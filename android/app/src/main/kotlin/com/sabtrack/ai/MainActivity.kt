@@ -7,6 +7,9 @@ import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.Manifest
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.sabtrack.ai/steps"
@@ -14,11 +17,15 @@ class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
-        // Start StepCounterService automatically when the app is launched
+        // Start StepCounterService automatically when the app is launched (only if permission already granted)
         startStepCounterService()
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                "startStepCounterService" -> {
+                    startStepCounterService()
+                    result.success(true)
+                }
                 "getTodaySteps" -> {
                     val prefs = getSharedPreferences(StepCounterService.PREFS_NAME, Context.MODE_PRIVATE)
                     val steps = prefs.getInt(StepCounterService.KEY_TODAY_STEPS, 0)
@@ -57,6 +64,17 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun startStepCounterService() {
+        // Check if we have Activity Recognition permission first (required on Android 10+ / API Q)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACTIVITY_RECOGNITION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasPermission) {
+                return
+            }
+        }
+
         val serviceIntent = Intent(this, StepCounterService::class.java)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

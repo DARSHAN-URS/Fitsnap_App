@@ -13,10 +13,26 @@ import 'utils/preferences_helper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ApiService.configureBaseUrl(isDevelopment: kDebugMode);
-  await ApiService.initToken();
-  await NotificationService.initialize();
+  
+  try {
+    await ApiService.initToken();
+  } catch (e) {
+    debugPrint('Error initializing ApiService token: $e');
+  }
+  
+  try {
+    await NotificationService.initialize();
+  } catch (e) {
+    debugPrint('Error initializing NotificationService: $e');
+  }
 
-  final bool onboardingCompleted = await PreferencesHelper.readBool('onboarding_completed') ?? false;
+  bool onboardingCompleted = false;
+  try {
+    onboardingCompleted = await PreferencesHelper.readBool('onboarding_completed') ?? false;
+  } catch (e) {
+    debugPrint('Error reading onboarding_completed status: $e');
+  }
+  
   final bool isLoggedIn = ApiService.isAuthenticated;
 
   runApp(

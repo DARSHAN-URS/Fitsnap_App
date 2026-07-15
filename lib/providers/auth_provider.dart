@@ -42,7 +42,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // store token securely if provided
         final token = result['data']?['token'] ?? result['data']?['data']?['token'];
         if (token != null) {
-          await _secureStorage.write(key: 'auth_token', value: token as String);
+          ApiService.setToken(token as String);
         }
         state = state.copyWith(isLoading: false, success: true);
       } else {
@@ -71,7 +71,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (result['success'] == true) {
         final token = result['data']?['token'] ?? result['data']?['data']?['token'];
         if (token != null) {
-          await _secureStorage.write(key: 'auth_token', value: token as String);
+          ApiService.setToken(token as String);
         }
         state = state.copyWith(isLoading: false, success: true);
       } else {

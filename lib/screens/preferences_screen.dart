@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../utils/preferences_helper.dart';
+import '../services/notification_service.dart';
 
 class PreferencesScreen extends StatefulWidget {
   const PreferencesScreen({super.key});
@@ -14,6 +16,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   bool _mealReminders = true;
   bool _fastingAlerts = true;
   bool _weeklyDigest = false;
+  bool _waterReminders = true;
   String _selectedThemeAccent = 'Indigo';
 
   final List<Map<String, dynamic>> _accents = [
@@ -23,7 +26,41 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     {'name': 'Cyan', 'color': AppTheme.neonCyan},
   ];
 
-  void _savePreferences() {
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final metric = await PreferencesHelper.readBool('use_metric') ?? true;
+    final meals = await PreferencesHelper.readBool('meal_reminders') ?? true;
+    final fasting = await PreferencesHelper.readBool('fasting_alerts') ?? true;
+    final weekly = await PreferencesHelper.readBool('weekly_digest') ?? false;
+    final water = await PreferencesHelper.readBool('water_reminders') ?? true;
+    final accent = await PreferencesHelper.readString('theme_accent') ?? 'Indigo';
+    setState(() {
+      _useMetric = metric;
+      _mealReminders = meals;
+      _fastingAlerts = fasting;
+      _weeklyDigest = weekly;
+      _waterReminders = water;
+      _selectedThemeAccent = accent;
+    });
+  }
+
+  void _savePreferences() async {
+    await PreferencesHelper.saveBool('use_metric', _useMetric);
+    await PreferencesHelper.saveBool('meal_reminders', _mealReminders);
+    await PreferencesHelper.saveBool('fasting_alerts', _fastingAlerts);
+    await PreferencesHelper.saveBool('weekly_digest', _weeklyDigest);
+    await PreferencesHelper.saveBool('water_reminders', _waterReminders);
+    await PreferencesHelper.saveString('theme_accent', _selectedThemeAccent);
+
+    // Schedule or cancel water reminders
+    await NotificationService.scheduleWaterReminders(_waterReminders);
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -152,6 +189,14 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     subtitle: 'Notify me when fasting windows start & end',
                     value: _fastingAlerts,
                     onChanged: (val) => setState(() => _fastingAlerts = val),
+                  ),
+                  _buildDivider(),
+                  _buildSwitchRow(
+                    icon: Icons.water_drop_outlined,
+                    title: 'Daily Water Reminders',
+                    subtitle: 'Remind me to drink water and stay hydrated',
+                    value: _waterReminders,
+                    onChanged: (val) => setState(() => _waterReminders = val),
                   ),
                   _buildDivider(),
                   _buildSwitchRow(

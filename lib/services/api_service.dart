@@ -1099,5 +1099,111 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // --- Supplements ---
+  static Future<Map<String, dynamic>> getSupplements() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/supplements'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to retrieve supplements (Status: ${response.statusCode})'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> addSupplement({
+    required String name,
+    required String dosage,
+    required String time,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/supplements'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'name': name,
+          'dosage': dosage.isEmpty ? null : dosage,
+          'time': time,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to add supplement (Status: ${response.statusCode})'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteSupplement(String supplementId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/supplements/$supplementId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': 'Supplement deleted'};
+      }
+      return {'success': false, 'error': 'Failed to delete supplement'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Referrals ---
+  static Future<Map<String, dynamic>> getReferralInfo() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/referrals'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to retrieve referral details (Status: ${response.statusCode})'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> claimReferralCode(String code) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/referrals/claim'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'code': code}),
+      );
+      final responseData = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'message': responseData['message'] ?? 'Claimed successfully!'};
+      }
+      return {
+        'success': false,
+        'error': responseData['detail'] ?? 'Failed to claim referral code (Status: ${response.statusCode})'
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
 

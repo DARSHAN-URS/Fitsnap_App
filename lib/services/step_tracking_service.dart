@@ -72,6 +72,13 @@ class StepTrackingService {
           debugPrint("Activity recognition permission denied");
           return false;
         }
+        if (activityStatus.isGranted) {
+          try {
+            await _channel.invokeMethod('startStepCounterService');
+          } catch (e) {
+            debugPrint("Failed to start step counter service: $e");
+          }
+        }
       }
 
       final types = [HealthDataType.STEPS];

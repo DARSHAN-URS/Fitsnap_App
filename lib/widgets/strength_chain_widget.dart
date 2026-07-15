@@ -12,24 +12,45 @@ class StrengthExercise {
   final String name;
   final double weight;
   final int reps;
+  final int? durationSeconds;
+  final String type; // 'weight', 'bodyweight', 'timed'
+  final int sets;
 
   StrengthExercise({
     required this.name,
-    required this.weight,
-    required this.reps,
+    this.weight = 0.0,
+    this.reps = 10,
+    this.durationSeconds,
+    this.type = 'weight',
+    this.sets = 1,
   });
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'weight': weight,
         'reps': reps,
+        'duration_seconds': durationSeconds,
+        'type': type,
+        'sets': sets,
       };
 
   factory StrengthExercise.fromJson(Map<String, dynamic> json) {
+    String detectedType = json['type'] as String? ?? 'weight';
+    final dur = json['duration_seconds'] ?? json['durationSeconds'];
+    if (json['type'] == null) {
+      if (dur != null && (dur as num) > 0) {
+        detectedType = 'timed';
+      } else if ((json['weight'] as num?)?.toDouble() == 0.0 && json['reps'] != null) {
+        detectedType = 'bodyweight';
+      }
+    }
     return StrengthExercise(
       name: json['name'] as String? ?? '',
       weight: (json['weight'] as num?)?.toDouble() ?? 0.0,
       reps: json['reps'] as int? ?? 10,
+      durationSeconds: dur as int?,
+      type: detectedType,
+      sets: json['sets'] as int? ?? 1,
     );
   }
 }
@@ -135,11 +156,9 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
               final String dateStr = item['completed_at'] ?? DateTime.now().toIso8601String();
               
               final List<dynamic> exercisesRaw = item['exercises'] ?? [];
-              final List<StrengthExercise> exercises = exercisesRaw.map((e) => StrengthExercise(
-                name: e['name']?.toString() ?? '',
-                weight: (e['weight'] as num?)?.toDouble() ?? 0.0,
-                reps: e['reps'] as int? ?? 10,
-              )).toList();
+              final List<StrengthExercise> exercises = exercisesRaw
+                  .map((e) => StrengthExercise.fromJson(e as Map<String, dynamic>))
+                  .toList();
 
               parsed.add(StrengthWorkout(
                 id: id,
@@ -206,6 +225,8 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
           'name': e.name,
           'weight': e.weight,
           'reps': e.reps,
+          'sets': e.sets,
+          'duration_seconds': e.durationSeconds,
         }).toList();
 
         final res = await ApiService.saveStrengthWorkout(
@@ -319,6 +340,23 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
         ],
       ),
     ];
+  }
+
+  String _formatExerciseDetails(StrengthExercise e) {
+    final setsText = e.sets > 1 ? '${e.sets} sets • ' : '';
+    if (e.type == 'timed' || (e.durationSeconds != null && e.durationSeconds! > 0)) {
+      final secs = e.durationSeconds ?? 0;
+      final mins = secs ~/ 60;
+      final remainingSecs = secs % 60;
+      final timeStr = mins > 0 
+          ? '${mins}m ${remainingSecs}s'
+          : '${secs}s';
+      return '$setsText$timeStr';
+    } else if (e.type == 'bodyweight') {
+      return '$setsText${e.reps} reps (bodyweight)';
+    } else {
+      return '$setsText${e.weight.toStringAsFixed(1)} kg • ${e.reps} reps';
+    }
   }
 
   // Calculate the max weight lifted in a specific category
@@ -795,7 +833,7 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
                                 ),
                               ),
                               Text(
-                                '${e.weight.toStringAsFixed(1)} kg • ${e.reps} reps',
+                                _formatExerciseDetails(e),
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   color: AppTheme.primary,
@@ -1317,10 +1355,13 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
   final _titleController = TextEditingController();
   String _selectedCategory = 'Chest';
 
-  // State to hold lists of controllers for name, weights, and reps
+  // State to hold lists of controllers for name, weights, reps, sets, duration, and type selection
   final List<TextEditingController> _nameControllers = [];
   final List<TextEditingController> _weightControllers = [];
   final List<TextEditingController> _repsControllers = [];
+  final List<TextEditingController> _durationControllers = [];
+  final List<TextEditingController> _setsControllers = [];
+  final List<String> _typesList = []; // 'weight', 'bodyweight', 'timed'
 
   @override
   void initState() {
@@ -1341,6 +1382,12 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
     for (var c in _repsControllers) {
       c.dispose();
     }
+    for (var c in _durationControllers) {
+      c.dispose();
+    }
+    for (var c in _setsControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1349,6 +1396,9 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
       _nameControllers.add(TextEditingController());
       _weightControllers.add(TextEditingController());
       _repsControllers.add(TextEditingController());
+      _durationControllers.add(TextEditingController());
+      _setsControllers.add(TextEditingController(text: "1"));
+      _typesList.add('weight');
     });
   }
 
@@ -1358,9 +1408,14 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
         _nameControllers[index].dispose();
         _weightControllers[index].dispose();
         _repsControllers[index].dispose();
+        _durationControllers[index].dispose();
+        _setsControllers[index].dispose();
         _nameControllers.removeAt(index);
         _weightControllers.removeAt(index);
         _repsControllers.removeAt(index);
+        _durationControllers.removeAt(index);
+        _setsControllers.removeAt(index);
+        _typesList.removeAt(index);
       });
     }
   }
@@ -1379,17 +1434,47 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
       final List<StrengthExercise> exercises = [];
       for (int i = 0; i < _nameControllers.length; i++) {
         final name = _nameControllers[i].text.trim();
-        final weight = double.tryParse(_weightControllers[i].text) ?? 0.0;
-        final reps = int.tryParse(_repsControllers[i].text) ?? 10;
-        if (name.isNotEmpty && weight > 0) {
-          exercises.add(StrengthExercise(name: name, weight: weight, reps: reps));
+        final type = _typesList[i];
+        final sets = int.tryParse(_setsControllers[i].text) ?? 1;
+
+        if (name.isNotEmpty) {
+          if (type == 'weight') {
+            final weight = double.tryParse(_weightControllers[i].text) ?? 0.0;
+            final reps = int.tryParse(_repsControllers[i].text) ?? 10;
+            exercises.add(StrengthExercise(
+              name: name,
+              weight: weight,
+              reps: reps,
+              sets: sets,
+              type: 'weight',
+            ));
+          } else if (type == 'bodyweight') {
+            final reps = int.tryParse(_repsControllers[i].text) ?? 10;
+            exercises.add(StrengthExercise(
+              name: name,
+              weight: 0.0,
+              reps: reps,
+              sets: sets,
+              type: 'bodyweight',
+            ));
+          } else if (type == 'timed') {
+            final duration = int.tryParse(_durationControllers[i].text) ?? 0;
+            exercises.add(StrengthExercise(
+              name: name,
+              weight: 0.0,
+              reps: 0,
+              durationSeconds: duration,
+              sets: sets,
+              type: 'timed',
+            ));
+          }
         }
       }
 
       if (exercises.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please add at least one exercise with a valid weight!'),
+            content: Text('Please add at least one valid exercise!'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -1564,117 +1649,220 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _nameControllers.length,
                   itemBuilder: (context, idx) {
+                    final type = _typesList[idx];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Exercise Name
-                          Expanded(
-                            flex: 4,
-                            child: TextFormField(
-                              controller: _nameControllers[idx],
-                              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-                              decoration: InputDecoration(
-                                hintText: 'Exercise',
-                                hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.04),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                                enabledBorder: OutlineInputBorder(
+                          Row(
+                            children: [
+                              // Type Selector Dropdown
+                              Container(
+                                height: 48,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.04),
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                  border: Border.all(color: Colors.white.withOpacity(0.08)),
                                 ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: themeColor),
-                                ),
-                              ),
-                              validator: (val) =>
-                                  val == null || val.trim().isEmpty ? 'Required' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-
-                          // Weight (kg)
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              controller: _weightControllers[idx],
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-                              decoration: InputDecoration(
-                                hintText: 'Wt (kg)',
-                                hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.04),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: themeColor),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: type,
+                                    dropdownColor: const Color(0xFF1E293B),
+                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                                    items: const [
+                                      DropdownMenuItem(value: 'weight', child: Text('🏋️')),
+                                      DropdownMenuItem(value: 'bodyweight', child: Text('🤸')),
+                                      DropdownMenuItem(value: 'timed', child: Text('⏱️')),
+                                    ],
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setState(() {
+                                          _typesList[idx] = val;
+                                        });
+                                      }
+                                    },
+                                  ),
                                 ),
                               ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) {
-                                  return 'Required';
-                                }
-                                final w = double.tryParse(val);
-                                if (w == null || w <= 0) {
-                                  return 'Invalid';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-
-                          // Reps
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _repsControllers[idx],
-                              keyboardType: TextInputType.number,
-                              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-                              decoration: InputDecoration(
-                                hintText: 'Reps',
-                                hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.04),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: themeColor),
+                              const SizedBox(width: 6),
+                              
+                              // Exercise Name
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _nameControllers[idx],
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                                  decoration: InputDecoration(
+                                    hintText: 'Exercise Name',
+                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13),
+                                    filled: true,
+                                    fillColor: Colors.white.withOpacity(0.04),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: themeColor),
+                                    ),
+                                  ),
+                                  validator: (val) =>
+                                      val == null || val.trim().isEmpty ? 'Required' : null,
                                 ),
                               ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) {
-                                  return 'Required';
-                                }
-                                final r = int.tryParse(val);
-                                if (r == null || r <= 0) {
-                                  return 'Invalid';
-                                }
-                                return null;
-                              },
-                            ),
+                              
+                              // Remove Button
+                              if (_nameControllers.length > 1)
+                                IconButton(
+                                  onPressed: () => _removeExerciseRow(idx),
+                                  icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
+                                  padding: const EdgeInsets.only(left: 4),
+                                  constraints: const BoxConstraints(),
+                                ),
+                            ],
                           ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              // Sets Field
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: _setsControllers[idx],
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                                  decoration: InputDecoration(
+                                    hintText: 'Sets',
+                                    labelText: 'Sets',
+                                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+                                    filled: true,
+                                    fillColor: Colors.white.withOpacity(0.04),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: themeColor),
+                                    ),
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) return 'Required';
+                                    final s = int.tryParse(val);
+                                    if (s == null || s <= 0) return 'Invalid';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 6),
 
-                          // Remove Row Button
-                          if (_nameControllers.length > 1)
-                            IconButton(
-                              onPressed: () => _removeExerciseRow(idx),
-                              icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
-                              padding: const EdgeInsets.only(top: 12, left: 4),
-                              constraints: const BoxConstraints(),
-                            ),
+                              // Dynamic Input 1: Weight / Duration
+                              if (type == 'weight') ...[
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    controller: _weightControllers[idx],
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      hintText: 'Wt (kg)',
+                                      labelText: 'Weight (kg)',
+                                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.04),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: themeColor),
+                                      ),
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) return 'Required';
+                                      final w = double.tryParse(val);
+                                      if (w == null || w <= 0) return 'Invalid';
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ] else if (type == 'timed') ...[
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    controller: _durationControllers[idx],
+                                    keyboardType: TextInputType.number,
+                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      hintText: 'Dur (s)',
+                                      labelText: 'Dur (s)',
+                                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.04),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: themeColor),
+                                      ),
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) return 'Required';
+                                      final d = int.tryParse(val);
+                                      if (d == null || d <= 0) return 'Invalid';
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+
+                              // Dynamic Input 2: Reps (for Weight / Bodyweight)
+                              if (type != 'timed')
+                                Expanded(
+                                  flex: 2,
+                                  child: TextFormField(
+                                    controller: _repsControllers[idx],
+                                    keyboardType: TextInputType.number,
+                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      hintText: 'Reps',
+                                      labelText: 'Reps',
+                                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.04),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: themeColor),
+                                      ),
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) return 'Required';
+                                      final r = int.tryParse(val);
+                                      if (r == null || r <= 0) return 'Invalid';
+                                      return null;
+                                    },
+                                  ),
+                                )
+                              else
+                                const Spacer(flex: 2), // Keep layout balanced
+                            ],
+                          ),
+                          const Divider(color: Colors.white10, height: 24),
                         ],
                       ),
                     );

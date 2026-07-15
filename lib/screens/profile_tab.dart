@@ -21,6 +21,7 @@ import 'help_support_screen.dart';
 import 'terms_privacy_screen.dart';
 import 'referral_screen.dart';
 import 'workout_library_screen.dart';
+import 'supplements_screen.dart';
 import '../services/notification_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -514,6 +515,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
             child: _buildCard(
             child: Column(
               children: [
+                _buildListTile(
+                  Icons.medication_rounded,
+                  'Supplements Reminders',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SupplementsScreen()),
+                  ),
+                ),
+                _buildDivider(),
                 _buildListTile(
                   Icons.track_changes_rounded,
                   'Edit Nutrition Goals',

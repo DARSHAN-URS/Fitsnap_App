@@ -39,6 +39,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<String> _selectedAllergies = [];
   final TextEditingController _customAllergyController = TextEditingController();
 
+  // Referral Code Variables
+  final TextEditingController _referralCodeController = TextEditingController();
+  bool _referralApplied = false;
+  String? _referralMessage;
+  bool _claimingReferral = false;
+
   final List<Map<String, String>> _commonAllergies = [
     {'name': 'Dairy', 'emoji': '🥛'},
     {'name': 'Gluten', 'emoji': '🌾'},
@@ -55,11 +61,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _weightController.dispose();
     _targetWeightController.dispose();
     _customAllergyController.dispose();
+    _referralCodeController.dispose();
     super.dispose();
   }
 
   void _nextStep() async {
-    if (_currentStep < 5) {
+    if (_currentStep < 6) {
       setState(() {
         _currentStep++;
       });
@@ -155,7 +162,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final double progress = (_currentStep + 1) / 6.0;
+    final double progress = (_currentStep + 1) / 7.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -279,10 +286,135 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 4:
         return _buildStepAllergies();
       case 5:
+        return _buildStepReferralCode();
+      case 6:
         return _buildStepAllSet();
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  // STEP 5: Referral Code
+  Widget _buildStepReferralCode() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'Got a Referral Code?',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Enter an invite code from a friend to earn 100 bonus points! (Optional)',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+        const SizedBox(height: 36),
+        _buildTranslucentInputCard(
+          controller: _referralCodeController,
+          hintText: 'e.g., FIT-A1B2C3',
+          icon: Icons.card_giftcard_rounded,
+        ),
+        const SizedBox(height: 24),
+        if (_referralMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: _referralApplied
+                  ? const Color(0xFF10B981).withOpacity(0.08)
+                  : const Color(0xFFEF4444).withOpacity(0.08),
+              border: Border.all(
+                color: _referralApplied
+                    ? const Color(0xFF10B981).withOpacity(0.2)
+                    : const Color(0xFFEF4444).withOpacity(0.2),
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _referralApplied ? Icons.check_circle_outline : Icons.error_outline,
+                  color: _referralApplied ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _referralMessage!,
+                    style: GoogleFonts.inter(
+                      color: _referralApplied ? const Color(0xFF065F46) : const Color(0xFF991B1B),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: (_claimingReferral || _referralApplied) ? null : _claimReferral,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _referralApplied ? Colors.grey.shade400 : const Color(0xFF6366F1),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
+            ),
+            child: _claimingReferral
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : Text(
+                    _referralApplied ? 'Code Applied ✓' : 'Apply Code',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _claimReferral() async {
+    final code = _referralCodeController.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a referral code first.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _claimingReferral = true;
+      _referralMessage = null;
+    });
+
+    final res = await ApiService.claimReferralCode(code);
+    setState(() {
+      _claimingReferral = false;
+      if (res['success']) {
+        _referralApplied = true;
+        _referralMessage = res['message'] ?? 'Referral code claimed successfully!';
+      } else {
+        _referralMessage = res['error'] ?? 'Invalid or expired referral code';
+      }
+    });
   }
 
   // STEP 0: Welcome, Gender, Age
@@ -1392,7 +1524,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       },
                       child: Center(
                         child: Text(
-                          _currentStep == 5 ? 'Start My Fitness Journey 🚀' : 'Continue',
+                          _currentStep == 6 ? 'Start My Fitness Journey 🚀' : 'Continue',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.inter(
                             color: Colors.white,
@@ -1408,7 +1540,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ],
           ),
           
-          if (_currentStep == 5) ...[
+          if (_currentStep == 6) ...[
             const SizedBox(height: 12),
             Text(
               'You can always update your preferences in Settings',

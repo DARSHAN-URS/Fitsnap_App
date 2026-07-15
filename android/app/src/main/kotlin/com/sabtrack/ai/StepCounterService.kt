@@ -13,6 +13,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.pm.ServiceInfo
 
 class StepCounterService : Service(), SensorEventListener {
 
@@ -42,7 +43,15 @@ class StepCounterService : Service(), SensorEventListener {
         wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout, refreshed on step updates
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, getNotification(getTodayStepsFromPrefs()))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                getNotification(getTodayStepsFromPrefs()),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, getNotification(getTodayStepsFromPrefs()))
+        }
 
         registerSensor()
     }

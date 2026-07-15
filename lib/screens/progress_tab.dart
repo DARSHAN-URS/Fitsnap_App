@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
@@ -205,15 +204,7 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
     Map<String, List<double>> chartValues = {};
     Map<String, List<String>> chartLabels = {};
 
-    final List<String> fallbackLabels = ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Today'];
-    final Map<String, List<double>> fallbacksData = {
-      'weight': [78.5, 78.2, 77.8, 78.0, 77.3, 76.9, currentWeight],
-      'waist': [34.0, 33.8, 33.5, 33.6, 33.2, 33.0, currentWaist],
-      'chest': [38.5, 38.6, 38.8, 39.0, 39.2, 39.3, currentChest],
-      'arms': [13.2, 13.3, 13.3, 13.5, 13.6, 13.7, currentArms],
-      'thighs': [22.0, 22.1, 22.1, 22.3, 22.4, 22.4, currentThighs],
-      'strength': [5.0, 5.0, 5.0, 7.5, 7.5, 7.5, currentStrength],
-    };
+
 
     for (var type in ['weight', 'waist', 'chest', 'arms', 'thighs', 'strength']) {
       List<double> vals = [];
@@ -235,8 +226,8 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
       }
       
       if (vals.isEmpty) {
-        chartValues[type] = fallbacksData[type]!;
-        chartLabels[type] = fallbackLabels;
+        chartValues[type] = [];
+        chartLabels[type] = [];
       } else {
         chartValues[type] = vals;
         chartLabels[type] = lbls;
@@ -275,9 +266,9 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
     }
     
     if (distanceData.isEmpty) {
-      distanceData = [3.2, 4.5, 2.8, 5.0, 3.6, 4.2, 5.8];
-      distanceLabels = ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Today'];
-      totalDistance = 29.1;
+      distanceData = [];
+      distanceLabels = [];
+      totalDistance = 0.0;
     }
 
     if (mounted) {
@@ -552,12 +543,50 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
                           const SizedBox(height: 24),
                           
                           // Custom Bar Chart
-                          ProgressBarChart(
-                            dataPoints: List<double>.from(metric['data']),
-                            labels: List<String>.from(metric['labels']),
-                            chartColor: metric['color'],
-                            unit: metric['unit'],
-                          ),
+                          metric['data'] == null || (metric['data'] as List).isEmpty
+                              ? Container(
+                                  height: 160,
+                                  width: double.infinity,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.analytics_outlined,
+                                        size: 32,
+                                        color: const Color(0xFF64748B).withOpacity(0.5),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'No data logged yet',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Start tracking to view charts',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: const Color(0xFF64748B).withOpacity(0.7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ProgressBarChart(
+                                  dataPoints: List<double>.from(metric['data']),
+                                  labels: List<String>.from(metric['labels']),
+                                  chartColor: metric['color'],
+                                  unit: metric['unit'],
+                                ),
                         ],
                       ),
                     ),
