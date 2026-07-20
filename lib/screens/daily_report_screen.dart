@@ -4,6 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/staggered_animation.dart';
+import '../widgets/transparent_report_widget.dart';
+import '../utils/share_helper.dart';
+import 'export_studio_screen.dart';
+
 
 class DailyReportScreen extends StatefulWidget {
   final DateTime date;
@@ -18,6 +22,10 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
   late AnimationController _animController;
   bool _isLoading = true;
   String? _errorMessage;
+
+  // Export state
+  bool _transparentOverlay = false;
+  final GlobalKey _repaintKey = GlobalKey();
 
   // Goals
   double _calorieGoal = 2000.0;
@@ -156,14 +164,33 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.save),
+        label: const Text('Export'),
+        backgroundColor: AppTheme.accent,
+        onPressed: _showExportDialog,
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadGoalsAndReport,
           color: AppTheme.accent,
           backgroundColor: Colors.white,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
+          child: RepaintBoundary(
+            key: _repaintKey,
+            child: _transparentOverlay
+                ? TransparentReportWidget(child: _buildReportContent())
+                : _buildReportContent(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportContent() {
+    final formattedDateStr = _getFormattedDate(widget.date);
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
               // Custom Header Bar
               SliverToBoxAdapter(
                 child: Padding(
@@ -308,10 +335,54 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
                   ),
                 )
             ],
-          ),
+          );
+  }
+
+  // Show export options dialog
+  void _showExportDialog() {
+    final dataMap = {
+      'date': _getFormattedDate(widget.date),
+      'steps': _steps,
+      'calorieBurned': _calorieBurned,
+      'waterMl': _waterMl,
+      'calorieIntake': _calorieIntake,
+      'recoveryScore': 84, // optimal defaults
+      'strainScore': 14.2,
+      'aiSummary': _aiSummary.isNotEmpty ? _aiSummary : "Great workout volume! Steps and nutrition are on track.",
+    };
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExportStudioScreen(
+          type: ExportType.daily,
+          data: dataMap,
         ),
       ),
     );
+  }
+
+  // Export the report as PNG (or JPEG placeholder) and save to device storage
+  Future<void> _exportReport(bool transparent) async {
+    setState(() => _transparentOverlay = transparent);
+    // Give the UI a moment to rebuild with the selected overlay
+    await Future.delayed(const Duration(milliseconds: 150));
+    final fileName = 'DailyReport_${widget.date.toIso8601String().split('T')[0]}';
+    final savedPath = await ShareHelper.saveWidgetCapture(
+      _repaintKey,
+      fileName: fileName,
+      asJpeg: false,
+    );
+    setState(() => _transparentOverlay = false);
+    if (savedPath != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Report saved to $savedPath')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save report')),
+      );
+    }
   }
 
   // --- UI Card Builders ---

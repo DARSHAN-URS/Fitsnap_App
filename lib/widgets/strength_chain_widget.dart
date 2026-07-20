@@ -183,16 +183,13 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
     // Fallback to local cache
     final list = await PreferencesHelper.readStringList('strength_workouts');
     if (list == null) {
-      final mock = _getInitialMockData();
-      final stringList = mock.map((w) => jsonEncode(w.toJson())).toList();
-      await PreferencesHelper.saveStringList('strength_workouts', stringList);
-      return mock;
+      return [];
     }
     try {
       return list.map((item) => StrengthWorkout.fromJson(jsonDecode(item))).toList();
     } catch (e) {
       debugPrint('Error loading cached strength workouts: $e');
-      return _getInitialMockData();
+      return [];
     }
   }
 
@@ -281,66 +278,6 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
     }
   }
 
-  List<StrengthWorkout> _getInitialMockData() {
-    final now = DateTime.now();
-    return [
-      StrengthWorkout(
-        id: '1',
-        title: 'Chest Destroyer',
-        category: 'Chest',
-        date: now.subtract(const Duration(days: 7)),
-        exercises: [
-          StrengthExercise(name: 'Bench Press', weight: 75.0, reps: 10),
-          StrengthExercise(name: 'Incline Dumbbell Press', weight: 26.0, reps: 12),
-          StrengthExercise(name: 'Chest Flys', weight: 14.0, reps: 15),
-        ],
-      ),
-      StrengthWorkout(
-        id: '2',
-        title: 'Leg Crusher',
-        category: 'Legs',
-        date: now.subtract(const Duration(days: 6)),
-        exercises: [
-          StrengthExercise(name: 'Squats', weight: 90.0, reps: 8),
-          StrengthExercise(name: 'Leg Press', weight: 180.0, reps: 12),
-          StrengthExercise(name: 'Calf Raises', weight: 45.0, reps: 20),
-        ],
-      ),
-      StrengthWorkout(
-        id: '3',
-        title: 'Back Pull Routine',
-        category: 'Back',
-        date: now.subtract(const Duration(days: 4)),
-        exercises: [
-          StrengthExercise(name: 'Deadlift', weight: 110.0, reps: 5),
-          StrengthExercise(name: 'Lat Pulldown', weight: 60.0, reps: 10),
-          StrengthExercise(name: 'Seated Cable Row', weight: 55.0, reps: 12),
-        ],
-      ),
-      StrengthWorkout(
-        id: '4',
-        title: 'Shoulders & Press',
-        category: 'Shoulders',
-        date: now.subtract(const Duration(days: 3)),
-        exercises: [
-          StrengthExercise(name: 'Overhead Press', weight: 45.0, reps: 8),
-          StrengthExercise(name: 'Dumbbell Lateral Raise', weight: 12.0, reps: 15),
-          StrengthExercise(name: 'Front Raise', weight: 10.0, reps: 12),
-        ],
-      ),
-      StrengthWorkout(
-        id: '5',
-        title: 'Arm Pump Friday',
-        category: 'Arms',
-        date: now.subtract(const Duration(days: 1)),
-        exercises: [
-          StrengthExercise(name: 'Bicep Barbell Curl', weight: 30.0, reps: 12),
-          StrengthExercise(name: 'Tricep Pushdowns', weight: 35.0, reps: 15),
-          StrengthExercise(name: 'Hammer Curls', weight: 14.0, reps: 12),
-        ],
-      ),
-    ];
-  }
 
   String _formatExerciseDetails(StrengthExercise e) {
     final setsText = e.sets > 1 ? '${e.sets} sets • ' : '';

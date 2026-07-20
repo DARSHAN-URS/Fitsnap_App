@@ -6,9 +6,12 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
+import '../widgets/transparent_report_widget.dart';
 import '../services/api_service.dart';
 import '../utils/share_helper.dart';
 import '../utils/preferences_helper.dart';
+import 'export_studio_screen.dart';
+
 
 class ActivityReportScreen extends StatefulWidget {
   final String activityType;
@@ -44,6 +47,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
   String _profileAge = '25';
   String _profileGoal = 'Build Muscle';
   bool _isSaving = false;
+  bool _transparentOverlay = false; // controls layout for export
   final GlobalKey _repaintKey = GlobalKey();
 
   @override
@@ -261,6 +265,47 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
     });
   }
 
+  // Export dialog and handling
+  void _showExportDialog() {
+    final dataMap = {
+      'date': 'Workout Summary',
+      'steps': 0,
+      'calorieBurned': widget.calories,
+      'waterMl': 0,
+      'calorieIntake': 0,
+      'recoveryScore': 85, // optimal defaults
+      'strainScore': 14.8,
+      'aiSummary': "Great aerobic performance! Your average pace of ${widget.avgPace} shows strong cardiovascular output.",
+      'activityType': widget.activityType,
+      'distance': '${widget.distance.toStringAsFixed(2)} km',
+      'pace': '${widget.avgPace} /km',
+      'duration': _formatDuration(widget.durationSeconds),
+    };
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExportStudioScreen(
+          type: ExportType.workout,
+          data: dataMap,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportReport(bool transparent) async {
+    setState(() { _transparentOverlay = transparent; });
+    await Future.delayed(const Duration(milliseconds: 200)); // allow UI update
+    final fileName = 'Workout_${DateTime.now().millisecondsSinceEpoch}';
+    final path = await ShareHelper.saveWidgetCapture(_repaintKey, fileName: fileName);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(path != null ? 'Report saved to $path' : 'Failed to save report')),
+      );
+    }
+    setState(() { _transparentOverlay = false; });
+  }
+
   @override
   Widget build(BuildContext context) {
     final String initials = _displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase();
@@ -291,20 +336,38 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
             // Shareable card layout
             RepaintBoundary(
               key: _repaintKey,
-              child: Card(
-              elevation: 8,
-              shadowColor: Colors.black12,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              clipBehavior: Clip.antiAlias,
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Column(
+              child: _transparentOverlay
+                  ? TransparentReportWidget(
+                      child: Card(
+                      elevation: 8,
+                      shadowColor: Colors.black12,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      clipBehavior: Clip.antiAlias,
+                      child: Container(
+                      decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    )
+                      )
+                    )
+                  : Card(
+                      elevation: 8,
+                      shadowColor: Colors.black12,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      clipBehavior: Clip.antiAlias,
+                      child: Container(
+                      decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Column(
                   children: [
                     // Header (User Profile metadata)
                     Padding(
@@ -484,8 +547,8 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                     ),
                   ],
                 ),
-              ),
-            ),
+                  ),
+                  ),
             ),
             const SizedBox(height: 28),
 
@@ -560,6 +623,16 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                         ),
                       ),
               ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _showExportDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonIndigo,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: Text('Export Report'),
             ),
             const SizedBox(height: 12),
             TextButton(

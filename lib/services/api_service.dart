@@ -132,45 +132,29 @@ class ApiService {
   // --- Smart Nutrition (Cal AI Feature) ---
   static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath, String? date, String? description}) async {
     try {
-      if (imagePath != null) {
-        final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze'));
-        if (_token != null) {
-          request.headers['Authorization'] = 'Bearer $_token';
-        }
-        final file = await http.MultipartFile.fromPath('image', imagePath);
-        request.files.add(file);
-        if (date != null) {
-          request.fields['date'] = date;
-        }
-        if (description != null) {
-          request.fields['description'] = description;
-        }
-        
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
-        
-        if (response.statusCode == 200) {
-          return {'success': true, 'data': jsonDecode(response.body)};
-        }
-        return {'success': false, 'error': 'Failed to analyze food image'};
-      } else {
-        final response = await http.post(
-          Uri.parse('$baseUrl/nutrition/analyze'),
-          headers: {
-            'Content-Type': 'application/json',
-            if (_token != null) 'Authorization': 'Bearer $_token',
-          },
-          body: jsonEncode({
-            'mockImage': true,
-            if (date != null) 'date': date,
-          }),
-        );
-        
-        if (response.statusCode == 200) {
-          return {'success': true, 'data': jsonDecode(response.body)};
-        }
-        return {'success': false, 'error': 'Failed to analyze food'};
+      if (imagePath == null) {
+        return {'success': false, 'error': 'Image path is required for analysis.'};
       }
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze'));
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      final file = await http.MultipartFile.fromPath('image', imagePath);
+      request.files.add(file);
+      if (date != null) {
+        request.fields['date'] = date;
+      }
+      if (description != null) {
+        request.fields['description'] = description;
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to analyze food image'};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -201,45 +185,29 @@ class ApiService {
 
   static Future<Map<String, dynamic>> analyzeNutritionLabel({String? imagePath, String? date, String? description}) async {
     try {
-      if (imagePath != null) {
-        final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze-label'));
-        if (_token != null) {
-          request.headers['Authorization'] = 'Bearer $_token';
-        }
-        final file = await http.MultipartFile.fromPath('image', imagePath);
-        request.files.add(file);
-        if (date != null) {
-          request.fields['date'] = date;
-        }
-        if (description != null) {
-          request.fields['description'] = description;
-        }
-        
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
-        
-        if (response.statusCode == 200) {
-          return {'success': true, 'data': jsonDecode(response.body)};
-        }
-        return {'success': false, 'error': 'Failed to analyze nutrition label image'};
-      } else {
-        final response = await http.post(
-          Uri.parse('$baseUrl/nutrition/analyze-label'),
-          headers: {
-            'Content-Type': 'application/json',
-            if (_token != null) 'Authorization': 'Bearer $_token',
-          },
-          body: jsonEncode({
-            'mockImage': true,
-            if (date != null) 'date': date,
-          }),
-        );
-        
-        if (response.statusCode == 200) {
-          return {'success': true, 'data': jsonDecode(response.body)};
-        }
-        return {'success': false, 'error': 'Failed to analyze nutrition label'};
+      if (imagePath == null) {
+        return {'success': false, 'error': 'Image path is required for analysis.'};
       }
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/nutrition/analyze-label'));
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      final file = await http.MultipartFile.fromPath('image', imagePath);
+      request.files.add(file);
+      if (date != null) {
+        request.fields['date'] = date;
+      }
+      if (description != null) {
+        request.fields['description'] = description;
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to analyze nutrition label image'};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

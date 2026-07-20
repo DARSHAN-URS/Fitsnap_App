@@ -283,7 +283,7 @@ class _MeasurementLogsScreenState extends State<MeasurementLogsScreen> {
                   setState(() {
                     _currentVal = newV;
                     _logs.insert(0, {
-                      'id': MathMock.randomId(),
+                      'id': 'local_${DateTime.now().millisecondsSinceEpoch}',
                       'date': dateStr,
                       'value': newV,
                       'change': 0.0,
@@ -433,7 +433,7 @@ class _MeasurementLogsScreenState extends State<MeasurementLogsScreen> {
     });
 
     bool deleteSuccess = true;
-    if (ApiService.isAuthenticated && !logId.startsWith('mock_')) {
+    if (ApiService.isAuthenticated && !logId.startsWith('local_')) {
       final res = await ApiService.deleteMeasurement(logId);
       deleteSuccess = res['success'] == true;
     }
@@ -811,18 +811,4 @@ class _MeasurementLogsScreenState extends State<MeasurementLogsScreen> {
   }
 }
 
-class MathMock {
-  static String randomId() {
-    return 'mock_${MathMock._randomString(8)}';
-  }
 
-  static String _randomString(int len) {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final rand = DateTime.now().microsecondsSinceEpoch;
-    String res = '';
-    for (int i = 0; i < len; i++) {
-      res += chars[(rand + i) % chars.length];
-    }
-    return res;
-  }
-}
