@@ -397,8 +397,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Image.network(
-                                          'https://developers.google.com/static/identity/images/g-logo.png',
+                                        Image.asset(
+                                          'assets/images/google_logo.png',
                                           height: 22,
                                           errorBuilder: (context, error, stackTrace) {
                                             return const Icon(Icons.g_mobiledata, color: AppTheme.accent, size: 28);

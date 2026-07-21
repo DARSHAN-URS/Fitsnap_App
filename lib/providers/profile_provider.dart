@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../utils/preferences_helper.dart';
 
@@ -95,6 +96,44 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           await PreferencesHelper.saveInt('profile_age', ageTemp);
           if (picTemp != null) {
             await PreferencesHelper.saveString('profile_pic_url', picTemp);
+          }
+
+          // Sync all calculation engine metrics to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('profile_bmi', (data['bmi'] as num?)?.toDouble() ?? 0.0);
+          await prefs.setString('profile_bmi_category', data['bmi_category'] ?? 'Healthy');
+          await prefs.setDouble('profile_bmr', (data['bmr'] as num?)?.toDouble() ?? 0.0);
+          await prefs.setDouble('profile_tdee', (data['tdee'] as num?)?.toDouble() ?? 0.0);
+          
+          await prefs.setDouble('profile_calorie_goal', (data['target_calories'] as num?)?.toDouble() ?? 2000.0);
+          await prefs.setDouble('profile_protein_goal', (data['protein_target'] as num?)?.toDouble() ?? 130.0);
+          await prefs.setDouble('profile_carbs_goal', (data['carb_target'] as num?)?.toDouble() ?? 250.0);
+          await prefs.setDouble('profile_fats_goal', (data['fat_target'] as num?)?.toDouble() ?? 65.0);
+          await prefs.setDouble('profile_fiber_goal', (data['fiber_target'] as num?)?.toDouble() ?? 28.0);
+          await prefs.setDouble('profile_water_goal', (data['water_target'] as num?)?.toDouble() ?? 2500.0);
+
+          // Sync personal parameters to secure PreferencesHelper
+          if (data['height_cm'] != null) {
+            await PreferencesHelper.saveDouble('profile_height', (data['height_cm'] as num).toDouble());
+          }
+          if (data['current_weight'] != null) {
+            await PreferencesHelper.saveDouble('profile_weight', (data['current_weight'] as num).toDouble());
+          }
+          if (data['target_weight'] != null) {
+            await PreferencesHelper.saveDouble('profile_target_weight', (data['target_weight'] as num).toDouble());
+          }
+          if (data['goal'] != null) {
+            await PreferencesHelper.saveString('profile_goal', data['goal']);
+            await PreferencesHelper.saveString('profile_goals', data['goal']);
+          }
+          if (data['activity_level'] != null) {
+            await PreferencesHelper.saveString('profile_activity_level', data['activity_level']);
+          }
+          if (data['gender'] != null) {
+            await PreferencesHelper.saveString('profile_gender', data['gender']);
+          }
+          if (data['age'] != null) {
+            await PreferencesHelper.saveString('profile_age', data['age'].toString());
           }
         }
 

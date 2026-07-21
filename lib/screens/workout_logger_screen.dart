@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../theme/app_theme.dart';
 import '../data/exercise_database.dart';
+import '../services/api_service.dart';
 
 class WorkoutLoggerScreen extends StatefulWidget {
   const WorkoutLoggerScreen({super.key});
@@ -78,39 +77,35 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> with SingleTi
       ),
     );
 
-    final token = await const FlutterSecureStorage().read(key: 'auth_token') ?? '';
-    if (token.isEmpty) return;
+    if (!ApiService.isAuthenticated) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to save workouts.'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
 
-    final url = Uri.parse('http://10.0.2.2:8000/api/workouts');
-    
-    // Convert to backend schema
-    final payload = {
-      "workout_name": "Quick Log: ${exercise.name}",
-      "workout_type": "strength",
-      "category": exercise.category,
-      "exercises": [
-        {
-          "name": exercise.name,
-          "sets": data['sets'] ?? 1,
-          "reps": data['reps'],
-          "weight": data['weight'],
-          "duration_seconds": data['duration_seconds'],
-          "notes": data['notes']
-        }
-      ]
-    };
+    // Convert to backend schema exercise structure
+    final List<Map<String, dynamic>> exercisesList = [
+      {
+        "name": exercise.name,
+        "sets": (data['sets'] as num?)?.toInt() ?? 1,
+        "reps": data['reps']?.toString() ?? "10",
+        "weight": (data['weight'] as num?)?.toDouble() ?? 0.0,
+        "duration_seconds": (data['duration_seconds'] as num?)?.toInt() ?? 0,
+        "notes": data['notes']?.toString() ?? ""
+      }
+    ];
 
     try {
-      final res = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(payload),
+      final res = await ApiService.saveStrengthWorkout(
+        workoutName: "Quick Log: ${exercise.name}",
+        category: exercise.category,
+        exercises: exercisesList,
       );
 
-      if (res.statusCode == 200) {
+      if (res['success'] == true) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -126,11 +121,23 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> with SingleTi
             ),
           );
         }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['error'] ?? 'Failed to log workout.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to log workout.'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to log workout: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

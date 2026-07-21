@@ -11,7 +11,7 @@ class ApiService {
   }
 
   static String get localUrl => 'http://$_localHost:3000/api';
-  static const String productionUrl = 'https://snapcal-production.up.railway.app/api';
+  static const String productionUrl = 'https://api.sabtrack.in/api';
   static String baseUrl = productionUrl; // Default to production
   static String? _token;
 
@@ -1169,6 +1169,34 @@ class ApiService {
         'success': false,
         'error': responseData['detail'] ?? 'Failed to claim referral code (Status: ${response.statusCode})'
       };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Support Desk ---
+  static Future<Map<String, dynamic>> submitSupportTicket({
+    required String email,
+    required String category,
+    required String message,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/support/tickets'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'email': email,
+          'category': category,
+          'message': message,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to submit ticket (Status: ${response.statusCode})'};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

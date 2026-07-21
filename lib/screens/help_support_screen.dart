@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -89,8 +90,12 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     });
   }
 
-  void _submitTicket() {
-    if (_emailController.text.trim().isEmpty || _messageController.text.trim().isEmpty) {
+  void _submitTicket() async {
+    final email = _emailController.text.trim();
+    final message = _messageController.text.trim();
+    final category = _selectedCategory;
+
+    if (email.isEmpty || message.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Please fill out all fields.'),
@@ -101,48 +106,78 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       return;
     }
 
-    // Show beautiful success dialog
+    // Show loading spinner
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: AppTheme.neonEmerald, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              'Ticket Submitted',
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w800,
-                color: AppTheme.primary,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: AppTheme.accent),
+      ),
+    );
+
+    final res = await ApiService.submitSupportTicket(
+      email: email,
+      category: category,
+      message: message,
+    );
+
+    if (mounted) {
+      Navigator.pop(context); // Pop loading spinner
+    }
+
+    if (res['success'] == true) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppTheme.neonEmerald, size: 28),
+              const SizedBox(width: 8),
+              Text(
+                'Ticket Submitted',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
               ),
+            ],
+          ),
+          content: Text(
+            'Thank you! Your request has been registered. Our support team will get back to you at $email within 24 hours.',
+            style: GoogleFonts.inter(color: Colors.black54),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _messageController.clear();
+                  _emailController.clear();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('Great', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
-        content: Text(
-          'Thank you! Your request has been registered. Our support team will get back to you at ${_emailController.text} within 24 hours.',
-          style: GoogleFonts.inter(color: Colors.black54),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['error'] ?? 'Failed to submit ticket. Please check connection.'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _messageController.clear();
-                _emailController.clear();
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Great', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
   @override

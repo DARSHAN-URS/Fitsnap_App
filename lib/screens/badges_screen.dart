@@ -28,7 +28,7 @@ const List<BadgeInfo> allBadges = [
   BadgeInfo(
     id: 'First Log',
     title: 'First Log',
-    description: 'Welcome to FitFlow! Opened the app and logged your first session.',
+    description: 'Welcome to SABTRACK AI! Opened the app and logged your first session.',
     requirement: 'Open the app for the first time.',
     icon: Icons.verified_rounded,
     color: AppTheme.accent,
