@@ -18,6 +18,7 @@ class SabtrackLogo extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.contain,
+      color: color,
     );
   }
 }

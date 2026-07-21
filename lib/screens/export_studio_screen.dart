@@ -2,12 +2,16 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
+import '../theme/sabtrack_logo.dart';
 import '../utils/share_helper.dart';
+import '../providers/profile_provider.dart';
 
 enum ExportType { daily, workout }
 
-class ExportStudioScreen extends StatefulWidget {
+class ExportStudioScreen extends ConsumerStatefulWidget {
   final ExportType type;
   
   // Data maps to populate layouts
@@ -20,17 +24,18 @@ class ExportStudioScreen extends StatefulWidget {
   });
 
   @override
-  State<ExportStudioScreen> createState() => _ExportStudioScreenState();
+  ConsumerState<ExportStudioScreen> createState() => _ExportStudioScreenState();
 }
 
-class _ExportStudioScreenState extends State<ExportStudioScreen> {
+class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   // Key to capture layout
   final GlobalKey _repaintKey = GlobalKey();
 
   // Customization States
-  String _layout = 'minimal'; // minimal, glass, rings, strava, whoop, oura, garmin, nutrition, sleep, hydration, ai, dashboard
+  int _activeStep = 0; // 0: Layouts, 1: Styles, 2: Ratios
+  String _layout = 'minimal'; // minimal, glass, rings, strava, whoop, oura, garmin, nutrition, sleep, hydration, ai, dashboard, transparent
   String _aspectRatio = 'square'; // square, story, post, landscape
-  String _theme = 'dark'; // dark, light, glass, gradient, black
+  String _theme = 'dark'; // dark, light, glass, gradient, black, transparent
   Color _accentColor = AppTheme.accent;
   Color _textColor = Colors.white;
   double _cornerRadius = 24.0;
@@ -56,7 +61,41 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
     {'id': 'hydration', 'name': 'Hydration bottle', 'desc': 'Liquid level bottle tracker'},
     {'id': 'ai', 'name': 'AI Coach insights', 'desc': 'Focus on generative feedback'},
     {'id': 'dashboard', 'name': 'Dashboard board', 'desc': 'All health metrics grid'},
+    {'id': 'transparent', 'name': 'Transparent Info', 'desc': 'Completely transparent stats summary'},
   ];
+
+  IconData _getLayoutIcon(String id) {
+    switch (id) {
+      case 'minimal':
+        return Icons.analytics_outlined;
+      case 'glass':
+        return Icons.blur_on_rounded;
+      case 'rings':
+        return Icons.published_with_changes_rounded;
+      case 'strava':
+        return Icons.directions_run_rounded;
+      case 'whoop':
+        return Icons.donut_large_rounded;
+      case 'oura':
+        return Icons.watch_rounded;
+      case 'garmin':
+        return Icons.show_chart_rounded;
+      case 'nutrition':
+        return Icons.restaurant_rounded;
+      case 'sleep':
+        return Icons.nights_stay_rounded;
+      case 'hydration':
+        return Icons.water_drop_rounded;
+      case 'ai':
+        return Icons.psychology_rounded;
+      case 'dashboard':
+        return Icons.grid_view_rounded;
+      case 'transparent':
+        return Icons.opacity_rounded;
+      default:
+        return Icons.dashboard_customize_rounded;
+    }
+  }
 
   @override
   void initState() {
@@ -144,6 +183,7 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final profileState = ref.watch(profileProvider);
     final canvasSize = _getCanvasSize();
 
     return Scaffold(
@@ -187,7 +227,7 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildCanvasHeader(),
+                          _buildCanvasHeader(profileState),
                           Expanded(
                             child: Center(
                               child: _buildLayoutContent(),
@@ -216,67 +256,14 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
               ),
               child: SafeArea(
                 top: false,
-                child: DefaultTabController(
-                  length: 3,
-                  child: Column(
-                    children: [
-                      TabBar(
-                        labelColor: AppTheme.accent,
-                        unselectedLabelColor: Colors.white60,
-                        indicatorColor: AppTheme.accent,
-                        tabs: const [
-                          Tab(text: 'Layouts'),
-                          Tab(text: 'Styles'),
-                          Tab(text: 'Ratios'),
-                        ],
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            _buildLayoutSelector(),
-                            _buildStylesEditor(),
-                            _buildRatioSelector(),
-                          ],
-                        ),
-                      ),
-                      
-                      // EXPORT ACTIONS FOOTER
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1E293B),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                ),
-                                icon: const Icon(Icons.download_rounded),
-                                label: const Text('Save to Gallery', style: TextStyle(fontWeight: FontWeight.bold)),
-                                onPressed: _isExporting ? null : _saveExport,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.accent,
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                ),
-                                icon: const Icon(Icons.share_rounded),
-                                label: const Text('Share Card', style: TextStyle(fontWeight: FontWeight.bold)),
-                                onPressed: _isExporting ? null : _shareExport,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                child: Column(
+                  children: [
+                    _buildStepIndicator(),
+                    Expanded(
+                      child: _buildActiveStepContent(),
+                    ),
+                    _buildNavigationButtons(),
+                  ],
                 ),
               ),
             ),
@@ -332,6 +319,11 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
           borderRadius: radius,
           border: Border.all(color: const Color(0xFF1E293B), width: 1),
         );
+      case 'transparent':
+        return BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: radius,
+        );
       case 'dark':
       default:
         return BoxDecoration(
@@ -342,7 +334,10 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
     }
   }
 
-  Widget _buildCanvasHeader() {
+  Widget _buildCanvasHeader(ProfileState profileState) {
+    final hasImage = profileState.profilePictureUrl != null && profileState.profilePictureUrl!.isNotEmpty;
+    final isNetworkImage = hasImage && profileState.profilePictureUrl!.startsWith('http');
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -356,8 +351,12 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white24, width: 1.2),
-                  image: const DecorationImage(
-                    image: NetworkImage("https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150"),
+                  image: DecorationImage(
+                    image: hasImage
+                        ? (isNetworkImage
+                            ? CachedNetworkImageProvider(profileState.profilePictureUrl!)
+                            : FileImage(File(profileState.profilePictureUrl!)) as ImageProvider)
+                        : const NetworkImage("https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=150"),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -367,11 +366,13 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Alex Rivera',
+                    profileState.name.isNotEmpty ? profileState.name : 'Guest User',
                     style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: _textColor),
                   ),
                   Text(
-                    '@alex_lifts',
+                    profileState.username.startsWith('@')
+                        ? profileState.username
+                        : '@${profileState.username.isNotEmpty ? profileState.username : 'guest_user'}',
                     style: GoogleFonts.inter(fontSize: 9, color: _textColor.withOpacity(0.5), fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -381,7 +382,7 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
           if (_showLogo)
             Row(
               children: [
-                Icon(Icons.dashboard_customize_rounded, color: _accentColor, size: 16),
+                SabtrackLogo(size: 16, color: _accentColor),
                 const SizedBox(width: 4),
                 Text(
                   'SABTRACK',
@@ -440,10 +441,78 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
         return _buildAiLayout();
       case 'dashboard':
         return _buildDashboardLayout();
+      case 'transparent':
+        return _buildTransparentLayout();
       case 'minimal':
       default:
         return _buildMinimalLayout();
     }
+  }
+
+  Widget _buildTransparentLayout() {
+    final steps = widget.data['steps'] ?? 10840;
+    final calories = widget.data['calorieBurned'] ?? 480;
+    final recovery = widget.data['recoveryScore'] ?? 84;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'DAILY SUMMARY',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: _accentColor.withOpacity(0.8),
+              letterSpacing: 2.0,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildTransparentStatItem('Steps', '$steps', Icons.directions_walk_rounded),
+              _buildTransparentStatItem('Burn', '$calories kcal', Icons.local_fire_department_rounded),
+              _buildTransparentStatItem('Recovery', '$recovery%', Icons.bolt_rounded),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransparentStatItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: _accentColor, size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+            color: _textColor,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 9,
+            color: _textColor.withOpacity(0.5),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildMinimalLayout() {
@@ -1087,32 +1156,380 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
   // --- CONTROLS TABS BUILDERS ---
   
   Widget _buildLayoutSelector() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      itemCount: _layoutsList.length,
-      itemBuilder: (context, index) {
-        final item = _layoutsList[index];
-        final isSelected = _layout == item['id'];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF1E293B) : Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isSelected ? AppTheme.accent : Colors.white10, width: 1.2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          child: Text(
+            'SELECT A LAYOUT STYLE',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white.withOpacity(0.5),
+              letterSpacing: 1.0,
+            ),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            title: Text(item['name']!, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
-            subtitle: Text(item['desc']!, style: const TextStyle(color: Colors.white60, fontSize: 11)),
-            onTap: () {
+        ),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _layoutsList.length,
+              itemBuilder: (context, index) {
+                final item = _layoutsList[index];
+                final isSelected = _layout == item['id'];
+                final icon = _getLayoutIcon(item['id']!);
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _layout = item['id']!;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: 135,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.accent.withOpacity(0.12)
+                          : const Color(0xFF1E293B).withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.accent : Colors.white.withOpacity(0.08),
+                        width: 2,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppTheme.accent.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              )
+                            ]
+                          : null,
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.accent : Colors.white.withOpacity(0.05),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? Colors.black : Colors.white70,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          item['name']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : Colors.white70,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item['desc']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white60 : Colors.white38,
+                            fontSize: 9,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        // Show preview features of active layout
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _getLayoutIcon(_layout),
+                  color: AppTheme.accent,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _layoutsList.firstWhere((item) => item['id'] == _layout)['name']!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _layoutsList.firstWhere((item) => item['id'] == _layout)['desc']!,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepIndicator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      child: Row(
+        children: [
+          _buildStepNode(0, 'Layout'),
+          _buildStepLine(0),
+          _buildStepNode(1, 'Styles'),
+          _buildStepLine(1),
+          _buildStepNode(2, 'Ratio'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepNode(int stepIndex, String title) {
+    final isCompleted = _activeStep > stepIndex;
+    final isActive = _activeStep == stepIndex;
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: isCompleted
+                ? AppTheme.accent
+                : isActive
+                    ? AppTheme.accent.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.05),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isCompleted || isActive ? AppTheme.accent : Colors.white24,
+              width: 1.5,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: isCompleted
+              ? const Icon(Icons.check_rounded, size: 14, color: Colors.black)
+              : Text(
+                  '${stepIndex + 1}',
+                  style: TextStyle(
+                    color: isActive ? AppTheme.accent : Colors.white54,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.white38,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepLine(int stepIndex) {
+    final isCompleted = _activeStep > stepIndex;
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        height: 2,
+        color: isCompleted ? AppTheme.accent : Colors.white.withOpacity(0.1),
+      ),
+    );
+  }
+
+  Widget _buildActiveStepContent() {
+    switch (_activeStep) {
+      case 0:
+        return _buildLayoutSelector();
+      case 1:
+        return _buildStylesEditor();
+      case 2:
+      default:
+        return _buildRatioSelector();
+    }
+  }
+
+  Widget _buildNavigationButtons() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: _buildNavigationButtonsContent(),
+      ),
+    );
+  }
+
+  Widget _buildNavigationButtonsContent() {
+    if (_activeStep == 0) {
+      return SizedBox(
+        key: const ValueKey('step0_nav'),
+        width: double.infinity,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accent,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 2,
+          ),
+          onPressed: () {
+            setState(() {
+              _activeStep = 1;
+            });
+          },
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Text('Configure Style', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              SizedBox(width: 8),
+              Icon(Icons.arrow_forward_rounded, size: 16),
+            ],
+          ),
+        ),
+      );
+    } else if (_activeStep == 1) {
+      return Row(
+        key: const ValueKey('step1_nav'),
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white24),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () {
+                setState(() {
+                  _activeStep = 0;
+                });
+              },
+              child: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 2,
+              ),
+              onPressed: () {
+                setState(() {
+                  _activeStep = 2;
+                });
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Text('Adjust Ratio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward_rounded, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Step 2: Ratios + Export buttons
+      return Column(
+        key: const ValueKey('step2_nav'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('Save to Gallery', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _isExporting ? null : _saveExport,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Share Card', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _isExporting ? null : _shareExport,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () {
               setState(() {
-                _layout = item['id']!;
+                _activeStep = 1;
               });
             },
+            child: Text(
+              '← Back to Styles',
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+            ),
           ),
-        );
-      },
-    );
+        ],
+      );
+    }
   }
 
   Widget _buildStylesEditor() {
@@ -1133,6 +1550,7 @@ class _ExportStudioScreenState extends State<ExportStudioScreen> {
               _buildStyleTab('glass', 'Glassmorphic'),
               _buildStyleTab('gradient', 'Gradient Glow'),
               _buildStyleTab('black', 'AMOLED Black'),
+              _buildStyleTab('transparent', 'Transparent'),
             ],
           ),
           const SizedBox(height: 20),
