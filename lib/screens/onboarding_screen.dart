@@ -441,7 +441,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
             child: const Center(
-              child: SabtrackLogo(size: 48, color: AppTheme.primary),
+              child: SabtrackLogo(size: 48),
             ),
           ),
         ),

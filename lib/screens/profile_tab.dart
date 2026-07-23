@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
+import '../theme/sabtrack_logo.dart';
 import '../auth_screen.dart';
 import '../services/api_service.dart';
 import '../services/health_sync_service.dart';
@@ -668,6 +669,24 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
               onTap: () => _showLogoutDialog(context),
             ),
           ),
+          ),
+          const SizedBox(height: 32),
+          Center(
+            child: Column(
+              children: [
+                const SabtrackLogo(size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  'SABTRACK AI v1.0.0',
+                  style: GoogleFonts.inter(
+                    color: Colors.black38,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

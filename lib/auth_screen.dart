@@ -548,8 +548,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
           ),
         ],
       ),
-      child: Center(
-        child: SabtrackLogo(size: 48, color: AppTheme.primary),
+      child: const Center(
+        child: SabtrackLogo(size: 48),
       ),
     );
   }

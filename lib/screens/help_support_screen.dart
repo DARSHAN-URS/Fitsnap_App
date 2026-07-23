@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../theme/sabtrack_logo.dart';
 import '../services/api_service.dart';
 
 class HelpSupportScreen extends StatefulWidget {
@@ -206,15 +207,23 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Subtitle info
-            Text(
-              'How can we help you today?',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.primary,
-                letterSpacing: -0.5,
-              ),
+            // Subtitle info with App Logo
+            Row(
+              children: [
+                const SabtrackLogo(size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'How can we help you today?',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(

@@ -516,9 +516,8 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
                             children: [
                               Row(
                                 children: [
-                                  SabtrackLogo(
+                                  const SabtrackLogo(
                                     size: 20,
-                                    color: widget.themeColor,
                                   ),
                                   const SizedBox(width: 6),
                                   Text(

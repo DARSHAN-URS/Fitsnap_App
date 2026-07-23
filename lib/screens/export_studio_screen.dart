@@ -382,8 +382,8 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
           if (_showLogo)
             Row(
               children: [
-                SabtrackLogo(size: 16, color: _accentColor),
-                const SizedBox(width: 4),
+                const SabtrackLogo(size: 20),
+                const SizedBox(width: 6),
                 Text(
                   'SABTRACK',
                   style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w900, color: _accentColor, letterSpacing: 0.5),
