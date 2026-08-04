@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'theme/app_theme.dart';
 
 import 'screens/onboarding_screen.dart';
+import 'screens/splash_screen.dart';
 import 'auth_screen.dart';
 import 'dashboard_screen.dart';
 import 'services/api_service.dart';
@@ -13,13 +14,13 @@ import 'utils/preferences_helper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ApiService.configureBaseUrl(isDevelopment: kDebugMode);
-  
+
   try {
     await ApiService.initToken();
   } catch (e) {
     debugPrint('Error initializing ApiService token: $e');
   }
-  
+
   try {
     await NotificationService.initialize();
   } catch (e) {
@@ -32,7 +33,7 @@ void main() async {
   } catch (e) {
     debugPrint('Error reading onboarding_completed status: $e');
   }
-  
+
   final bool isLoggedIn = ApiService.isAuthenticated;
 
   runApp(
@@ -57,11 +58,14 @@ class SabtrackApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget homeScreen;
+    // Resolve the real destination based on auth + onboarding state
+    final Widget destinationScreen;
     if (isLoggedIn) {
-      homeScreen = onboardingCompleted ? const DashboardScreen() : const OnboardingScreen();
+      destinationScreen = onboardingCompleted
+          ? const DashboardScreen()
+          : const OnboardingScreen();
     } else {
-      homeScreen = const AuthScreen();
+      destinationScreen = const AuthScreen();
     }
 
     return MaterialApp(
@@ -70,8 +74,8 @@ class SabtrackApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: homeScreen,
+      // Always start with the animated splash — it routes to the correct screen
+      home: SplashScreen(nextScreen: destinationScreen),
     );
   }
 }
-
