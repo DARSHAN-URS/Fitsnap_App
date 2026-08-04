@@ -81,14 +81,16 @@ class StepCounterService : Service(), SensorEventListener {
     private fun processSensorValue(sensorValue: Int) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val todayStr = getTodayDateString()
-        
+
         val lastDate = prefs.getString(KEY_LAST_DATE, "") ?: ""
         var baseline = prefs.getInt(KEY_BASELINE, -1)
         var todaySteps = prefs.getInt(KEY_TODAY_STEPS, 0)
+        val lastSensorValue = prefs.getInt(KEY_LAST_SENSOR_VALUE, -1)
 
-        // 1. Check Date Change (Midnight Reset)
+        // 1. Date Change — Midnight Reset
         if (lastDate != todayStr) {
             if (lastDate.isNotEmpty()) {
+                // Archive yesterday's steps before resetting
                 prefs.edit().putInt("yesterday_steps_$lastDate", todaySteps).apply()
             }
             baseline = sensorValue
@@ -96,18 +98,31 @@ class StepCounterService : Service(), SensorEventListener {
             prefs.edit()
                 .putString(KEY_LAST_DATE, todayStr)
                 .putInt(KEY_BASELINE, baseline)
-                .putInt(KEY_TODAY_STEPS, todaySteps)
+                .putInt(KEY_TODAY_STEPS, 0)
                 .apply()
         }
+        // 2. Service Restart on Same Day — Re-anchor baseline from last known sensor value.
+        //    When Android kills and restarts the service via START_STICKY, the prefs still
+        //    have the correct todaySteps but baseline may be stale.
+        //    Fix: re-derive baseline so that (sensorValue - baseline) == todaySteps exactly.
+        else if (lastDate == todayStr && lastSensorValue > 0 && baseline != -1) {
+            val expectedBaseline = lastSensorValue - todaySteps
+            // Only re-anchor if baseline has drifted (service was restarted or sensor restarted)
+            if (sensorValue != lastSensorValue && baseline != expectedBaseline) {
+                baseline = sensorValue - todaySteps
+                if (baseline < 0) baseline = 0
+                prefs.edit().putInt(KEY_BASELINE, baseline).apply()
+            }
+        }
 
-        // 2. Check Device Reboot (Sensor restarts at zero)
+        // 3. Device Reboot — Hardware sensor resets to zero after reboot
         if (baseline != -1 && sensorValue < baseline) {
             baseline = sensorValue - todaySteps
             if (baseline < 0) baseline = 0
             prefs.edit().putInt(KEY_BASELINE, baseline).apply()
         }
 
-        // 3. First Run Init
+        // 4. First Run Init — No baseline ever set
         if (baseline == -1) {
             baseline = sensorValue
             todaySteps = 0
@@ -117,24 +132,24 @@ class StepCounterService : Service(), SensorEventListener {
                 .apply()
         }
 
-        // 4. Calculate Steps
+        // 5. Calculate Steps
         val calculatedSteps = sensorValue - baseline
-        
+
         if (calculatedSteps in 0..todaySteps + 10000) {
             todaySteps = calculatedSteps
         } else {
-            // Re-align baseline on drift
+            // Drift guard — re-align baseline if calculated steps are wildly off
             baseline = sensorValue - todaySteps
             prefs.edit().putInt(KEY_BASELINE, baseline).apply()
         }
 
-        // 5. Persist values
+        // 6. Persist values
         prefs.edit()
             .putInt(KEY_TODAY_STEPS, todaySteps)
             .putInt(KEY_LAST_SENSOR_VALUE, sensorValue)
             .apply()
 
-        // 6. Refresh persistent notification
+        // 7. Refresh persistent notification
         updateNotification(todaySteps)
     }
 
