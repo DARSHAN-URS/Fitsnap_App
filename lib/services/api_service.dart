@@ -14,22 +14,25 @@ class ApiService {
   static const String productionUrl = 'https://api.sabtrack.in/api';
   static String baseUrl = productionUrl; // Default to production
   static String? _token;
+  static String? _refreshToken;
+  static bool _isRefreshing = false;
 
   // Configure baseUrl based on environment
   static void configureBaseUrl({required bool isDevelopment}) {
     baseUrl = isDevelopment ? localUrl : productionUrl;
   }
 
-  // Initialize the JWT token from secure storage on startup
+  // Initialize both JWT access token and refresh token from storage on startup
   static Future<void> initToken() async {
     try {
       _token = await PreferencesHelper.readString('auth_token');
+      _refreshToken = await PreferencesHelper.readString('auth_refresh_token');
     } catch (e) {
       debugPrint('Error initializing auth token: $e');
     }
   }
 
-  // Set the JWT token after login
+  // Set the JWT access token after login
   static void setToken(String token) {
     _token = token.isEmpty ? null : token;
     if (token.isEmpty) {
@@ -41,6 +44,119 @@ class ApiService {
         debugPrint('Error saving token: $e');
       });
     }
+  }
+
+  // Set the refresh token after login
+  static void setRefreshToken(String token) {
+    _refreshToken = token.isEmpty ? null : token;
+    if (token.isNotEmpty) {
+      PreferencesHelper.saveString('auth_refresh_token', token).catchError((e) {
+        debugPrint('Error saving refresh token: $e');
+      });
+    }
+  }
+
+  // Attempt to silently refresh the access token using the stored refresh token.
+  // Returns true if successful.
+  static Future<bool> _refreshAccessToken() async {
+    if (_refreshToken == null || _isRefreshing) return false;
+    _isRefreshing = true;
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': _refreshToken}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final newToken = data['token'] as String?;
+        final newRefresh = data['refresh_token'] as String?;
+        if (newToken != null) setToken(newToken);
+        if (newRefresh != null) setRefreshToken(newRefresh);
+        _isRefreshing = false;
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Token refresh failed: $e');
+    }
+    _isRefreshing = false;
+    return false;
+  }
+
+  // Authenticated GET with automatic 401 token refresh
+  static Future<http.Response> _authGet(String url) async {
+    var response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 401 && _refreshToken != null) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        response = await http.get(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $_token'},
+        );
+      }
+    }
+    return response;
+  }
+
+  // Authenticated POST with automatic 401 token refresh
+  static Future<http.Response> _authPost(String url, {Object? body}) async {
+    var response = await http.post(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $_token', 'Content-Type': 'application/json'},
+      body: body != null ? jsonEncode(body) : null,
+    );
+    if (response.statusCode == 401 && _refreshToken != null) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        response = await http.post(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $_token', 'Content-Type': 'application/json'},
+          body: body != null ? jsonEncode(body) : null,
+        );
+      }
+    }
+    return response;
+  }
+
+  // Authenticated PUT with automatic 401 token refresh
+  static Future<http.Response> _authPut(String url, {Object? body}) async {
+    var response = await http.put(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $_token', 'Content-Type': 'application/json'},
+      body: body != null ? jsonEncode(body) : null,
+    );
+    if (response.statusCode == 401 && _refreshToken != null) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        response = await http.put(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $_token', 'Content-Type': 'application/json'},
+          body: body != null ? jsonEncode(body) : null,
+        );
+      }
+    }
+    return response;
+  }
+
+  // Authenticated DELETE with automatic 401 token refresh
+  static Future<http.Response> _authDelete(String url) async {
+    var response = await http.delete(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 401 && _refreshToken != null) {
+      final refreshed = await _refreshAccessToken();
+      if (refreshed) {
+        response = await http.delete(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $_token'},
+        );
+      }
+    }
+    return response;
   }
 
   // --- Authentication ---
@@ -55,7 +171,9 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         final token = data['token'] ?? data['data']?['token'];
+        final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
+        if (refreshToken != null) setRefreshToken(refreshToken);
         return {'success': true, 'data': data};
       }
       try {
@@ -80,7 +198,9 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         final token = data['token'] ?? data['data']?['token'];
+        final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
+        if (refreshToken != null) setRefreshToken(refreshToken);
         return {'success': true, 'data': data};
       }
       try {
