@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
+import '../services/api_service.dart';
 
 class NutritionGoalsScreen extends StatefulWidget {
   const NutritionGoalsScreen({super.key});
@@ -23,6 +24,7 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
   }
 
   Future<void> _loadGoals() async {
+
     final double? savedCal = await PreferencesHelper.readDouble('profile_calorie_goal');
     final double? savedProt = await PreferencesHelper.readDouble('profile_protein_goal');
     final double? savedCarb = await PreferencesHelper.readDouble('profile_carbs_goal');
@@ -35,8 +37,27 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
         _carbsGoal = savedCarb;
         _fatsGoal = savedFat;
       });
-      return;
     }
+
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getNutritionGoals();
+      if (res['success'] == true && res['data'] != null) {
+        final data = res['data'];
+        setState(() {
+          _calorieGoal = (data['calorie_goal'] as num).toDouble();
+          _proteinGoal = (data['protein_goal'] as num).toDouble();
+          _carbsGoal = (data['carbs_goal'] as num).toDouble();
+          _fatsGoal = (data['fats_goal'] as num).toDouble();
+        });
+        await PreferencesHelper.saveDouble('profile_calorie_goal', _calorieGoal);
+        await PreferencesHelper.saveDouble('profile_protein_goal', _proteinGoal);
+        await PreferencesHelper.saveDouble('profile_carbs_goal', _carbsGoal);
+        await PreferencesHelper.saveDouble('profile_fats_goal', _fatsGoal);
+        return;
+      }
+    }
+
+    if (savedCal != null) return;
 
     // Load user details to calculate default recommended BMR/TDEE goals
     final String ageStr = await PreferencesHelper.readString('profile_age') ?? '25';
@@ -79,9 +100,6 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
   }
 
   // Calorie calculations from macros:
-  // Protein: 4 kcal/g
-  // Carbs: 4 kcal/g
-  // Fats: 9 kcal/g
   int get _calculatedMacroCalories =>
       (_proteinGoal * 4 + _carbsGoal * 4 + _fatsGoal * 9).toInt();
 
@@ -90,6 +108,15 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
     await PreferencesHelper.saveDouble('profile_protein_goal', _proteinGoal);
     await PreferencesHelper.saveDouble('profile_carbs_goal', _carbsGoal);
     await PreferencesHelper.saveDouble('profile_fats_goal', _fatsGoal);
+
+    if (ApiService.isAuthenticated) {
+      await ApiService.updateNutritionGoals(
+        calorieGoal: _calorieGoal,
+        proteinGoal: _proteinGoal,
+        carbsGoal: _carbsGoal,
+        fatsGoal: _fatsGoal,
+      );
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -111,6 +138,7 @@ class _NutritionGoalsScreenState extends State<NutritionGoalsScreen> {
       });
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

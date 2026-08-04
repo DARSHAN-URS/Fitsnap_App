@@ -219,6 +219,104 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     }
   }
 
+  void _showForgotPasswordDialog() {
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Reset Password',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter your registered email address to receive a password reset link.',
+                    style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailCtrl,
+                    style: GoogleFonts.inter(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'user@example.com',
+                      hintStyle: GoogleFonts.inter(color: Colors.white38),
+                      prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.accent),
+                      filled: true,
+                      fillColor: const Color(0xFF334155),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: isSending
+                      ? null
+                      : () async {
+                          final email = emailCtrl.text.trim();
+                          if (email.isEmpty) return;
+
+                          setDialogState(() => isSending = true);
+                          final res = await ApiService.forgotPassword(email);
+                          if (!mounted) return;
+                          Navigator.pop(ctx);
+
+                          if (res['success'] == true) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(res['data']?['message'] ?? 'Password reset link sent to $email! 📧'),
+                                backgroundColor: AppTheme.neonEmerald,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(res['error'] ?? 'Failed to send reset link'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isSending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text('Send Link', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,6 +389,23 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                               },
                             ),
                           ),
+                          if (isLogin) ...[
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: GestureDetector(
+                                onTap: _showForgotPasswordDialog,
+                                child: Text(
+                                  'Forgot Password?',
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.accent,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                           if (!isLogin) ...[
                             const SizedBox(height: 18),
                             _buildInput(
@@ -312,7 +427,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                               ),
                             ),
                           ],
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 24),
 
                           // Auth Button
                           Container(

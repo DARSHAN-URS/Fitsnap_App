@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/notification_service.dart';
+import '../services/api_service.dart';
+
 
 class BadgeState {
   final int streakDays;
@@ -90,8 +92,20 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
       }
     }
 
-    // Load earned badges or initialize with default
+    // Load earned badges from backend or local storage
     List<String> earned = prefs.getStringList('earned_badges') ?? ['First Log'];
+    
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getUserBadges();
+      if (res['success'] == true && res['data'] != null) {
+        final List<dynamic> backendBadges = res['data'];
+        for (var b in backendBadges) {
+          final String bId = b.toString();
+          if (!earned.contains(bId)) earned.add(bId);
+        }
+      }
+    }
+
     if (currentStreak >= 3 && !earned.contains('3 Day Streak')) {
       earned.add('3 Day Streak');
     }
@@ -162,6 +176,9 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
           title: 'Achievement Unlocked! 🏆',
           body: 'You earned the "$badge" badge for your healthy progress!',
         );
+        if (ApiService.isAuthenticated) {
+          ApiService.awardBadge(badge);
+        }
       }
       state = state.copyWith(earnedBadges: newBadges);
       await prefs.setStringList('earned_badges', newBadges);
@@ -172,6 +189,7 @@ class BadgeNotifier extends StateNotifier<BadgeState> {
     await updateStreakDaily();
   }
 }
+
 
 final badgeProvider = StateNotifierProvider<BadgeNotifier, BadgeState>((ref) {
   return BadgeNotifier();

@@ -57,8 +57,10 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     await PreferencesHelper.saveBool('water_reminders', _waterReminders);
     await PreferencesHelper.saveString('theme_accent', _selectedThemeAccent);
 
-    // Schedule or cancel water reminders
+    // Schedule or cancel water & meal reminders
     await NotificationService.scheduleWaterReminders(_waterReminders);
+    await NotificationService.scheduleMealReminders(_mealReminders);
+
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

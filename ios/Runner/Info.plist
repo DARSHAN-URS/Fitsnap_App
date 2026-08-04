@@ -72,5 +72,13 @@
 	<string>We need permission to read steps and health data from HealthKit to sync with your daily goals.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>We need permission to write health logs to HealthKit to save your progress.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We need camera access to capture food photos for AI nutrition analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need photo library access to select food photos and profile pictures.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need location access to track your outdoor workouts, distance, and routes in real-time.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need location access to accurately track your runs and walks.</string>
 </dict>
 </plist>

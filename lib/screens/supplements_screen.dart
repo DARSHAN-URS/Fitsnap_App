@@ -14,6 +14,7 @@ class SupplementsScreen extends StatefulWidget {
 
 class _SupplementsScreenState extends State<SupplementsScreen> {
   List<dynamic> _supplements = [];
+  Set<String> _takenIds = {};
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -29,11 +30,23 @@ class _SupplementsScreenState extends State<SupplementsScreen> {
       _errorMessage = null;
     });
 
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
     final res = await ApiService.getSupplements();
+    final logsRes = await ApiService.getSupplementLogs(todayStr);
+
     if (res['success'] == true) {
       final data = res['data'] as List<dynamic>;
+      final takenSet = <String>{};
+      if (logsRes['success'] == true && logsRes['data'] != null) {
+        for (var l in (logsRes['data'] as List)) {
+          final sId = l['supplement_id']?.toString();
+          if (sId != null) takenSet.add(sId);
+        }
+      }
+
       setState(() {
         _supplements = data;
+        _takenIds = takenSet;
         _isLoading = false;
       });
 
@@ -59,6 +72,29 @@ class _SupplementsScreenState extends State<SupplementsScreen> {
       });
     }
   }
+
+  Future<void> _toggleTaken(String supplementId, String name) async {
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    setState(() {
+      if (_takenIds.contains(supplementId)) {
+        _takenIds.remove(supplementId);
+      } else {
+        _takenIds.add(supplementId);
+      }
+    });
+
+    final res = await ApiService.logSupplementTaken(supplementId, todayStr);
+    if (res['success'] == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$name marked as taken for today! 💊'),
+          backgroundColor: AppTheme.neonEmerald,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
 
   Future<void> _deleteSupplement(Map<String, dynamic> item) async {
     final id = item['id'];
@@ -523,15 +559,27 @@ class _SupplementsScreenState extends State<SupplementsScreen> {
                                         ],
                                       ),
                                     ),
-                                    IconButton(
-                                      onPressed: () => _deleteSupplement(item),
-                                      icon: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        color: AppTheme.caloriesColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                     IconButton(
+                                       onPressed: () => _toggleTaken(item['id'].toString(), name),
+                                       icon: Icon(
+                                         _takenIds.contains(item['id'].toString())
+                                             ? Icons.check_circle_rounded
+                                             : Icons.radio_button_unchecked_rounded,
+                                         color: _takenIds.contains(item['id'].toString())
+                                             ? AppTheme.neonEmerald
+                                             : Colors.black26,
+                                         size: 26,
+                                       ),
+                                     ),
+                                     IconButton(
+                                       onPressed: () => _deleteSupplement(item),
+                                       icon: const Icon(
+                                         Icons.delete_outline_rounded,
+                                         color: AppTheme.caloriesColor,
+                                       ),
+                                     ),
+                                   ],
+                                 ),
                               ),
                             ),
                           ),

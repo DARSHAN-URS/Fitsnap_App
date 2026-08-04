@@ -284,4 +284,85 @@ class NotificationService {
       debugPrint('Error cancelling notification: $e');
     }
   }
+
+  static Future<void> scheduleFastingEndReminder(DateTime endTime) async {
+
+    try {
+      final tzEndTime = tz.TZDateTime.from(endTime, tz.local);
+      if (tzEndTime.isBefore(tz.TZDateTime.now(tz.local))) return;
+
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'sabtrack_channel_fasting',
+        'Fasting Alerts',
+        channelDescription: 'Alerts when fast duration ends',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+        playSound: true,
+      );
+
+      const NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+      );
+
+      await _notificationsPlugin.zonedSchedule(
+        50,
+        'Fast Completed! 🎉',
+        'Congratulations! You completed your scheduled fast target.',
+        tzEndTime,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling fasting notification: $e');
+    }
+  }
+
+  static Future<void> cancelFastingReminder() async {
+    await _notificationsPlugin.cancel(50);
+  }
+
+  static Future<void> scheduleMealReminders(bool enabled, {int hour = 12, int minute = 30}) async {
+    await _notificationsPlugin.cancel(200);
+    if (!enabled) return;
+
+    try {
+      final now = tz.TZDateTime.now(tz.local);
+      var scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+      if (scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 1));
+      }
+
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'sabtrack_channel_meals',
+        'Meal Reminders',
+        channelDescription: 'Daily reminders to log your meals',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+        playSound: true,
+      );
+
+      const NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+      );
+
+      await _notificationsPlugin.zonedSchedule(
+        200,
+        'Meal Time! 🥗',
+        'Don\'t forget to log your meal and track your macros!',
+        scheduledDate,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling meal reminder: $e');
+    }
+  }
 }
+

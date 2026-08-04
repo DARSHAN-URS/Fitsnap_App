@@ -63,20 +63,43 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     final activity = await PreferencesHelper.readString('profile_activity_level') ?? 'Moderately Active';
     final gender = await PreferencesHelper.readString('profile_gender') ?? 'Male';
     final allergies = await PreferencesHelper.readStringList('profile_allergies') ?? [];
- 
-    setState(() {
-      _nameController.text = name;
-      _usernameController.text = username;
-      _ageController.text = age;
-      _weight = weight;
-      _targetWeight = targetWeight;
-      _height = height;
-      _selectedGoal = goal;
-      _selectedActivity = activity;
-      _gender = gender;
-      _selectedAllergies = allergies;
-    });
+
+    if (mounted) {
+      setState(() {
+        _nameController.text = name;
+        _usernameController.text = username;
+        _ageController.text = age;
+        _weight = weight;
+        _targetWeight = targetWeight;
+        _height = height;
+        _selectedGoal = goal;
+        _selectedActivity = activity;
+        _gender = gender;
+        _selectedAllergies = allergies;
+      });
+    }
+
+    if (ApiService.isAuthenticated) {
+      final res = await ApiService.getProfile();
+      if (res['success'] == true && res['data'] != null) {
+        final d = res['data'];
+        if (mounted) {
+          setState(() {
+            _nameController.text = d['name'] ?? name;
+            _usernameController.text = d['username'] ?? username;
+            _ageController.text = (d['age'] ?? age).toString();
+            _weight = (d['weight'] as num?)?.toDouble() ?? weight;
+            _targetWeight = (d['target_weight'] as num?)?.toDouble() ?? targetWeight;
+            _height = (d['height'] as num?)?.toDouble() ?? height;
+            _selectedGoal = d['goals'] ?? d['goal'] ?? goal;
+            _selectedActivity = d['activity_level'] ?? activity;
+            _gender = d['gender'] ?? gender;
+          });
+        }
+      }
+    }
   }
+
 
   Future<String?> _savePersonalDetails() async {
     final name = _nameController.text.trim();

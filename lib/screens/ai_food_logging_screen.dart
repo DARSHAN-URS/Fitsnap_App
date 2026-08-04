@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:ui';
 import '../services/ai_food_logging_service.dart';
 import '../theme/app_theme.dart';
@@ -23,6 +24,24 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
     setState(() {
       _errorMsg = null;
     });
+
+    // Just-In-Time Permission Request before accessing camera or gallery
+    if (source == ImageSource.camera) {
+      final status = await Permission.camera.request();
+      if (status.isPermanentlyDenied) {
+        if (!mounted) return;
+        _showPermissionDialog('Camera permission is required to take food photos. Please enable it in Settings.');
+        return;
+      }
+      if (status.isDenied) return;
+    } else {
+      final status = await Permission.photos.request();
+      if (status.isPermanentlyDenied) {
+        if (!mounted) return;
+        _showPermissionDialog('Photo gallery permission is required to pick food images. Please enable it in Settings.');
+        return;
+      }
+    }
 
     try {
       final XFile? pickedFile = await _picker.pickImage(
@@ -80,6 +99,30 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
         _errorMsg = "An error occurred: $e";
       });
     }
+  }
+
+  void _showPermissionDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Permission Required'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+            child: const Text('Open Settings', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

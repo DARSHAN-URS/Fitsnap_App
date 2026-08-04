@@ -284,6 +284,129 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     }
   }
 
+  void _showInviteFriendsDialog() async {
+    // Load friends list
+    final friendsRes = await ApiService.getFriends();
+    final List<dynamic> friendsList = (friendsRes['success'] == true) ? (friendsRes['data'] ?? []) : [];
+
+    if (!mounted) return;
+
+    if (friendsList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No friends found to invite. Add friends from the Groups -> Friends tab!'),
+          backgroundColor: Colors.amber,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Invite Friends to Group',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: friendsList.length,
+                      separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                      itemBuilder: (context, index) {
+                        final f = friendsList[index];
+                        final fName = f['name'] ?? 'Friend';
+                        final fId = (f['friend_id'] ?? f['id'] ?? '').toString();
+                        final isInvited = widget.group.invitedFriends.contains(fId);
+
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: AppTheme.accent.withOpacity(0.2),
+                            child: Text(
+                              fName.substring(0, fName.length > 2 ? 2 : fName.length).toUpperCase(),
+                              style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Text(fName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          subtitle: Text(f['email'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                          trailing: ElevatedButton(
+                            onPressed: isInvited
+                                ? null
+                                : () async {
+                                    final res = await ApiService.inviteToGroup(widget.group.id, fId);
+                                    if (res['success'] == true) {
+                                      setState(() {
+                                        widget.group.invitedFriends.add(fId);
+                                      });
+                                      setModalState(() {});
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Invite sent to $fName! ✉️'),
+                                            backgroundColor: AppTheme.neonEmerald,
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(res['error'] ?? 'Failed to invite'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isInvited ? Colors.grey : AppTheme.accent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: Text(
+                              isInvited ? 'Invited' : 'Invite',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -313,6 +436,14 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ],
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add_rounded, color: AppTheme.accent),
+            tooltip: 'Invite Friends',
+            onPressed: _showInviteFriendsDialog,
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))

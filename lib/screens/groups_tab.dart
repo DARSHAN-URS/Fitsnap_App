@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/staggered_animation.dart';
 import '../utils/preferences_helper.dart';
 import 'group_details_screen.dart';
+import 'dm_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 
@@ -1186,13 +1187,26 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                             Row(
                               children: [
                                 GestureDetector(
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Fitness challenge invite sent to ${friend.name}! 👟'),
-                                        backgroundColor: AppTheme.accent,
-                                      ),
-                                    );
+                                  onTap: () async {
+                                    final fId = friend.friendId.isNotEmpty ? friend.friendId : friend.id;
+                                    final res = await ApiService.inviteFriendToChallenge(fId);
+                                    if (context.mounted) {
+                                      if (res['success'] == true) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Fitness challenge invite sent to ${friend.name}! 👟'),
+                                            backgroundColor: AppTheme.accent,
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(res['error'] ?? 'Failed to send challenge invite'),
+                                            backgroundColor: Colors.red.shade600,
+                                          ),
+                                        );
+                                      }
+                                    }
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1220,10 +1234,16 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                 const SizedBox(width: 6),
                                 GestureDetector(
                                   onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Opening chat with ${friend.name}... 💬'),
-                                        backgroundColor: AppTheme.primary,
+                                    final fId = friend.friendId.isNotEmpty ? friend.friendId : friend.id;
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => DmScreen(
+                                          friendId: fId,
+                                          friendName: friend.name,
+                                          friendAvatar: friend.avatar,
+                                          avatarColor: avatarCol,
+                                        ),
                                       ),
                                     );
                                   },

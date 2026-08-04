@@ -163,7 +163,7 @@ class ApiService {
   static Future<Map<String, dynamic>> analyzeNutritionText(String description, {String? date}) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/nutrition/describe'),
+        Uri.parse('$baseUrl/nutrition/analyze-text'),
         headers: {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
@@ -177,7 +177,14 @@ class ApiService {
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)};
       }
-      return {'success': false, 'error': 'Failed to analyze text description'};
+      String errorMsg = 'Failed to analyze text description';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('detail')) {
+          errorMsg = decoded['detail'];
+        }
+      } catch (_) {}
+      return {'success': false, 'error': errorMsg};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -775,10 +782,17 @@ class ApiService {
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
       );
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true};
       }
-      return {'success': false, 'error': 'Failed to join group'};
+      String errorMsg = 'Failed to join group';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('detail')) {
+          errorMsg = decoded['detail'];
+        }
+      } catch (_) {}
+      return {'success': false, 'error': errorMsg};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -793,10 +807,17 @@ class ApiService {
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
       );
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true};
       }
-      return {'success': false, 'error': 'Failed to leave group'};
+      String errorMsg = 'Failed to leave group';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('detail')) {
+          errorMsg = decoded['detail'];
+        }
+      } catch (_) {}
+      return {'success': false, 'error': errorMsg};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -912,7 +933,14 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};
       }
-      return {'success': false, 'error': 'Failed to add friend'};
+      String errorMsg = 'Failed to add friend';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('detail')) {
+          errorMsg = decoded['detail'];
+        }
+      } catch (_) {}
+      return {'success': false, 'error': errorMsg};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -1201,5 +1229,265 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // --- Badges ---
+  static Future<Map<String, dynamic>> getUserBadges() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/badges'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve badges'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> awardBadge(String badgeId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/user/badges'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'badge_id': badgeId}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to award badge'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Nutrition Goals ---
+  static Future<Map<String, dynamic>> getNutritionGoals() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/nutrition-goals'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to retrieve nutrition goals'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateNutritionGoals({
+    required double calorieGoal,
+    required double proteinGoal,
+    required double carbsGoal,
+    required double fatsGoal,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/user/nutrition-goals'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'calorie_goal': calorieGoal,
+          'protein_goal': proteinGoal,
+          'carbs_goal': carbsGoal,
+          'fats_goal': fatsGoal,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to update nutrition goals'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Supplement Take Logging ---
+  static Future<Map<String, dynamic>> logSupplementTaken(String supplementId, String date) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/supplements/$supplementId/log?date=$date'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to log supplement taken'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSupplementLogs(String date) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/supplements/logs?date=$date'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve supplement logs'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Group Invites ---
+  static Future<Map<String, dynamic>> inviteToGroup(String groupId, String inviteeId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/invite?invitee_id=$inviteeId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to send group invite'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getGroupInvites() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/invites'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to retrieve group invites'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> acceptGroupInvite(String groupId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/groups/$groupId/accept-invite'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to accept invite'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Forgot Password ---
+  static Future<Map<String, dynamic>> forgotPassword(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/forgot-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to send reset email'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Direct Messages ---
+  static Future<Map<String, dynamic>> getDmMessages(String friendId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/dm/$friendId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to load messages'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> sendDm(String friendId, String message) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/dm/$friendId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'message': message}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to send message'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // --- Challenge Invite ---
+  static Future<Map<String, dynamic>> inviteFriendToChallenge(String friendId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/challenges/invite/$friendId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Failed to send challenge invite'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
+
+
+
+
 

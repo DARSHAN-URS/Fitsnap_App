@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class FastingScreen extends StatefulWidget {
+
   const FastingScreen({super.key});
 
   @override
@@ -180,6 +182,8 @@ class _FastingScreenState extends State<FastingScreen> {
       final res = await ApiService.stopFast(_activeFastId!);
       if (res['success'] == true) {
         _timer?.cancel();
+        await NotificationService.cancelFastingReminder();
+
         _isFasting = false;
         final durationStr = "${_elapsedTime.inHours}h ${_elapsedTime.inMinutes.remainder(60)}m";
         _elapsedTime = Duration.zero;
@@ -257,7 +261,13 @@ class _FastingScreenState extends State<FastingScreen> {
               });
             }
           });
+
+          // Schedule alarm for fasting end target
+          final targetHours = _protocols[_selectedProtocol] ?? 16;
+          final endTime = _fastStart!.add(Duration(hours: targetHours));
+          NotificationService.scheduleFastingEndReminder(endTime);
         }
+
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

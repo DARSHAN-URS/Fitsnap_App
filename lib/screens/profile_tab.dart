@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../auth_screen.dart';
@@ -117,6 +118,18 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
 
   Future<void> _pickAndUploadProfilePicture() async {
     try {
+      final status = await Permission.photos.request();
+      if (status.isPermanentlyDenied) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Photo library permission is required to change profile picture.'),
+            action: SnackBarAction(label: 'Settings', onPressed: () => openAppSettings()),
+          ),
+        );
+        return;
+      }
+
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,

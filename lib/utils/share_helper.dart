@@ -38,10 +38,11 @@ class ShareHelper {
     bool asJpeg = false,
   }) async {
     try {
-      // Request storage permission (Android)
-      if (await Permission.storage.request().isDenied) {
-        debugPrint('Storage permission denied');
-        return null;
+      // Request storage / media permission
+      if (Platform.isAndroid) {
+        if (await Permission.photos.isDenied && await Permission.storage.isDenied) {
+          await [Permission.photos, Permission.storage].request();
+        }
       }
 
       final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;

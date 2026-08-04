@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'app_theme.dart';
 
 class SabtrackLogo extends StatelessWidget {
+
   final double size;
   final Color? color;
 
