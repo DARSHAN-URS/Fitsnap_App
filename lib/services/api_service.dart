@@ -262,7 +262,9 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         final token = data['token'] ?? data['data']?['token'];
+        final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
+        if (refreshToken != null) setRefreshToken(refreshToken);
         return {'success': true, 'data': data};
       }
       try {

@@ -70,8 +70,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       if (result['success'] == true) {
         final token = result['data']?['token'] ?? result['data']?['data']?['token'];
+        final refreshToken = result['data']?['refresh_token'] ?? result['data']?['data']?['refresh_token'];
         if (token != null) {
           ApiService.setToken(token as String);
+        }
+        if (refreshToken != null) {
+          ApiService.setRefreshToken(refreshToken as String);
         }
         state = state.copyWith(isLoading: false, success: true);
       } else {
