@@ -136,6 +136,15 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(
         ThemeData.light().textTheme,
       ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFF0F172A),
+        contentTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
       useMaterial3: true,
     );
   }
@@ -152,6 +161,15 @@ class AppTheme {
       ),
       textTheme: GoogleFonts.interTextTheme(
         ThemeData.dark().textTheme,
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFF0F172A),
+        contentTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        behavior: SnackBarBehavior.floating,
       ),
       useMaterial3: true,
     );

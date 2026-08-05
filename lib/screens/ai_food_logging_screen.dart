@@ -77,12 +77,20 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
           _isAnalyzing = false;
         });
 
+        final rawData = res['data'];
+        List<Map<String, dynamic>> foodsList = [];
+        if (rawData is Map && rawData['foods'] is List) {
+          foodsList = (rawData['foods'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList();
+        } else if (rawData is Map && rawData.containsKey('name')) {
+          foodsList = [Map<String, dynamic>.from(rawData)];
+        }
+
         // Navigate to the Review screen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => MealReviewScreen(
-              initialFoods: List<Map<String, dynamic>>.from(res['data']['foods']),
+              initialFoods: foodsList,
               imagePath: pickedFile.path,
             ),
           ),

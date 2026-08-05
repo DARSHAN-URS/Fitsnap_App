@@ -160,6 +160,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   final List<GroupItem> _groups = [];
   List<GroupItem> _filteredGroups = [];
   final List<FriendItem> _friends = [];
+  final List<dynamic> _pendingRequests = [];
   int _selectedTab = 0;
   bool _isAddingFriend = false;
   bool _isLoading = true;
@@ -230,6 +231,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     final groupsRes = await ApiService.getGroups();
     final friendsRes = await ApiService.getFriends();
     final suggestionsRes = await ApiService.getFriendSuggestions();
+    final pendingRes = await ApiService.getPendingFriendRequests();
     
     List<GroupItem> newGroups = _groups;
     if (groupsRes['success'] == true) {
@@ -249,6 +251,11 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     if (suggestionsRes['success'] == true) {
       newSuggestions = suggestionsRes['data'] ?? [];
     }
+
+    List<dynamic> newPending = [];
+    if (pendingRes['success'] == true) {
+      newPending = pendingRes['data'] ?? [];
+    }
     
     if (mounted) {
       setState(() {
@@ -258,6 +265,8 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
         _friends.addAll(newFriends);
         _suggestions.clear();
         _suggestions.addAll(newSuggestions);
+        _pendingRequests.clear();
+        _pendingRequests.addAll(newPending);
         _isLoading = false;
         _filterGroups();
       });
@@ -284,14 +293,14 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       
       NotificationService.showNotification(
         id: query.hashCode,
-        title: 'Friend Request Accepted! 🤝',
-        body: 'You and $query are now connected.',
+        title: 'Friend Request Sent! 📩',
+        body: 'Your friend request to $query has been sent.',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added friend: $query'),
+            content: Text('Friend request sent to $query! 📩'),
             backgroundColor: Colors.green,
           ),
         );
@@ -300,7 +309,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['error'] ?? 'User not found or already friends'),
+            content: Text(res['error'] ?? 'User not found or request already sent'),
             backgroundColor: Colors.red,
           ),
         );
@@ -309,6 +318,45 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     
     if (mounted) {
       setState(() => _isAddingFriend = false);
+    }
+  }
+
+  Future<void> _acceptRequest(String requestId) async {
+    final res = await ApiService.acceptFriendRequest(requestId);
+    if (res['success'] == true) {
+      await _fetchData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Friend request accepted! 🤝'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'Failed to accept request'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _declineRequest(String requestId) async {
+    final res = await ApiService.declineFriendRequest(requestId);
+    if (res['success'] == true) {
+      await _fetchData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Friend request declined'),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      }
     }
   }
 
@@ -800,6 +848,140 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 12),
+        ],
+
+        if (!_isSearching && _searchSuggestions.isEmpty && _pendingRequests.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text(
+                'Pending Friend Requests',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.primary,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_pendingRequests.length}',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _pendingRequests.length,
+            itemBuilder: (context, index) {
+              final req = _pendingRequests[index];
+              final String requestId = (req['id'] ?? '').toString();
+              final String name = req['name'] ?? 'User';
+              final String username = req['username'] ?? '';
+              final String avatar = req['avatar'] ?? 'FR';
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: AppTheme.cardShadow,
+                  border: Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.accent.withOpacity(0.12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          avatar,
+                          style: GoogleFonts.inter(
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                          if (username.isNotEmpty)
+                            Text(
+                              '@$username',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.black45,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _acceptRequest(requestId),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text('Accept', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800)),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: () => _declineRequest(requestId),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.grey.shade700,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text('Decline', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
 
         if (!_isSearching && _searchSuggestions.isEmpty && _suggestions.isNotEmpty) ...[

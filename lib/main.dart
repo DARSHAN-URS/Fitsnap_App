@@ -13,7 +13,7 @@ import 'utils/preferences_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  ApiService.configureBaseUrl(isDevelopment: kDebugMode);
+  ApiService.configureBaseUrl(isDevelopment: false);
 
   try {
     await ApiService.initToken();

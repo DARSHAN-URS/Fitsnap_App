@@ -381,62 +381,102 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void _showScanToast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppTheme.primary,
+        backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
 
   void _handleAnalysisResponse(Map<String, dynamic> result, String successMsg, {String? imagePath, String? description}) {
-    if (result['success']) {
-      final data = result['data']['data'];
+    if (result['success'] == true && result['data'] != null) {
+      final rawData = result['data'];
+      Map<String, dynamic> data = {};
+      if (rawData is Map<String, dynamic> && rawData['data'] is Map<String, dynamic>) {
+        data = Map<String, dynamic>.from(rawData['data']);
+      } else if (rawData is Map<String, dynamic>) {
+        data = Map<String, dynamic>.from(rawData);
+      }
       
       // Calculate current time formatted string
       final now = DateTime.now();
       final String timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-      setState(() {
-        _meals.add({
-          'name': data['name'] ?? 'Analyzed Meal',
-          'calories': data['calories'] ?? 0,
-          'protein': data['protein'] ?? 0,
-          'carbs': data['carbs'] ?? 0,
-          'fats': data['fats'] ?? 0,
-          'time': timeStr,
-          if (imagePath != null) 'imagePath': imagePath,
-          if (description != null) 'description': description,
-          if (result['data']['image_url'] != null) 'image_url': result['data']['image_url'],
+      final int calVal = ((data['calories'] ?? data['total_calories'] ?? 0) as num).toInt();
+      final int proVal = ((data['protein'] ?? 0) as num).toInt();
+      final int carbVal = ((data['carbs'] ?? 0) as num).toInt();
+      final int fatVal = ((data['fats'] ?? data['fat'] ?? 0) as num).toInt();
+
+      if (mounted) {
+        setState(() {
+          _meals.add({
+            'name': data['name'] ?? 'Analyzed Meal',
+            'calories': calVal,
+            'protein': proVal,
+            'carbs': carbVal,
+            'fats': fatVal,
+            'time': timeStr,
+            if (imagePath != null) 'imagePath': imagePath,
+            if (description != null) 'description': description,
+            if (rawData is Map && rawData['image_url'] != null) 'image_url': rawData['image_url'],
+          });
+          _consumed += calVal;
+          _protein += proVal;
+          _carbs += carbVal;
+          _fats += fatVal;
         });
-        _consumed += (data['calories'] as num).toInt();
-        _protein += (data['protein'] as num).toInt();
-        _carbs += (data['carbs'] as num).toInt();
-        _fats += (data['fats'] as num).toInt();
-      });
-      _saveLogs();
+        _saveLogs();
 
-      NotificationService.showNotification(
-        id: 1,
-        title: 'Meal Logged! 🍳',
-        body: 'Added "${data['name'] ?? 'Meal'}" (${data['calories']} kcal) to your daily journal.',
-      );
+        NotificationService.showNotification(
+          id: 1,
+          title: 'Meal Logged! 🍳',
+          body: 'Added "${data['name'] ?? 'Meal'}" ($calVal kcal) to your daily journal.',
+        );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(successMsg),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.green.shade600,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              successMsg,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.green.shade600,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        );
+      }
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['error'] ?? 'Analysis failed. Please check backend connection.'),
+          content: Text(
+            result['error'] ?? 'Analysis failed. Please check backend connection.',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.red.shade600,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

@@ -22,15 +22,42 @@ class ApiService {
     baseUrl = isDevelopment ? localUrl : productionUrl;
   }
 
-  // Initialize both JWT access token and refresh token from storage on startup
+  // Initialize both JWT access token and refresh token from storage on startup.
+  // If the stored access token is expired (or expires within 5 min), silently
+  // refreshes it using the stored refresh token so the first API call succeeds.
   static Future<void> initToken() async {
     try {
       _token = await PreferencesHelper.readString('auth_token');
       _refreshToken = await PreferencesHelper.readString('auth_refresh_token');
+
+      // Proactively refresh if token is expired or about to expire (within 5 min)
+      if (_token != null && _refreshToken != null) {
+        final payload = _decodeJwtPayload(_token!);
+        final exp = payload['exp'];
+        final nowPlusFiveMin = (DateTime.now().millisecondsSinceEpoch / 1000) + 300;
+        if (exp != null && exp < nowPlusFiveMin) {
+          debugPrint('initToken: access token expired/expiring soon, refreshing...');
+          await _refreshAccessToken();
+        }
+      }
     } catch (e) {
       debugPrint('Error initializing auth token: $e');
     }
   }
+
+  // Decode JWT payload without signature verification (reuse logic from backend)
+  static Map<String, dynamic> _decodeJwtPayload(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length >= 2) {
+        final padded = parts[1] + '=' * (-parts[1].length % 4);
+        final decoded = utf8.decode(base64Url.decode(padded));
+        return jsonDecode(decoded) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {};
+  }
+
 
   // Set the JWT access token after login
   static void setToken(String token) {
@@ -1605,7 +1632,66 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // --- Friend Requests ---
+  static Future<Map<String, dynamic>> getPendingFriendRequests() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends/requests/pending'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
+        return {'success': true, 'data': list};
+      }
+      return {'success': false, 'error': 'Failed to fetch friend requests'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> acceptFriendRequest(String requestId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/friends/requests/$requestId/accept'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      final err = jsonDecode(response.body);
+      return {'success': false, 'error': err['detail'] ?? 'Failed to accept request'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> declineFriendRequest(String requestId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/friends/requests/$requestId/decline'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      final err = jsonDecode(response.body);
+      return {'success': false, 'error': err['detail'] ?? 'Failed to decline request'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
+
 
 
 

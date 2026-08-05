@@ -15,6 +15,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import android.content.pm.ServiceInfo
 
+import android.os.SystemClock
+
 class StepCounterService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
@@ -42,17 +44,7 @@ class StepCounterService : Service(), SensorEventListener {
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SABTRACK::StepCounterWakeLock")
         wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout, refreshed on step updates
 
-        createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                getNotification(getTodayStepsFromPrefs()),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, getNotification(getTodayStepsFromPrefs()))
-        }
-
+        startForegroundWithNotification()
         registerSensor()
     }
 
@@ -63,7 +55,44 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForegroundWithNotification()
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Auto-restart foreground service via AlarmManager if task is swiped away from recent apps
+        try {
+            val restartServiceIntent = Intent(applicationContext, StepCounterService::class.java).also {
+                it.setPackage(packageName)
+            }
+            val restartServicePendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartServiceIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmService.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 1000,
+                restartServicePendingIntent
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
+    private fun startForegroundWithNotification() {
+        createNotificationChannel()
+        val notification = getNotification(getTodayStepsFromPrefs())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -102,12 +131,8 @@ class StepCounterService : Service(), SensorEventListener {
                 .apply()
         }
         // 2. Service Restart on Same Day — Re-anchor baseline from last known sensor value.
-        //    When Android kills and restarts the service via START_STICKY, the prefs still
-        //    have the correct todaySteps but baseline may be stale.
-        //    Fix: re-derive baseline so that (sensorValue - baseline) == todaySteps exactly.
         else if (lastDate == todayStr && lastSensorValue > 0 && baseline != -1) {
             val expectedBaseline = lastSensorValue - todaySteps
-            // Only re-anchor if baseline has drifted (service was restarted or sensor restarted)
             if (sensorValue != lastSensorValue && baseline != expectedBaseline) {
                 baseline = sensorValue - todaySteps
                 if (baseline < 0) baseline = 0
@@ -138,7 +163,6 @@ class StepCounterService : Service(), SensorEventListener {
         if (calculatedSteps in 0..todaySteps + 10000) {
             todaySteps = calculatedSteps
         } else {
-            // Drift guard — re-align baseline if calculated steps are wildly off
             baseline = sensorValue - todaySteps
             prefs.edit().putInt(KEY_BASELINE, baseline).apply()
         }
@@ -189,14 +213,18 @@ class StepCounterService : Service(), SensorEventListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val iconRes = R.mipmap.launcher_icon
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("SABTRACK AI")
             .setContentText("Daily progress: $steps steps logged today")
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setSmallIcon(iconRes)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 
@@ -212,3 +240,4 @@ class StepCounterService : Service(), SensorEventListener {
         }
     }
 }
+
