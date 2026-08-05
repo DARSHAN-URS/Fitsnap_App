@@ -431,14 +431,24 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       final String timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
       final int calVal = ((data['calories'] ?? data['total_calories'] ?? 0) as num).toInt();
-      final int proVal = ((data['protein'] ?? 0) as num).toInt();
-      final int carbVal = ((data['carbs'] ?? 0) as num).toInt();
-      final int fatVal = ((data['fats'] ?? data['fat'] ?? 0) as num).toInt();
+      final int proVal = (((data['protein'] ?? 0) as num).toDouble()).round();
+      final int carbVal = (((data['carbs'] ?? 0) as num).toDouble()).round();
+      final int fatVal = (((data['fats'] ?? data['fat'] ?? 0) as num).toDouble()).round();
+
+      String mealName = data['name'] ?? 'Meal Log';
+      if (mealName == 'Analyzed Meal' || mealName == 'Unknown Meal') {
+        if (data['foods'] is List && (data['foods'] as List).isNotEmpty) {
+          final first = (data['foods'] as List)[0];
+          if (first is Map && (first['food_name'] != null || first['name'] != null)) {
+            mealName = first['food_name'] ?? first['name'];
+          }
+        }
+      }
 
       if (mounted) {
         setState(() {
           _meals.add({
-            'name': data['name'] ?? 'Analyzed Meal',
+            'name': mealName,
             'calories': calVal,
             'protein': proVal,
             'carbs': carbVal,
