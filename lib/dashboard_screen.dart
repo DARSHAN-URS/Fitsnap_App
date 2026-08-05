@@ -158,7 +158,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       // 1. Fetch meals from backend for the selected date
       final mealsRes = await ApiService.getMeals(date: dateStr);
       if (mealsRes['success']) {
-        final List<dynamic> serverMeals = mealsRes['data'];
+        final dynamic rawData = mealsRes['data'];
+        final List<dynamic> serverMeals = (rawData is List)
+            ? rawData
+            : (rawData is Map && rawData['meals'] is List ? rawData['meals'] as List : []);
+
         mealsTemp.clear();
         consumedTemp = 0;
         proteinTemp = 0;
@@ -168,8 +172,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         for (var meal in serverMeals) {
           final double proteinVal = (meal['protein'] as num?)?.toDouble() ?? 0.0;
           final double carbsVal = (meal['carbs'] as num?)?.toDouble() ?? 0.0;
-          final double fatsVal = (meal['fats'] as num?)?.toDouble() ?? 0.0;
-          final int caloriesVal = (meal['calories'] as num?)?.toInt() ?? 0;
+          final double fatsVal = ((meal['fat'] ?? meal['fats']) as num?)?.toDouble() ?? 0.0;
+          final int caloriesVal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
 
           mealsTemp.add({
             'name': meal['name'] ?? 'Meal Log',

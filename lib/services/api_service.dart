@@ -472,7 +472,6 @@ class ApiService {
     }
   }
 
-  // --- Meals Logging & Fetching ---
   static Future<Map<String, dynamic>> getMeals({String? date}) async {
     try {
       final queryParam = date != null ? '?date=$date' : '';
@@ -484,8 +483,13 @@ class ApiService {
         },
       );
       if (response.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(response.body)['data'];
-        return {'success': true, 'data': list};
+        final data = jsonDecode(response.body)['data'];
+        if (data is List) {
+          return {'success': true, 'data': data};
+        } else if (data is Map && data['meals'] is List) {
+          return {'success': true, 'data': data['meals'], 'summary': data};
+        }
+        return {'success': true, 'data': []};
       }
       return {'success': false, 'error': 'Failed to retrieve meals'};
     } catch (e) {
