@@ -31,6 +31,7 @@ class _DmScreenState extends State<DmScreen> {
   bool _isSending = false;
   bool _isLoading = true;
   String? _myProfileName;
+  String? _myUserId;
 
   @override
   void initState() {
@@ -57,10 +58,11 @@ class _DmScreenState extends State<DmScreen> {
     if (!silent && mounted) setState(() => _isLoading = true);
 
     // Get my profile to mark messages as "mine"
-    if (_myProfileName == null) {
+    if (_myProfileName == null || _myUserId == null) {
       final profileRes = await ApiService.getProfile();
       if (profileRes['success'] == true && profileRes['data'] != null) {
         _myProfileName = profileRes['data']['name'] ?? '';
+        _myUserId = profileRes['data']['id']?.toString() ?? '';
       }
     }
 
@@ -68,6 +70,7 @@ class _DmScreenState extends State<DmScreen> {
     if (res['success'] == true && mounted) {
       final List<dynamic> raw = res['data'] ?? [];
       final myToken = ApiService.token ?? '';
+      final cleanTokenId = myToken.replaceAll('mock-token-', '');
 
       // Check for new incoming messages and notify
       if (silent && raw.length > _messages.length) {
@@ -75,7 +78,9 @@ class _DmScreenState extends State<DmScreen> {
         final newMsgs = raw.where((m) {
           final id = m['id']?.toString() ?? '';
           final senderId = m['sender_id']?.toString() ?? '';
-          return !oldIds.contains(id) && senderId != myToken.replaceAll('mock-token-', '');
+          final isSenderMe = (_myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) ||
+                              (myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId));
+          return !oldIds.contains(id) && !isSenderMe;
         }).toList();
 
         for (var m in newMsgs) {
@@ -91,7 +96,8 @@ class _DmScreenState extends State<DmScreen> {
         _messages.clear();
         for (var m in raw) {
           final senderId = m['sender_id']?.toString() ?? '';
-          final isMe = myToken.isNotEmpty && senderId == myToken.replaceAll('mock-token-', '');
+          final isMe = (_myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) ||
+                       (myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId));
           _messages.add({
             'id': m['id']?.toString() ?? '',
             'message': m['message'] ?? '',
