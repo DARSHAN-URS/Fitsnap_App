@@ -13,6 +13,9 @@ class ApiService {
   static String get localUrl => 'http://$_localHost:3000/api';
   static const String productionUrl = 'https://api.sabtrack.in/api';
   static String baseUrl = productionUrl; // Default to Railway live backend
+  static String? _token;
+  static String? _refreshToken;
+  static bool _isRefreshing = false;
 
   // Always use live production Railway backend
   static void configureBaseUrl({required bool isDevelopment}) {
