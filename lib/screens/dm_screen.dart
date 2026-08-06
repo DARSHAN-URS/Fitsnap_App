@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
@@ -54,15 +55,33 @@ class _DmScreenState extends State<DmScreen> {
     });
   }
 
+  String _getUserIdFromToken(String token) {
+    if (token.isEmpty) return '';
+    if (token.startsWith('mock-token-')) {
+      return token.replaceAll('mock-token-', '');
+    }
+    try {
+      final parts = token.split('.');
+      if (parts.length >= 2) {
+        final padded = parts[1] + '=' * (-parts[1].length % 4);
+        final decoded = utf8.decode(base64Url.decode(padded));
+        final Map<String, dynamic> payload = jsonDecode(decoded);
+        return payload['sub']?.toString() ?? payload['user_id']?.toString() ?? payload['id']?.toString() ?? '';
+      }
+    } catch (_) {}
+    return '';
+  }
+
   Future<void> _loadMessages({bool silent = false}) async {
     if (!silent && mounted) setState(() => _isLoading = true);
 
     // Get my profile to mark messages as "mine"
-    if (_myProfileName == null || _myUserId == null) {
+    if (_myProfileName == null || _myUserId == null || _myUserId!.isEmpty) {
       final profileRes = await ApiService.getProfile();
       if (profileRes['success'] == true && profileRes['data'] != null) {
-        _myProfileName = profileRes['data']['name'] ?? '';
-        _myUserId = profileRes['data']['id']?.toString() ?? '';
+        final data = profileRes['data'];
+        _myProfileName = data['name'] ?? '';
+        _myUserId = data['user_id']?.toString() ?? data['id']?.toString() ?? '';
       }
     }
 
@@ -71,15 +90,36 @@ class _DmScreenState extends State<DmScreen> {
       final List<dynamic> raw = res['data'] ?? [];
       final myToken = ApiService.token ?? '';
       final cleanTokenId = myToken.replaceAll('mock-token-', '');
+      final tokenUserId = _getUserIdFromToken(myToken);
+
+      bool checkIsMe(dynamic m) {
+        final senderId = m['sender_id']?.toString() ?? m['user_id']?.toString() ?? '';
+        final receiverId = m['receiver_id']?.toString() ?? '';
+        
+        if (senderId.isNotEmpty && widget.friendId.isNotEmpty && senderId == widget.friendId) {
+          return false; // Explicitly sent by the friend
+        }
+        if (receiverId.isNotEmpty && widget.friendId.isNotEmpty && receiverId == widget.friendId) {
+          return true; // Sent by me to friend
+        }
+        if (senderId.isNotEmpty && _myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) {
+          return true;
+        }
+        if (senderId.isNotEmpty && tokenUserId.isNotEmpty && senderId == tokenUserId) {
+          return true;
+        }
+        if (senderId.isNotEmpty && myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId)) {
+          return true;
+        }
+        return false;
+      }
 
       // Check for new incoming messages and notify
       if (silent && raw.length > _messages.length) {
         final oldIds = _messages.map((m) => m['id']).toSet();
         final newMsgs = raw.where((m) {
           final id = m['id']?.toString() ?? '';
-          final senderId = m['sender_id']?.toString() ?? '';
-          final isSenderMe = (_myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) ||
-                              (myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId));
+          final isSenderMe = checkIsMe(m);
           return !oldIds.contains(id) && !isSenderMe;
         }).toList();
 
@@ -95,9 +135,7 @@ class _DmScreenState extends State<DmScreen> {
       setState(() {
         _messages.clear();
         for (var m in raw) {
-          final senderId = m['sender_id']?.toString() ?? '';
-          final isMe = (_myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) ||
-                       (myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId));
+          final isMe = checkIsMe(m);
           _messages.add({
             'id': m['id']?.toString() ?? '',
             'message': m['message'] ?? '',

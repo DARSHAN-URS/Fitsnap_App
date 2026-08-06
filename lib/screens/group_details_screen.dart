@@ -189,13 +189,21 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       final List<dynamic> list = res['data'] ?? [];
       final List<Map<String, dynamic>> loadedMessages = [];
       
-      // Get current user profile name to check if "isMe"
+      // Get current user profile to check if "isMe"
       final profileRes = await ApiService.getProfile();
-      final myName = (profileRes['success'] == true) ? (profileRes['data']?['name'] ?? '') : '';
+      final data = (profileRes['success'] == true) ? profileRes['data'] : null;
+      final myName = data?['name']?.toString() ?? '';
+      final myUserId = data?['user_id']?.toString() ?? data?['id']?.toString() ?? '';
+      final myToken = ApiService.token ?? '';
+      final cleanTokenId = myToken.replaceAll('mock-token-', '');
       
       for (final m in list) {
         final senderName = m['sender_name'] ?? 'Guest';
-        final isMe = (myName.isNotEmpty && senderName == myName) || (m['user_id'] == ApiService.token);
+        final senderId = m['user_id']?.toString() ?? m['sender_id']?.toString() ?? '';
+        final isMe = (myUserId.isNotEmpty && senderId == myUserId) ||
+                     (senderId.isNotEmpty && (senderId == myToken || senderId == cleanTokenId)) ||
+                     (myName.isNotEmpty && senderName == myName) ||
+                     (m['user_id'] == ApiService.token);
         
         loadedMessages.add({
           'id': m['id'].toString(),

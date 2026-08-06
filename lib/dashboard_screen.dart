@@ -143,6 +143,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       }
     }
 
+    if (mealsTemp.isNotEmpty) {
+      int calcConsumed = 0;
+      int calcProtein = 0;
+      int calcCarbs = 0;
+      int calcFats = 0;
+      for (var m in mealsTemp) {
+        calcConsumed += ((m['calories'] ?? m['total_calories']) as num?)?.toInt() ?? 0;
+        calcProtein += ((m['protein']) as num?)?.toInt() ?? 0;
+        calcCarbs += ((m['carbs']) as num?)?.toInt() ?? 0;
+        calcFats += ((m['fats'] ?? m['fat']) as num?)?.toInt() ?? 0;
+      }
+      if (consumedTemp == 0) consumedTemp = calcConsumed;
+      if (proteinTemp == 0) proteinTemp = calcProtein;
+      if (carbsTemp == 0) carbsTemp = calcCarbs;
+      if (fatsTemp == 0) fatsTemp = calcFats;
+    }
+
     setState(() {
       _consumed = consumedTemp;
       _protein = proteinTemp;
@@ -163,34 +180,77 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ? rawData
             : (rawData is Map && rawData['meals'] is List ? rawData['meals'] as List : []);
 
-        mealsTemp.clear();
-        consumedTemp = 0;
-        proteinTemp = 0;
-        carbsTemp = 0;
-        fatsTemp = 0;
+        int serverConsumed = 0;
+        int serverProtein = 0;
+        int serverCarbs = 0;
+        int serverFats = 0;
 
-        for (var meal in serverMeals) {
-          final double proteinVal = (meal['protein'] as num?)?.toDouble() ?? 0.0;
-          final double carbsVal = (meal['carbs'] as num?)?.toDouble() ?? 0.0;
-          final double fatsVal = ((meal['fat'] ?? meal['fats']) as num?)?.toDouble() ?? 0.0;
-          final int caloriesVal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
+        if (rawData is Map) {
+          serverConsumed = (rawData['calories'] as num?)?.toInt() ?? 0;
+          serverProtein = (rawData['protein'] as num?)?.toInt() ?? 0;
+          serverCarbs = (rawData['carbs'] as num?)?.toInt() ?? 0;
+          serverFats = ((rawData['fat'] ?? rawData['fats']) as num?)?.toInt() ?? 0;
+        }
 
-          mealsTemp.add({
-            'name': meal['name'] ?? 'Meal Log',
-            'calories': caloriesVal,
-            'protein': proteinVal.toInt(),
-            'carbs': carbsVal.toInt(),
-            'fats': fatsVal.toInt(),
-            'description': meal['description'],
-            'image_url': meal['image_url'],
-            'time': meal['logged_at'] != null 
-                ? '${DateTime.parse(meal['logged_at']).toLocal().hour.toString().padLeft(2, '0')}:${DateTime.parse(meal['logged_at']).toLocal().minute.toString().padLeft(2, '0')}'
-                : 'Just now',
-          });
-          consumedTemp += caloriesVal;
-          proteinTemp += proteinVal.toInt();
-          carbsTemp += carbsVal.toInt();
-          fatsTemp += fatsVal.toInt();
+        if (serverMeals.isNotEmpty || serverConsumed > 0) {
+          final List<Map<String, dynamic>> parsedServerMeals = [];
+          int sumConsumed = 0;
+          int sumProtein = 0;
+          int sumCarbs = 0;
+          int sumFats = 0;
+
+          for (var meal in serverMeals) {
+            final double proteinVal = (meal['protein'] as num?)?.toDouble() ?? 0.0;
+            final double carbsVal = (meal['carbs'] as num?)?.toDouble() ?? 0.0;
+            final double fatsVal = ((meal['fat'] ?? meal['fats']) as num?)?.toDouble() ?? 0.0;
+            final int caloriesVal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
+
+            parsedServerMeals.add({
+              'name': meal['name'] ?? 'Meal Log',
+              'calories': caloriesVal,
+              'protein': proteinVal.toInt(),
+              'carbs': carbsVal.toInt(),
+              'fats': fatsVal.toInt(),
+              'description': meal['description'],
+              'image_url': meal['image_url'],
+              'time': meal['logged_at'] != null 
+                  ? '${DateTime.parse(meal['logged_at']).toLocal().hour.toString().padLeft(2, '0')}:${DateTime.parse(meal['logged_at']).toLocal().minute.toString().padLeft(2, '0')}'
+                  : 'Just now',
+            });
+            sumConsumed += caloriesVal;
+            sumProtein += proteinVal.toInt();
+            sumCarbs += carbsVal.toInt();
+            sumFats += fatsVal.toInt();
+          }
+
+          if (parsedServerMeals.isNotEmpty) {
+            mealsTemp = parsedServerMeals;
+          }
+          consumedTemp = serverConsumed > 0 ? serverConsumed : sumConsumed;
+          proteinTemp = serverProtein > 0 ? serverProtein : sumProtein;
+          carbsTemp = serverCarbs > 0 ? serverCarbs : sumCarbs;
+          fatsTemp = serverFats > 0 ? serverFats : sumFats;
+
+          // Keep local preferences cache updated with server data
+          final serializableMeals = mealsTemp.map((m) {
+            final copy = Map<String, dynamic>.from(m);
+            if (copy['tagColor'] != null && copy['tagColor'] is Color) {
+              copy['tagColor'] = (copy['tagColor'] as Color).value;
+            }
+            return copy;
+          }).toList();
+          await prefs.setString('dashboard_meals_$dateStr', jsonEncode(serializableMeals));
+          await prefs.setInt('dashboard_consumed_$dateStr', consumedTemp);
+          await prefs.setInt('dashboard_protein_$dateStr', proteinTemp);
+          await prefs.setInt('dashboard_carbs_$dateStr', carbsTemp);
+          await prefs.setInt('dashboard_fats_$dateStr', fatsTemp);
+          if (dateStr == todayStr) {
+            await prefs.setString('dashboard_meals', jsonEncode(serializableMeals));
+            await prefs.setInt('dashboard_consumed', consumedTemp);
+            await prefs.setInt('dashboard_protein', proteinTemp);
+            await prefs.setInt('dashboard_carbs', carbsTemp);
+            await prefs.setInt('dashboard_fats', fatsTemp);
+          }
         }
       }
 
