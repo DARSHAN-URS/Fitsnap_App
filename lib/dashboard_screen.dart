@@ -480,7 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  void _handleAnalysisResponse(Map<String, dynamic> result, String successMsg, {String? imagePath, String? description}) {
+  Future<void> _handleAnalysisResponse(Map<String, dynamic> result, String successMsg, {String? imagePath, String? description}) async {
     if (result['success'] == true && result['data'] != null) {
       final rawData = result['data'];
       Map<String, dynamic> data = {};
@@ -509,6 +509,20 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
       }
 
+      final dateStr = _selectedDate.toIso8601String().split('T')[0];
+      if (ApiService.isAuthenticated) {
+        await ApiService.logMeal(
+          name: mealName,
+          calories: calVal,
+          protein: proVal,
+          carbs: carbVal,
+          fats: fatVal,
+          date: dateStr,
+          description: description,
+          imageUrl: imagePath ?? (rawData is Map ? (rawData['image_url'] ?? rawData['data']?['image_url']) : null),
+        );
+      }
+
       if (mounted) {
         setState(() {
           _meals.add({
@@ -532,7 +546,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         NotificationService.showNotification(
           id: 1,
           title: 'Meal Logged! 🍳',
-          body: 'Added "${data['name'] ?? 'Meal'}" ($calVal kcal) to your daily journal.',
+          body: 'Added "$mealName" ($calVal kcal) to your daily journal.',
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
