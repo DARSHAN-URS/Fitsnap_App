@@ -87,6 +87,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final String todayStr = DateTime.now().toIso8601String().split('T')[0];
     final prefs = await SharedPreferences.getInstance();
 
+    // Use user-scoped keys so switching accounts never shows another user's meals
+    final String? userId = await ApiService.getCurrentUserId();
+    final String up = userId != null ? '${userId}_' : '';
+
     int consumedTemp = 0;
     int proteinTemp = 0;
     int carbsTemp = 0;
@@ -96,14 +100,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     List<Map<String, dynamic>> mealsTemp = [];
 
     if (dateStr == todayStr) {
-      consumedTemp = prefs.getInt('dashboard_consumed') ?? prefs.getInt('dashboard_consumed_$dateStr') ?? 0;
-      proteinTemp = prefs.getInt('dashboard_protein') ?? prefs.getInt('dashboard_protein_$dateStr') ?? 0;
-      carbsTemp = prefs.getInt('dashboard_carbs') ?? prefs.getInt('dashboard_carbs_$dateStr') ?? 0;
-      fatsTemp = prefs.getInt('dashboard_fats') ?? prefs.getInt('dashboard_fats_$dateStr') ?? 0;
+      consumedTemp = prefs.getInt('${up}dashboard_consumed') ?? prefs.getInt('${up}dashboard_consumed_$dateStr') ?? 0;
+      proteinTemp = prefs.getInt('${up}dashboard_protein') ?? prefs.getInt('${up}dashboard_protein_$dateStr') ?? 0;
+      carbsTemp = prefs.getInt('${up}dashboard_carbs') ?? prefs.getInt('${up}dashboard_carbs_$dateStr') ?? 0;
+      fatsTemp = prefs.getInt('${up}dashboard_fats') ?? prefs.getInt('${up}dashboard_fats_$dateStr') ?? 0;
       stepsTemp = prefs.getInt('home_steps') ?? prefs.getInt('home_steps_$dateStr') ?? 0;
       waterTemp = prefs.getInt('home_water') ?? prefs.getInt('home_water_$dateStr') ?? 0;
       
-      final String? mealsJson = prefs.getString('dashboard_meals') ?? prefs.getString('dashboard_meals_$dateStr');
+      final String? mealsJson = prefs.getString('${up}dashboard_meals') ?? prefs.getString('${up}dashboard_meals_$dateStr');
       if (mealsJson != null) {
         try {
           final List<dynamic> decoded = jsonDecode(mealsJson);
@@ -119,14 +123,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
       }
     } else {
-      consumedTemp = prefs.getInt('dashboard_consumed_$dateStr') ?? 0;
-      proteinTemp = prefs.getInt('dashboard_protein_$dateStr') ?? 0;
-      carbsTemp = prefs.getInt('dashboard_carbs_$dateStr') ?? 0;
-      fatsTemp = prefs.getInt('dashboard_fats_$dateStr') ?? 0;
+      consumedTemp = prefs.getInt('${up}dashboard_consumed_$dateStr') ?? 0;
+      proteinTemp = prefs.getInt('${up}dashboard_protein_$dateStr') ?? 0;
+      carbsTemp = prefs.getInt('${up}dashboard_carbs_$dateStr') ?? 0;
+      fatsTemp = prefs.getInt('${up}dashboard_fats_$dateStr') ?? 0;
       stepsTemp = prefs.getInt('home_steps_$dateStr') ?? 0;
       waterTemp = prefs.getInt('home_water_$dateStr') ?? 0;
       
-      final String? mealsJson = prefs.getString('dashboard_meals_$dateStr');
+      final String? mealsJson = prefs.getString('${up}dashboard_meals_$dateStr');
       if (mealsJson != null) {
         try {
           final List<dynamic> decoded = jsonDecode(mealsJson);
@@ -142,6 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
       }
     }
+
 
     if (mealsTemp.isNotEmpty) {
       int calcConsumed = 0;
@@ -175,22 +180,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       // 1. Fetch meals from backend for the selected date
       final mealsRes = await ApiService.getMeals(date: dateStr);
       if (mealsRes['success']) {
-        final dynamic rawData = mealsRes['data'];
-        final List<dynamic> serverMeals = (rawData is List)
-            ? rawData
-            : (rawData is Map && rawData['meals'] is List ? rawData['meals'] as List : []);
+        final List<dynamic> serverMeals = (mealsRes['data'] is List) ? mealsRes['data'] as List : [];
+        final Map<String, dynamic>? summary = mealsRes['summary'] as Map<String, dynamic>?;
 
-        int serverConsumed = 0;
-        int serverProtein = 0;
-        int serverCarbs = 0;
-        int serverFats = 0;
-
-        if (rawData is Map) {
-          serverConsumed = (rawData['calories'] as num?)?.toInt() ?? 0;
-          serverProtein = (rawData['protein'] as num?)?.toInt() ?? 0;
-          serverCarbs = (rawData['carbs'] as num?)?.toInt() ?? 0;
-          serverFats = ((rawData['fat'] ?? rawData['fats']) as num?)?.toInt() ?? 0;
-        }
+        // Read pre-computed totals directly from server summary
+        int serverConsumed = (summary?['calories'] as num?)?.toInt() ?? 0;
+        int serverProtein = (summary?['protein'] as num?)?.toInt() ?? 0;
+        int serverCarbs = (summary?['carbs'] as num?)?.toInt() ?? 0;
+        int serverFats = ((summary?['fat'] ?? summary?['fats']) as num?)?.toInt() ?? 0;
 
         if (serverMeals.isNotEmpty || serverConsumed > 0) {
           final List<Map<String, dynamic>> parsedServerMeals = [];
@@ -226,12 +223,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           if (parsedServerMeals.isNotEmpty) {
             mealsTemp = parsedServerMeals;
           }
+          // Prefer server summary totals; fall back to per-meal sums
           consumedTemp = serverConsumed > 0 ? serverConsumed : sumConsumed;
           proteinTemp = serverProtein > 0 ? serverProtein : sumProtein;
           carbsTemp = serverCarbs > 0 ? serverCarbs : sumCarbs;
           fatsTemp = serverFats > 0 ? serverFats : sumFats;
 
           // Keep local preferences cache updated with server data
+          final String? userId = await ApiService.getCurrentUserId();
+          final String userPrefix = userId != null ? '${userId}_' : '';
           final serializableMeals = mealsTemp.map((m) {
             final copy = Map<String, dynamic>.from(m);
             if (copy['tagColor'] != null && copy['tagColor'] is Color) {
@@ -239,20 +239,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             }
             return copy;
           }).toList();
-          await prefs.setString('dashboard_meals_$dateStr', jsonEncode(serializableMeals));
-          await prefs.setInt('dashboard_consumed_$dateStr', consumedTemp);
-          await prefs.setInt('dashboard_protein_$dateStr', proteinTemp);
-          await prefs.setInt('dashboard_carbs_$dateStr', carbsTemp);
-          await prefs.setInt('dashboard_fats_$dateStr', fatsTemp);
+          await prefs.setString('${userPrefix}dashboard_meals_$dateStr', jsonEncode(serializableMeals));
+          await prefs.setInt('${userPrefix}dashboard_consumed_$dateStr', consumedTemp);
+          await prefs.setInt('${userPrefix}dashboard_protein_$dateStr', proteinTemp);
+          await prefs.setInt('${userPrefix}dashboard_carbs_$dateStr', carbsTemp);
+          await prefs.setInt('${userPrefix}dashboard_fats_$dateStr', fatsTemp);
           if (dateStr == todayStr) {
-            await prefs.setString('dashboard_meals', jsonEncode(serializableMeals));
-            await prefs.setInt('dashboard_consumed', consumedTemp);
-            await prefs.setInt('dashboard_protein', proteinTemp);
-            await prefs.setInt('dashboard_carbs', carbsTemp);
-            await prefs.setInt('dashboard_fats', fatsTemp);
+            await prefs.setString('${userPrefix}dashboard_meals', jsonEncode(serializableMeals));
+            await prefs.setInt('${userPrefix}dashboard_consumed', consumedTemp);
+            await prefs.setInt('${userPrefix}dashboard_protein', proteinTemp);
+            await prefs.setInt('${userPrefix}dashboard_carbs', carbsTemp);
+            await prefs.setInt('${userPrefix}dashboard_fats', fatsTemp);
           }
         }
       }
+
 
       // 2. Fetch daily stats from backend for the selected date
       final statsRes = await ApiService.getDailyStats(date: dateStr);
@@ -294,11 +295,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final String dateStr = _selectedDate.toIso8601String().split('T')[0];
     final String todayStr = DateTime.now().toIso8601String().split('T')[0];
     final prefs = await SharedPreferences.getInstance();
+    final String? userId = await ApiService.getCurrentUserId();
+    final String up = userId != null ? '${userId}_' : '';
 
-    await prefs.setInt('dashboard_consumed_$dateStr', _consumed);
-    await prefs.setInt('dashboard_protein_$dateStr', _protein);
-    await prefs.setInt('dashboard_carbs_$dateStr', _carbs);
-    await prefs.setInt('dashboard_fats_$dateStr', _fats);
+    await prefs.setInt('${up}dashboard_consumed_$dateStr', _consumed);
+    await prefs.setInt('${up}dashboard_protein_$dateStr', _protein);
+    await prefs.setInt('${up}dashboard_carbs_$dateStr', _carbs);
+    await prefs.setInt('${up}dashboard_fats_$dateStr', _fats);
     await prefs.setInt('home_steps_$dateStr', _steps);
     await prefs.setInt('home_water_$dateStr', _water);
 
@@ -310,18 +313,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return copy;
     }).toList();
 
-    await prefs.setString('dashboard_meals_$dateStr', jsonEncode(serializableMeals));
+    await prefs.setString('${up}dashboard_meals_$dateStr', jsonEncode(serializableMeals));
 
     if (dateStr == todayStr) {
-      await prefs.setInt('dashboard_consumed', _consumed);
-      await prefs.setInt('dashboard_protein', _protein);
-      await prefs.setInt('dashboard_carbs', _carbs);
-      await prefs.setInt('dashboard_fats', _fats);
+      await prefs.setInt('${up}dashboard_consumed', _consumed);
+      await prefs.setInt('${up}dashboard_protein', _protein);
+      await prefs.setInt('${up}dashboard_carbs', _carbs);
+      await prefs.setInt('${up}dashboard_fats', _fats);
       await prefs.setInt('home_steps', _steps);
       await prefs.setInt('home_water', _water);
-      await prefs.setString('dashboard_meals', jsonEncode(serializableMeals));
+      await prefs.setString('${up}dashboard_meals', jsonEncode(serializableMeals));
     }
   }
+
 
   @override
   void initState() {

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../auth_screen.dart';
@@ -192,14 +193,26 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                // Clear active user's cached meal/macro data before logging out
+                final prefs = await SharedPreferences.getInstance();
+                final String? userId = await ApiService.getCurrentUserId();
+                if (userId != null) {
+                  final prefix = '${userId}_';
+                  final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+                  for (final k in keys) {
+                    await prefs.remove(k);
+                  }
+                }
                 // Clear active token
                 ApiService.setToken('');
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AuthScreen()),
-                  (route) => false,
-                );
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AuthScreen()),
+                    (route) => false,
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.caloriesColor,

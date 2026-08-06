@@ -58,6 +58,12 @@ class ApiService {
     return {};
   }
 
+  /// Extract the user's ID from the current JWT token (sub field)
+  static Future<String?> getCurrentUserId() async {
+    final payload = _decodeJwtPayload(_token ?? '');
+    final id = payload['sub'] ?? payload['user_id'] ?? payload['id'];
+    return id?.toString();
+  }
 
   // Set the JWT access token after login
   static void setToken(String token) {
@@ -483,11 +489,17 @@ class ApiService {
         },
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'];
-        if (data is List) {
+        final responseBody = jsonDecode(response.body);
+        final data = responseBody['data'];
+        if (data is Map && data['meals'] is List) {
+          // Backend returned a full nutrition summary with embedded meals list
+          return {
+            'success': true,
+            'data': data['meals'],
+            'summary': data,
+          };
+        } else if (data is List) {
           return {'success': true, 'data': data};
-        } else if (data is Map && data['meals'] is List) {
-          return {'success': true, 'data': data['meals'], 'summary': data};
         }
         return {'success': true, 'data': []};
       }
