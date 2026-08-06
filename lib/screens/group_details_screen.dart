@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import 'groups_tab.dart';
+import 'dm_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 
@@ -536,6 +537,210 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     );
   }
 
+  void _showMemberProfileSheet(Map<String, dynamic> member) {
+    final String name = member['name'] ?? 'Group Member';
+    final String avatar = member['avatar'] ?? 'US';
+    final int steps = member['steps'] ?? 0;
+    final int calories = member['calories'] ?? 0;
+    final int workouts = member['workouts'] ?? 0;
+    final Color memberColor = (member['color'] as Color?) ?? AppTheme.accent;
+    final bool isMe = member['isMe'] == true;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Avatar Circle
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [memberColor, memberColor.withOpacity(0.5)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: memberColor.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    avatar,
+                    style: GoogleFonts.inter(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // User Name
+              Text(
+                name,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isMe ? AppTheme.accent.withOpacity(0.2) : Colors.white10,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: isMe ? AppTheme.accent.withOpacity(0.4) : Colors.white12),
+                ),
+                child: Text(
+                  isMe ? 'YOU (GROUP MEMBER)' : 'ACTIVE GROUP MEMBER',
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: isMe ? AppTheme.accent : Colors.white70,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Stats Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildProfileStatBox('Steps', '$steps', Icons.directions_walk_rounded, const Color(0xFF10B981)),
+                  _buildProfileStatBox('Calories', '$calories kcal', Icons.local_fire_department_rounded, const Color(0xFFEF4444)),
+                  _buildProfileStatBox('Workouts', '$workouts', Icons.fitness_center_rounded, const Color(0xFF38BDF8)),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Action Buttons (DM & Challenge)
+              if (!isMe) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          final fId = member['friend_id']?.toString() ?? member['id']?.toString() ?? name;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DmScreen(
+                                friendId: fId,
+                                friendName: name,
+                                friendAvatar: avatar,
+                                avatarColor: memberColor,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                        label: Text('Send DM', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final fId = member['friend_id']?.toString() ?? member['id']?.toString() ?? name;
+                          final res = await ApiService.inviteFriendToChallenge(fId);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(res['success'] == true
+                                    ? 'Challenge sent to $name! 👟'
+                                    : 'Challenge invite sent! 👟'),
+                                backgroundColor: AppTheme.neonEmerald,
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.bolt_rounded, size: 18, color: Colors.amberAccent),
+                        label: Text('Challenge', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white24),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileStatBox(String label, String value, IconData icon, Color color) {
+    return Container(
+      width: 95,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.inter(color: Colors.white38, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -609,7 +814,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                 color: widget.group.isPrivate ? Colors.amber.withOpacity(0.15) : Colors.cyan.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: widget.group.isPrivate ? Colors.amberAccent.withOpacity(0.3) : Colors.cyan.withOpacity(0.3),
+                                  color: widget.group.isPrivate ? Colors.amberAccent.withOpacity(0.3) : Colors.cyanAccent.withOpacity(0.3),
                                 ),
                               ),
                               child: Text(
@@ -624,6 +829,47 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                             ),
                           ],
                         ),
+                        if (_members.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Group Members Roster (Tap profile to view)',
+                            style: GoogleFonts.inter(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 44,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _members.length,
+                              separatorBuilder: (_, __) => const SizedBox(width: 8),
+                              itemBuilder: (context, idx) {
+                                final m = _members[idx];
+                                final mColor = (m['color'] as Color?) ?? AppTheme.accent;
+                                return GestureDetector(
+                                  onTap: () => _showMemberProfileSheet(m),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: mColor.withOpacity(0.6), width: 1.5),
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: mColor.withOpacity(0.2),
+                                      child: Text(
+                                        m['avatar'] ?? 'US',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -752,83 +998,86 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 displayVal = "${member['workouts']} workouts";
               }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: isMe ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.03),
-                  borderRadius: AppTheme.cardRadius,
-                  border: Border.all(
-                    color: isMe ? AppTheme.accent.withOpacity(0.3) : Colors.white.withOpacity(0.06),
-                    width: isMe ? 1.5 : 1.0,
+              return GestureDetector(
+                onTap: () => _showMemberProfileSheet(member),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isMe ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.03),
+                    borderRadius: AppTheme.cardRadius,
+                    border: Border.all(
+                      color: isMe ? AppTheme.accent.withOpacity(0.3) : Colors.white.withOpacity(0.06),
+                      width: isMe ? 1.5 : 1.0,
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: _getRankColor(index),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: _getRankColor(index),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${index + 1}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
+                      const SizedBox(width: 16),
 
-                    CircleAvatar(
-                      radius: 19,
-                      backgroundColor: (member['color'] as Color).withOpacity(0.15),
-                      child: Text(
-                        member['avatar'] ?? 'US',
-                        style: GoogleFonts.inter(
-                          color: member['color'] as Color,
-                          fontWeight: FontWeight.bold,
+                      CircleAvatar(
+                        radius: 19,
+                        backgroundColor: (member['color'] as Color).withOpacity(0.15),
+                        child: Text(
+                          member['avatar'] ?? 'US',
+                          style: GoogleFonts.inter(
+                            color: member['color'] as Color,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              member['name'] ?? 'User',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontWeight: isMe ? FontWeight.w800 : FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (isMe)
+                              Text(
+                                'Syncing live metrics',
+                                style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      Text(
+                        displayVal,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isMe ? AppTheme.accent : Colors.white70,
+                          fontWeight: FontWeight.w800,
                           fontSize: 13,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            member['name'] ?? 'User',
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontWeight: isMe ? FontWeight.w800 : FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (isMe)
-                            Text(
-                              'Syncing live metrics',
-                              style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    Text(
-                      displayVal,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: isMe ? AppTheme.accent : Colors.white70,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
