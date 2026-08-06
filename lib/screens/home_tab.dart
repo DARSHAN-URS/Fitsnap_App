@@ -505,11 +505,11 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                               final meal = widget.meals.reversed.toList()[index];
                               return _buildMealItem(
                                 title: meal['name'] ?? 'Analyzed Food',
-                                calories: '${meal['calories']}',
+                                calories: '${((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0}',
                                 time: meal['time'] ?? 'Just now',
-                                protein: meal['protein'] ?? 0,
-                                carbs: meal['carbs'] ?? 0,
-                                fats: meal['fats'] ?? 0,
+                                protein: (meal['protein'] as num?)?.toInt() ?? 0,
+                                carbs: (meal['carbs'] as num?)?.toInt() ?? 0,
+                                fats: ((meal['fats'] ?? meal['fat']) as num?)?.toInt() ?? 0,
                                 imagePath: meal['imagePath'],
                                 imageUrl: meal['image_url'],
                                 description: meal['description'],

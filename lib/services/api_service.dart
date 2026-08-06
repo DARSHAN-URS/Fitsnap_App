@@ -12,14 +12,11 @@ class ApiService {
 
   static String get localUrl => 'http://$_localHost:3000/api';
   static const String productionUrl = 'https://api.sabtrack.in/api';
-  static String baseUrl = productionUrl; // Default to production
-  static String? _token;
-  static String? _refreshToken;
-  static bool _isRefreshing = false;
+  static String baseUrl = productionUrl; // Default to Railway live backend
 
-  // Configure baseUrl based on environment
+  // Always use live production Railway backend
   static void configureBaseUrl({required bool isDevelopment}) {
-    baseUrl = isDevelopment ? localUrl : productionUrl;
+    baseUrl = productionUrl;
   }
 
   // Initialize both JWT access token and refresh token from storage on startup.
