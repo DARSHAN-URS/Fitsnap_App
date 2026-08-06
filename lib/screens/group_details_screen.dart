@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import 'groups_tab.dart';
 import '../services/api_service.dart';
@@ -299,39 +301,44 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
     if (!mounted) return;
 
-    if (friendsList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No friends found to invite. Add friends from the Groups -> Friends tab!'),
-          backgroundColor: Colors.amber,
-        ),
-      );
-      return;
-    }
-
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E293B),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
+            return Container(
+              padding: const EdgeInsets.all(24.0),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Invite Friends to Group',
+                        'Invite Members',
                         style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -341,70 +348,184 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: friendsList.length,
-                      separatorBuilder: (_, __) => const Divider(color: Colors.white12),
-                      itemBuilder: (context, index) {
-                        final f = friendsList[index];
-                        final fName = f['name'] ?? 'Friend';
-                        final fId = (f['friend_id'] ?? f['id'] ?? '').toString();
-                        final isInvited = widget.group.invitedFriends.contains(fId);
+                  const SizedBox(height: 16),
 
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: CircleAvatar(
-                            backgroundColor: AppTheme.accent.withOpacity(0.2),
-                            child: Text(
-                              fName.substring(0, fName.length > 2 ? 2 : fName.length).toUpperCase(),
-                              style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          title: Text(fName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                          subtitle: Text(f['email'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                          trailing: ElevatedButton(
-                            onPressed: isInvited
-                                ? null
-                                : () async {
-                                    final res = await ApiService.inviteToGroup(widget.group.id, fId);
-                                    if (res['success'] == true) {
-                                      setState(() {
-                                        widget.group.invitedFriends.add(fId);
-                                      });
-                                      setModalState(() {});
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Invite sent to $fName! ✉️'),
-                                            backgroundColor: AppTheme.neonEmerald,
-                                          ),
-                                        );
-                                      }
-                                    } else {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(res['error'] ?? 'Failed to invite'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isInvited ? Colors.grey : AppTheme.accent,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: Text(
-                              isInvited ? 'Invited' : 'Invite',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        );
-                      },
+                  // Outside-App Share Action Card (WhatsApp, SMS, Socials)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF007AFF).withOpacity(0.15),
+                          const Color(0xFF10B981).withOpacity(0.15),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.3)),
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.share_rounded, color: Color(0xFF38BDF8), size: 22),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Invite Outside App',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Share a direct join link & group code via WhatsApp, SMS, or Socials.',
+                          style: GoogleFonts.inter(color: Colors.white70, fontSize: 12),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  final String shareMsg = 
+                                    'Join my ${widget.group.isPrivate ? "private " : ""}group "${widget.group.title}" on SABTRACK AI! 🚀\n\n'
+                                    'Group Code: ${widget.group.id}\n'
+                                    'Join Link: https://sabtrack.in/join-group?code=${widget.group.id}';
+                                  Share.share(shareMsg, subject: 'Join my SABTRACK AI group');
+                                },
+                                icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                                label: Text(
+                                  'Share Link / WhatsApp',
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF007AFF),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            IconButton(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: widget.group.id));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Group Code copied to clipboard! 📋'),
+                                    backgroundColor: Color(0xFF10B981),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.copy_rounded, color: Colors.white70, size: 20),
+                              tooltip: 'Copy Code',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white10,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                  Text(
+                    'In-App SABTRACK Friends',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  Flexible(
+                    child: friendsList.isEmpty
+                        ? Container(
+                            padding: const EdgeInsets.all(20),
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.03),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'No in-app friends found yet.\nUse the button above to invite friends via WhatsApp or SMS!',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(color: Colors.white38, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: friendsList.length,
+                            separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                            itemBuilder: (context, index) {
+                              final f = friendsList[index];
+                              final fName = f['name'] ?? 'Friend';
+                              final fId = (f['friend_id'] ?? f['id'] ?? '').toString();
+                              final isInvited = widget.group.invitedFriends.contains(fId);
+
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: CircleAvatar(
+                                  backgroundColor: AppTheme.accent.withOpacity(0.2),
+                                  child: Text(
+                                    fName.substring(0, fName.length > 2 ? 2 : fName.length).toUpperCase(),
+                                    style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                title: Text(fName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                subtitle: Text(f['email'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                                trailing: ElevatedButton(
+                                  onPressed: isInvited
+                                      ? null
+                                      : () async {
+                                          final res = await ApiService.inviteToGroup(widget.group.id, fId);
+                                          if (res['success'] == true) {
+                                            setState(() {
+                                              widget.group.invitedFriends.add(fId);
+                                            });
+                                            setModalState(() {});
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('In-app invite sent to $fName! ✉️'),
+                                                  backgroundColor: AppTheme.neonEmerald,
+                                                ),
+                                              );
+                                            }
+                                          } else {
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(res['error'] ?? 'Failed to send invite'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isInvited ? Colors.grey : AppTheme.accent,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: Text(
+                                    isInvited ? 'Invited' : 'Invite',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
