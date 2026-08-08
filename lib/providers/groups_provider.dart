@@ -168,8 +168,7 @@ class GroupsNotifier extends StateNotifier<GroupsState> {
     final newFriend = FriendItem(
       id: userDetails['id'] ?? '',
       name: userDetails['name'] ?? 'Friend',
-      avatarUrl: userDetails['avatar_url'],
-      activity: 'Connected',
+      profilePictureUrl: userDetails['avatar_url'],
     );
     final updatedFriends = [newFriend, ...originalFriends];
 
