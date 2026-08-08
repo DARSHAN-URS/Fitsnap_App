@@ -51,6 +51,24 @@
             <intent-filter>
                 <action android:name="androidx.health.platform.client.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+
+            <!-- Deep Link Intent Filters for HTTPS Web Links -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="sabtrack.in" android:pathPrefix="/join-group" />
+                <data android:scheme="https" android:host="api.sabtrack.in" android:pathPrefix="/join-group" />
+                <data android:scheme="http" android:host="sabtrack.in" android:pathPrefix="/join-group" />
+            </intent-filter>
+
+            <!-- Custom App Scheme Intent Filter (sabtrack://join-group) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabtrack" android:host="join-group" />
+            </intent-filter>
         </activity>
         <service
             android:name=".StepCounterService"

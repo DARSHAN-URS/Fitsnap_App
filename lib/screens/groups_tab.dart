@@ -9,6 +9,7 @@ import '../widgets/staggered_animation.dart';
 import '../utils/preferences_helper.dart';
 import 'group_details_screen.dart';
 import 'dm_screen.dart';
+import 'notifications_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 
@@ -71,11 +72,43 @@ class GroupItem {
   }
 }
 
+String getSmartDisplayName(String? name, String? username, String? email) {
+  final n = (name ?? '').trim();
+  final u = (username ?? '').trim();
+  final e = (email ?? '').trim();
+
+  if (n.isNotEmpty && !['user', 'friend user', 'user user', 'none', 'null'].contains(n.toLowerCase())) {
+    return n;
+  }
+  if (u.isNotEmpty && !['user', 'none', 'null'].contains(u.toLowerCase())) {
+    return u;
+  }
+  if (e.isNotEmpty && e.contains('@')) {
+    final prefix = e.split('@').first.trim();
+    if (prefix.isNotEmpty && !['user', 'none', 'null'].contains(prefix.toLowerCase())) {
+      return prefix;
+    }
+  }
+  return n.isNotEmpty ? n : (u.isNotEmpty ? u : 'User');
+}
+
+String getAvatarInitials(String displayName) {
+  final cleaned = displayName.trim();
+  if (cleaned.isEmpty) return 'U';
+  final parts = cleaned.split(' ').where((e) => e.isNotEmpty).toList();
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return cleaned.substring(0, cleaned.length >= 2 ? 2 : 1).toUpperCase();
+}
+
 class FriendItem {
   final String id;
   final String friendId;
   final String name;
+  final String username;
   final String email;
+  final String? profilePictureUrl;
   final int steps;
   final int calories;
   final String avatar;
@@ -85,7 +118,9 @@ class FriendItem {
     required this.id,
     required this.friendId,
     required this.name,
+    this.username = '',
     required this.email,
+    this.profilePictureUrl,
     required this.steps,
     required this.calories,
     required this.avatar,
@@ -93,14 +128,25 @@ class FriendItem {
   });
 
   factory FriendItem.fromBackendJson(Map<String, dynamic> json) {
+    final rawName = json['name'];
+    final uname = json['username'] ?? '';
+    final mail = json['email'] ?? '';
+    final resolvedName = getSmartDisplayName(rawName, uname, mail);
+    final rawAvatar = json['avatar'];
+    final avatarInit = (rawAvatar != null && rawAvatar != 'FR' && rawAvatar != 'US' && rawAvatar.toString().trim().isNotEmpty)
+        ? rawAvatar.toString()
+        : getAvatarInitials(resolvedName);
+
     return FriendItem(
       id: (json['id'] ?? '').toString(),
       friendId: (json['friend_id'] ?? '').toString(),
-      name: json['name'] ?? 'Friend User',
-      email: json['email'] ?? '',
+      name: resolvedName,
+      username: uname,
+      email: mail,
+      profilePictureUrl: json['profile_picture_url'],
       steps: json['steps'] ?? 0,
       calories: json['calories'] ?? 0,
-      avatar: json['avatar'] ?? 'FR',
+      avatar: avatarInit,
       status: json['status'] ?? 'Active',
     );
   }
@@ -388,17 +434,20 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
     }
   }
 
+  int _groupFilterIndex = 0; // 0 = All, 1 = Public, 2 = Private
+
   void _filterGroups() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      if (query.isEmpty) {
-        _filteredGroups = List.from(_groups);
-      } else {
-        _filteredGroups = _groups.where((group) {
-          return group.title.toLowerCase().contains(query) ||
-              group.desc.toLowerCase().contains(query);
-        }).toList();
-      }
+      _filteredGroups = _groups.where((group) {
+        final matchesQuery = query.isEmpty ||
+            group.title.toLowerCase().contains(query) ||
+            group.desc.toLowerCase().contains(query);
+        final matchesCategory = _groupFilterIndex == 0 ||
+            (_groupFilterIndex == 1 && !group.isPrivate) ||
+            (_groupFilterIndex == 2 && group.isPrivate);
+        return matchesQuery && matchesCategory;
+      }).toList();
     });
   }
 
@@ -698,9 +747,9 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                           ),
                           itemBuilder: (context, index) {
                             final user = _searchSuggestions[index];
-                            final String displayName = user['name'] ?? 'User';
                             final String username = user['username'] ?? '';
                             final String email = user['email'] ?? '';
+                            final String displayName = getSmartDisplayName(user['name'], username, email);
                             final String? picUrl = user['profile_picture_url'];
                             
                             // Check if already friends
@@ -730,7 +779,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                         color: Colors.grey.shade200,
                                         width: 1,
                                       ),
-                                      gradient: picUrl == null
+                                      gradient: picUrl == null || picUrl.isEmpty
                                           ? LinearGradient(
                                               colors: [
                                                 placeholderColor.withOpacity(0.12),
@@ -740,7 +789,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                               end: Alignment.bottomRight,
                                             )
                                           : null,
-                                      image: picUrl != null
+                                      image: picUrl != null && picUrl.isNotEmpty
                                           ? DecorationImage(
                                               image: picUrl.startsWith('http')
                                                   ? CachedNetworkImageProvider(picUrl)
@@ -749,10 +798,10 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                             )
                                           : null,
                                     ),
-                                    child: picUrl == null
+                                    child: picUrl == null || picUrl.isEmpty
                                         ? Center(
                                             child: Text(
-                                              displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                              getAvatarInitials(displayName),
                                               style: GoogleFonts.inter(
                                                 color: placeholderColor,
                                                 fontWeight: FontWeight.w800,
@@ -889,9 +938,13 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
             itemBuilder: (context, index) {
               final req = _pendingRequests[index];
               final String requestId = (req['id'] ?? '').toString();
-              final String name = req['name'] ?? 'User';
               final String username = req['username'] ?? '';
-              final String avatar = req['avatar'] ?? 'FR';
+              final String email = req['email'] ?? '';
+              final String name = getSmartDisplayName(req['name'], username, email);
+              final String avatar = req['avatar'] != null && req['avatar'] != 'FR' && req['avatar'] != 'US'
+                  ? req['avatar']
+                  : getAvatarInitials(name);
+              final String? picUrl = req['profile_picture_url'];
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -910,17 +963,27 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppTheme.accent.withOpacity(0.12),
+                        image: picUrl != null && picUrl.isNotEmpty
+                            ? DecorationImage(
+                                image: picUrl.startsWith('http')
+                                    ? CachedNetworkImageProvider(picUrl)
+                                    : FileImage(File(picUrl)) as ImageProvider,
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                       ),
-                      child: Center(
-                        child: Text(
-                          avatar,
-                          style: GoogleFonts.inter(
-                            color: AppTheme.accent,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
+                      child: picUrl == null || picUrl.isEmpty
+                          ? Center(
+                              child: Text(
+                                avatar,
+                                style: GoogleFonts.inter(
+                                  color: AppTheme.accent,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -1003,9 +1066,9 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
               itemCount: _suggestions.length,
               itemBuilder: (context, index) {
                 final user = _suggestions[index];
-                final String displayName = user['name'] ?? 'User';
                 final String username = user['username'] ?? '';
                 final String email = user['email'] ?? '';
+                final String displayName = getSmartDisplayName(user['name'], username, email);
                 final String? picUrl = user['profile_picture_url'];
                 
                 final List<Color> gradients = [
@@ -1038,7 +1101,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                             color: Colors.grey.shade200,
                             width: 1,
                           ),
-                          gradient: picUrl == null
+                          gradient: picUrl == null || picUrl.isEmpty
                               ? LinearGradient(
                                   colors: [
                                     placeholderColor.withOpacity(0.12),
@@ -1048,7 +1111,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                   end: Alignment.bottomRight,
                                 )
                               : null,
-                          image: picUrl != null
+                          image: picUrl != null && picUrl.isNotEmpty
                               ? DecorationImage(
                                   image: picUrl.startsWith('http')
                                       ? CachedNetworkImageProvider(picUrl)
@@ -1057,10 +1120,10 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                 )
                               : null,
                         ),
-                        child: picUrl == null
+                        child: picUrl == null || picUrl.isEmpty
                             ? Center(
                                 child: Text(
-                                  displayName.split(' ').map((e) => e[0]).take(2).join().toUpperCase(),
+                                  getAvatarInitials(displayName),
                                   style: GoogleFonts.inter(
                                     color: placeholderColor,
                                     fontWeight: FontWeight.w800,
@@ -1241,17 +1304,27 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                     color: avatarCol.withOpacity(0.12),
                                     shape: BoxShape.circle,
                                     border: Border.all(color: avatarCol.withOpacity(0.25), width: 1.5),
+                                    image: friend.profilePictureUrl != null && friend.profilePictureUrl!.isNotEmpty
+                                        ? DecorationImage(
+                                            image: friend.profilePictureUrl!.startsWith('http')
+                                                ? CachedNetworkImageProvider(friend.profilePictureUrl!)
+                                                : FileImage(File(friend.profilePictureUrl!)) as ImageProvider,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
                                   ),
-                                  child: Center(
-                                    child: Text(
-                                      friend.avatar,
-                                      style: GoogleFonts.inter(
-                                        color: avatarCol,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
+                                  child: friend.profilePictureUrl == null || friend.profilePictureUrl!.isEmpty
+                                      ? Center(
+                                          child: Text(
+                                            friend.avatar,
+                                            style: GoogleFonts.inter(
+                                              color: avatarCol,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
                                 ),
                                 Positioned(
                                   right: 1,
@@ -1424,6 +1497,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                                           friendId: fId,
                                           friendName: friend.name,
                                           friendAvatar: friend.avatar,
+                                          friendPicUrl: friend.profilePictureUrl,
                                           avatarColor: avatarCol,
                                         ),
                                       ),
@@ -1590,19 +1664,43 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                         letterSpacing: -1,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: _showCreateGroupDialog,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                          boxShadow: AppTheme.cardShadow,
-                          border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                            );
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.8),
+                              shape: BoxShape.circle,
+                              boxShadow: AppTheme.cardShadow,
+                              border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+                            ),
+                            child: const Icon(Icons.notifications_none_rounded, color: AppTheme.primary, size: 22),
+                          ),
                         ),
-                        child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 24),
-                      ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: _showCreateGroupDialog,
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.8),
+                              shape: BoxShape.circle,
+                              boxShadow: AppTheme.cardShadow,
+                              border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+                            ),
+                            child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 24),
+                          ),
+                        ),
+                      ],
                     )
                   ],
                 ),
@@ -1643,6 +1741,7 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                         ),
                         child: TextField(
                           controller: _searchController,
+                          onChanged: (_) => _filterGroups(),
                           style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary),
                           decoration: InputDecoration(
                             hintText: 'Search communities, challenges...',
@@ -1656,27 +1755,24 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                const SizedBox(height: 28),
-                
+                const SizedBox(height: 20),
+
+                // Group Filter Chips (All, Public, Private)
                 StaggeredListItem(
                   index: 3,
                   animationController: _entryAnimController,
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Discover Communities',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.primary,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
+                      _buildFilterChip('All', 0),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Public', 1),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Private 🔒', 2),
+                      const Spacer(),
                       GestureDetector(
                         onTap: _showCreateGroupDialog,
                         child: Text(
-                          'Create Private',
+                          '+ Create',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: AppTheme.accent,
@@ -1789,6 +1885,47 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, int index) {
+    final bool isSelected = _groupFilterIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _groupFilterIndex = index;
+          _filterGroups();
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary : Colors.white.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.primary : Colors.white.withOpacity(0.6),
+            width: 1.2,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primary.withOpacity(0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  )
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? Colors.white : AppTheme.primary.withOpacity(0.7),
+          ),
+        ),
+      ),
     );
   }
 

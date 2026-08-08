@@ -39,46 +39,32 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
     for (int i = 0; i < _foods.length; i++) {
       final f = _foods[i];
       final double weight = (f['weight_g'] as num?)?.toDouble() ?? 150.0;
-      double cal = (f['calories'] as num?)?.toDouble() ?? 0.0;
-      double prot = (f['protein'] as num?)?.toDouble() ?? 0.0;
-      double carb = (f['carbs'] as num?)?.toDouble() ?? 0.0;
-      double fat = ((f['fat'] ?? f['fats']) as num?)?.toDouble() ?? 0.0;
-      double fib = (f['fiber'] as num?)?.toDouble() ?? 0.0;
+      final double cal = (f['calories'] as num?)?.toDouble() ?? 0.0;
+      final double prot = (f['protein'] as num?)?.toDouble() ?? 0.0;
+      final double carb = (f['carbs'] as num?)?.toDouble() ?? 0.0;
+      final double fat = ((f['fat'] ?? f['fats']) as num?)?.toDouble() ?? 0.0;
+      final double fib = (f['fiber'] as num?)?.toDouble() ?? 0.0;
 
-      double calDensity = weight > 0 ? cal / weight : 0.0;
-      double protDensity = weight > 0 ? prot / weight : 0.0;
-      double carbDensity = weight > 0 ? carb / weight : 0.0;
-      double fatDensity = weight > 0 ? fat / weight : 0.0;
-      double fibDensity = weight > 0 ? fib / weight : 0.0;
-
-      // Ensure no 0-calorie food items
-      if (calDensity == 0.0) {
-        calDensity = 1.4;
-        protDensity = 0.04;
-        carbDensity = 0.20;
-        fatDensity = 0.03;
-        fibDensity = 0.015;
-
-        cal = (weight * calDensity);
-        prot = (weight * protDensity);
-        carb = (weight * carbDensity);
-        fat = (weight * fatDensity);
-        fib = (weight * fibDensity);
-
-        f['calories'] = cal.round();
-        f['protein'] = double.parse(prot.toStringAsFixed(1));
-        f['carbs'] = double.parse(carb.toStringAsFixed(1));
-        f['fat'] = double.parse(fat.toStringAsFixed(1));
-        f['fiber'] = double.parse(fib.toStringAsFixed(1));
+      // If calories are 0, mark this item as having no nutrition data — do NOT inject fake values.
+      // The user can manually edit the weight or food name to trigger a re-resolution.
+      if (cal == 0.0) {
+        // Use a 0-density density map so weight changes don't produce fake numbers
+        _macroDensities[i] = {
+          'calories': 0.0,
+          'protein': 0.0,
+          'carbs': 0.0,
+          'fat': 0.0,
+          'fiber': 0.0,
+        };
+        continue;
       }
 
-      // Density per gram
       _macroDensities[i] = {
-        'calories': calDensity,
-        'protein': protDensity,
-        'carbs': carbDensity,
-        'fat': fatDensity,
-        'fiber': fibDensity,
+        'calories': weight > 0 ? cal / weight : 0.0,
+        'protein': weight > 0 ? prot / weight : 0.0,
+        'carbs': weight > 0 ? carb / weight : 0.0,
+        'fat': weight > 0 ? fat / weight : 0.0,
+        'fiber': weight > 0 ? fib / weight : 0.0,
       };
     }
   }
@@ -201,6 +187,10 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
   double get _totalFat => _foods.fold(0.0, (sum, f) => sum + (((f['fat'] ?? f['fats']) as num?)?.toDouble() ?? 0.0));
   double get _totalFiber => _foods.fold(0.0, (sum, f) => sum + ((f['fiber'] as num?)?.toDouble() ?? 0.0));
 
+  /// True if any food item still has 0 calories (nutrition data missing)
+  bool get _hasMissingNutrition => _foods.any((f) => ((f['calories'] as num?)?.toInt() ?? 0) == 0);
+
+
   void _deleteFood(int index) {
     setState(() {
       _foods.removeAt(index);
@@ -253,6 +243,20 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
       return;
     }
 
+    if (_hasMissingNutrition) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Some food items are missing nutrition data. Please remove them or check your image.',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
     setState(() {
       _isSaving = true;
       _errorMsg = null;

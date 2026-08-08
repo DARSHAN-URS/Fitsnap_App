@@ -90,19 +90,19 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       _myWorkouts = (workoutsRes['data'] as List).length;
     }
     
-    // Fetch friends list from backend
-    final friendsRes = await ApiService.getFriends();
-    if (friendsRes['success'] == true && friendsRes['data'] != null) {
-      final List<dynamic> friendsList = friendsRes['data'];
-      _friendStats.clear();
-      for (int i = 0; i < friendsList.length; i++) {
-        final f = friendsList[i];
-        final name = f['name'] ?? 'Friend';
+    // Fetch actual group members from backend
+    final membersRes = await ApiService.getGroupMembers(widget.group.id);
+    _friendStats.clear();
+    if (membersRes['success'] == true && membersRes['data'] != null) {
+      final List<dynamic> membersList = membersRes['data'];
+      for (int i = 0; i < membersList.length; i++) {
+        final m = membersList[i];
+        final name = (m['name'] ?? 'Member').toString();
         _friendStats[name] = {
-          'steps': f['steps'] ?? 0,
-          'calories': f['calories'] ?? 0,
-          'workouts': ((f['steps'] ?? 0) / 4000).toInt() + 1,
-          'avatar': f['avatar'] ?? 'FR',
+          'steps': m['steps'] ?? 0,
+          'calories': m['calories'] ?? ((m['steps'] ?? 0) * 0.045).round(),
+          'workouts': m['workouts'] ?? 1,
+          'avatar': m['avatar'] ?? 'MB',
           'color': _getSenderColor(name),
         };
       }
@@ -398,7 +398,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   final String shareMsg = 
                                     'Join my ${widget.group.isPrivate ? "private " : ""}group "${widget.group.title}" on SABTRACK AI! 🚀\n\n'
                                     'Group Code: ${widget.group.id}\n'
-                                    'Join Link: https://sabtrack.in/join-group?code=${widget.group.id}';
+                                    'Join Link: ${ApiService.baseUrl}/join-group?code=${widget.group.id}';
                                   Share.share(shareMsg, subject: 'Join my SABTRACK AI group');
                                 },
                                 icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),

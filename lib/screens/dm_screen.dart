@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
@@ -10,6 +12,7 @@ class DmScreen extends StatefulWidget {
   final String friendId;
   final String friendName;
   final String friendAvatar;
+  final String? friendPicUrl;
   final Color avatarColor;
 
   const DmScreen({
@@ -17,6 +20,7 @@ class DmScreen extends StatefulWidget {
     required this.friendId,
     required this.friendName,
     required this.friendAvatar,
+    this.friendPicUrl,
     this.avatarColor = AppTheme.accent,
   });
 
@@ -75,7 +79,6 @@ class _DmScreenState extends State<DmScreen> {
   Future<void> _loadMessages({bool silent = false}) async {
     if (!silent && mounted) setState(() => _isLoading = true);
 
-    // Get my profile to mark messages as "mine"
     if (_myProfileName == null || _myUserId == null || _myUserId!.isEmpty) {
       final profileRes = await ApiService.getProfile();
       if (profileRes['success'] == true && profileRes['data'] != null) {
@@ -97,10 +100,10 @@ class _DmScreenState extends State<DmScreen> {
         final receiverId = m['receiver_id']?.toString() ?? '';
         
         if (senderId.isNotEmpty && widget.friendId.isNotEmpty && senderId == widget.friendId) {
-          return false; // Explicitly sent by the friend
+          return false;
         }
         if (receiverId.isNotEmpty && widget.friendId.isNotEmpty && receiverId == widget.friendId) {
-          return true; // Sent by me to friend
+          return true;
         }
         if (senderId.isNotEmpty && _myUserId != null && _myUserId!.isNotEmpty && senderId == _myUserId) {
           return true;
@@ -108,7 +111,7 @@ class _DmScreenState extends State<DmScreen> {
         if (senderId.isNotEmpty && tokenUserId.isNotEmpty && senderId == tokenUserId) {
           return true;
         }
-        if (senderId.isNotEmpty && myToken.isNotEmpty && (senderId == myToken || senderId == cleanTokenId)) {
+        if (senderId.isNotEmpty && cleanTokenId.isNotEmpty && senderId == cleanTokenId) {
           return true;
         }
         return false;

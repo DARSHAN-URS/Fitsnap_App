@@ -980,13 +980,22 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             )
           else
             ...widget.meals.reversed.map((meal) {
+              final int cal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
+              final int p = (meal['protein'] as num?)?.toInt() ?? 0;
+              final int c = (meal['carbs'] as num?)?.toInt() ?? 0;
+              final int f = ((meal['fats'] ?? meal['fat']) as num?)?.toInt() ?? 0;
+
+              String name = (meal['name'] as String? ?? '').trim();
+              if (name.isEmpty) name = 'Scanned Meal';
+
               return _buildMealItem(
-                title: meal['name'] ?? 'Analyzed Food',
-                calories: '${meal['calories']}',
+                title: name,
+                // Show real value; '? kcal' only as safety net for legacy cached entries
+                calories: cal > 0 ? '$cal' : '?',
                 time: meal['time'] ?? 'Just now',
-                protein: meal['protein'] ?? 0,
-                carbs: meal['carbs'] ?? 0,
-                fats: meal['fats'] ?? 0,
+                protein: p,
+                carbs: c,
+                fats: f,
                 imagePath: meal['imagePath'],
                 imageUrl: meal['image_url'],
                 description: meal['description'],

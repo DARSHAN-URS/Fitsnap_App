@@ -116,7 +116,48 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             if (meal['tagColor'] != null && meal['tagColor'] is int) {
               meal['tagColor'] = Color(meal['tagColor'] as int);
             }
-            mealsTemp.add(meal);
+
+            int cal = ((meal['calories'] ?? meal['total_calories'] ?? 0) as num).toInt();
+            int prot = ((meal['protein'] ?? 0) as num).toInt();
+            int carb = ((meal['carbs'] ?? 0) as num).toInt();
+            int fat = ((meal['fats'] ?? meal['fat'] ?? 0) as num).toInt();
+            String name = (meal['name'] as String? ?? '').trim();
+
+            final List foodItems = (meal['food_items'] is List) ? meal['food_items'] as List : [];
+            if ((cal == 0 || prot == 0) && foodItems.isNotEmpty) {
+              int fiCal = 0;
+              double fiProt = 0.0;
+              double fiCarb = 0.0;
+              double fiFat = 0.0;
+              for (var fi in foodItems) {
+                if (fi is Map) {
+                  fiCal += ((fi['calories'] ?? 0) as num).toInt();
+                  fiProt += ((fi['protein'] ?? 0) as num).toDouble();
+                  fiCarb += ((fi['carbs'] ?? 0) as num).toDouble();
+                  fiFat += (((fi['fat'] ?? fi['fats']) ?? 0) as num).toDouble();
+                }
+              }
+              if (fiCal > 0) cal = fiCal;
+              if (fiProt > 0) prot = fiProt.round();
+              if (fiCarb > 0) carb = fiCarb.round();
+              if (fiFat > 0) fat = fiFat.round();
+            }
+
+            if (name.isEmpty || ['meal log', 'analyzed meal', 'unknown meal', 'analyzed food'].contains(name.toLowerCase())) {
+              if (foodItems.isNotEmpty && foodItems[0] is Map) {
+                name = (foodItems[0]['food_name'] ?? foodItems[0]['normalized_name'] ?? foodItems[0]['name'] ?? '').toString();
+              }
+            }
+
+            meal['calories'] = cal;
+            meal['protein'] = prot;
+            meal['carbs'] = carb;
+            meal['fats'] = fat;
+            if (name.isNotEmpty) meal['name'] = name;
+
+            if (cal > 0 || foodItems.isNotEmpty) {
+              mealsTemp.add(meal);
+            }
           }
         } catch (e) {
           debugPrint('Error loading local meals: $e');
@@ -139,7 +180,49 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             if (meal['tagColor'] != null && meal['tagColor'] is int) {
               meal['tagColor'] = Color(meal['tagColor'] as int);
             }
-            mealsTemp.add(meal);
+
+            int cal = ((meal['calories'] ?? meal['total_calories'] ?? 0) as num).toInt();
+            int prot = ((meal['protein'] ?? 0) as num).toInt();
+            int carb = ((meal['carbs'] ?? 0) as num).toInt();
+            int fat = ((meal['fats'] ?? meal['fat'] ?? 0) as num).toInt();
+            String name = (meal['name'] as String? ?? '').trim();
+
+            final List foodItems = (meal['food_items'] is List) ? meal['food_items'] as List : [];
+            if ((cal == 0 || prot == 0) && foodItems.isNotEmpty) {
+              int fiCal = 0;
+              double fiProt = 0.0;
+              double fiCarb = 0.0;
+              double fiFat = 0.0;
+              for (var fi in foodItems) {
+                if (fi is Map) {
+                  fiCal += ((fi['calories'] ?? 0) as num).toInt();
+                  fiProt += ((fi['protein'] ?? 0) as num).toDouble();
+                  fiCarb += ((fi['carbs'] ?? 0) as num).toDouble();
+                  fiFat += (((fi['fat'] ?? fi['fats']) ?? 0) as num).toDouble();
+                }
+              }
+              if (fiCal > 0) cal = fiCal;
+              if (fiProt > 0) prot = fiProt.round();
+              if (fiCarb > 0) carb = fiCarb.round();
+              if (fiFat > 0) fat = fiFat.round();
+            }
+
+            if (name.isEmpty || ['meal log', 'analyzed meal', 'unknown meal', 'analyzed food'].contains(name.toLowerCase())) {
+              if (foodItems.isNotEmpty && foodItems[0] is Map) {
+                name = (foodItems[0]['food_name'] ?? foodItems[0]['normalized_name'] ?? foodItems[0]['name'] ?? '').toString();
+              }
+            }
+
+            meal['calories'] = cal;
+            meal['protein'] = prot;
+            meal['carbs'] = carb;
+            meal['fats'] = fat;
+            if (name.isNotEmpty) meal['name'] = name;
+
+            // Only add meals that have real calorie data — no fake injection
+            if (cal > 0) {
+              mealsTemp.add(meal);
+            }
           }
         } catch (e) {
           debugPrint('Error loading local meals: $e');
@@ -197,28 +280,65 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           int sumFats = 0;
 
           for (var meal in serverMeals) {
-            final double proteinVal = (meal['protein'] as num?)?.toDouble() ?? 0.0;
-            final double carbsVal = (meal['carbs'] as num?)?.toDouble() ?? 0.0;
-            final double fatsVal = ((meal['fat'] ?? meal['fats']) as num?)?.toDouble() ?? 0.0;
-            final int caloriesVal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
+            double proteinVal = (meal['protein'] as num?)?.toDouble() ?? 0.0;
+            double carbsVal = (meal['carbs'] as num?)?.toDouble() ?? 0.0;
+            double fatsVal = ((meal['fat'] ?? meal['fats']) as num?)?.toDouble() ?? 0.0;
+            int caloriesVal = ((meal['calories'] ?? meal['total_calories']) as num?)?.toInt() ?? 0;
+            String mealName = (meal['name'] as String? ?? '').trim();
 
-            parsedServerMeals.add({
-              'name': meal['name'] ?? 'Meal Log',
-              'calories': caloriesVal,
-              'protein': proteinVal.toInt(),
-              'carbs': carbsVal.toInt(),
-              'fats': fatsVal.toInt(),
-              'description': meal['description'],
-              'image_url': meal['image_url'],
-              'time': meal['logged_at'] != null 
-                  ? '${DateTime.parse(meal['logged_at']).toLocal().hour.toString().padLeft(2, '0')}:${DateTime.parse(meal['logged_at']).toLocal().minute.toString().padLeft(2, '0')}'
-                  : 'Just now',
-            });
-            sumConsumed += caloriesVal;
-            sumProtein += proteinVal.toInt();
-            sumCarbs += carbsVal.toInt();
-            sumFats += fatsVal.toInt();
-          }
+            final List foodItems = (meal['food_items'] is List) ? meal['food_items'] as List : [];
+
+            // Fallback sum macros from food_items if parent fields are 0
+            if ((caloriesVal == 0 || proteinVal == 0.0) && foodItems.isNotEmpty) {
+              int fiCal = 0;
+              double fiProt = 0.0;
+              double fiCarb = 0.0;
+              double fiFat = 0.0;
+              for (var fi in foodItems) {
+                if (fi is Map) {
+                  fiCal += ((fi['calories'] ?? 0) as num).toInt();
+                  fiProt += ((fi['protein'] ?? 0) as num).toDouble();
+                  fiCarb += ((fi['carbs'] ?? 0) as num).toDouble();
+                  fiFat += (((fi['fat'] ?? fi['fats']) ?? 0) as num).toDouble();
+                }
+              }
+              if (fiCal > 0) caloriesVal = fiCal;
+              if (fiProt > 0) proteinVal = fiProt;
+              if (fiCarb > 0) carbsVal = fiCarb;
+              if (fiFat > 0) fatsVal = fiFat;
+            }
+
+            // Fallback derive name from food_items if generic
+            if (mealName.isEmpty || ['meal log', 'analyzed meal', 'unknown meal', 'analyzed food'].contains(mealName.toLowerCase())) {
+              if (foodItems.isNotEmpty) {
+                final first = foodItems[0];
+                if (first is Map) {
+                  mealName = (first['food_name'] ?? first['normalized_name'] ?? first['name'] ?? '').toString();
+                }
+              }
+            }
+            if (mealName.isEmpty) mealName = 'Meal';
+
+            // Only include meals with real calorie data — no fake injection
+            if (caloriesVal > 0) {
+              parsedServerMeals.add({
+                'name': mealName,
+                'calories': caloriesVal,
+                'protein': proteinVal.toInt(),
+                'carbs': carbsVal.toInt(),
+                'fats': fatsVal.toInt(),
+                'description': meal['description'],
+                'image_url': meal['image_url'],
+                'time': meal['logged_at'] != null
+                    ? '${DateTime.parse(meal['logged_at']).toLocal().hour.toString().padLeft(2, '0')}:${DateTime.parse(meal['logged_at']).toLocal().minute.toString().padLeft(2, '0')}'
+                    : 'Just now',
+              });
+              sumConsumed += caloriesVal;
+              sumProtein += proteinVal.toInt();
+              sumCarbs += carbsVal.toInt();
+              sumFats += fatsVal.toInt();
+            }
+          } // end for serverMeals
 
           if (parsedServerMeals.isNotEmpty) {
             mealsTemp = parsedServerMeals;
@@ -494,20 +614,65 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       final now = DateTime.now();
       final String timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-      final int calVal = ((data['calories'] ?? data['total_calories'] ?? 0) as num).toInt();
-      final int proVal = (((data['protein'] ?? 0) as num).toDouble()).round();
-      final int carbVal = (((data['carbs'] ?? 0) as num).toDouble()).round();
-      final int fatVal = (((data['fats'] ?? data['fat'] ?? 0) as num).toDouble()).round();
+      int calVal = ((data['calories'] ?? data['total_calories'] ?? 0) as num).toInt();
+      int proVal = (((data['protein'] ?? 0) as num).toDouble()).round();
+      int carbVal = (((data['carbs'] ?? 0) as num).toDouble()).round();
+      int fatVal = (((data['fats'] ?? data['fat'] ?? 0) as num).toDouble()).round();
 
-      String mealName = data['name'] ?? 'Meal Log';
-      if (mealName == 'Analyzed Meal' || mealName == 'Unknown Meal') {
-        if (data['foods'] is List && (data['foods'] as List).isNotEmpty) {
-          final first = (data['foods'] as List)[0];
-          if (first is Map && (first['food_name'] != null || first['name'] != null)) {
-            mealName = first['food_name'] ?? first['name'];
+      final List foodsList = (data['foods'] is List) ? data['foods'] as List : [];
+
+      // Fallback sum from foods list if top-level numbers are 0
+      if ((calVal == 0 || proVal == 0) && foodsList.isNotEmpty) {
+        int sumC = 0;
+        double sumP = 0.0;
+        double sumCr = 0.0;
+        double sumF = 0.0;
+        for (var f in foodsList) {
+          if (f is Map) {
+            sumC += ((f['calories'] ?? f['total_calories'] ?? 0) as num).toInt();
+            sumP += (((f['protein'] ?? 0) as num).toDouble());
+            sumCr += (((f['carbs'] ?? 0) as num).toDouble());
+            sumF += (((f['fat'] ?? f['fats'] ?? 0) as num).toDouble());
+          }
+        }
+        if (sumC > 0) calVal = sumC;
+        if (sumP > 0) proVal = sumP.round();
+        if (sumCr > 0) carbVal = sumCr.round();
+        if (sumF > 0) fatVal = sumF.round();
+      }
+
+      // If still 0 calories after all sources — analysis truly failed. Show error, do NOT log fake data.
+      if (calVal == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Could not read nutrition from this photo. Try again with a clearer, well-lit image.',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      String mealName = (data['name'] as String? ?? '').trim();
+      if (mealName.isEmpty || ['meal log', 'analyzed meal', 'unknown meal', 'analyzed food'].contains(mealName.toLowerCase())) {
+        if (foodsList.isNotEmpty) {
+          final first = foodsList[0];
+          if (first is Map) {
+            mealName = (first['food_name'] ?? first['normalized_name'] ?? first['name'] ?? '').toString();
           }
         }
       }
+      if (mealName.isEmpty || mealName.toLowerCase() == 'meal log') {
+        mealName = 'Scanned Meal';
+      }
+      if (mealName.isEmpty) mealName = 'Meal Log';
 
       final dateStr = _selectedDate.toIso8601String().split('T')[0];
       if (ApiService.isAuthenticated) {

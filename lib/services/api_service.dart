@@ -211,7 +211,8 @@ class ApiService {
       }
       try {
         final data = jsonDecode(response.body);
-        return {'success': false, 'error': data['error'] ?? 'Invalid credentials'};
+        final errorMsg = data['detail'] ?? data['error'] ?? data['message'] ?? 'Invalid credentials';
+        return {'success': false, 'error': errorMsg};
       } catch (_) {
         return {'success': false, 'error': 'Invalid credentials (Status: ${response.statusCode})'};
       }
@@ -238,7 +239,8 @@ class ApiService {
       }
       try {
         final data = jsonDecode(response.body);
-        return {'success': false, 'error': data['error'] ?? 'Signup failed'};
+        final errorMsg = data['detail'] ?? data['error'] ?? data['message'] ?? 'Signup failed';
+        return {'success': false, 'error': errorMsg};
       } catch (_) {
         return {'success': false, 'error': 'Signup failed (Status: ${response.statusCode})'};
       }
@@ -936,6 +938,56 @@ class ApiService {
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
+  }
+
+  static Future<Map<String, dynamic>> getGroupMembers(String groupId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/members'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data['data'] ?? []};
+      }
+      return {'success': false, 'data': []};
+    } catch (e) {
+      return {'success': false, 'data': []};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getNotifications() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data['data'] ?? []};
+      }
+      return {'success': false, 'data': []};
+    } catch (e) {
+      return {'success': false, 'data': []};
+    }
+  }
+
+  static Future<void> markNotificationRead(String notifId) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/notifications/$notifId/read'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+    } catch (_) {}
   }
 
   static Future<Map<String, dynamic>> joinGroup(String groupId) async {

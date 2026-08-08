@@ -9,7 +9,10 @@ import 'auth_screen.dart';
 import 'dashboard_screen.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
+import 'services/deep_link_service.dart';
 import 'utils/preferences_helper.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +38,13 @@ void main() async {
   }
 
   final bool isLoggedIn = ApiService.isAuthenticated;
+
+  // Initialize deep link listener
+  try {
+    await DeepLinkService.initialize(navigatorKey);
+  } catch (e) {
+    debugPrint('Error initializing DeepLinkService: $e');
+  }
 
   runApp(
     ProviderScope(
@@ -69,6 +79,7 @@ class SabtrackApp extends StatelessWidget {
     }
 
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'SABTRACK AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

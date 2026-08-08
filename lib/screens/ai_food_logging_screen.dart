@@ -98,13 +98,13 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
       } else {
         setState(() {
           _isAnalyzing = false;
-          _errorMsg = res['error'] ?? "Failed to analyze food image. Please try again.";
+          _errorMsg = res['error'] as String? ?? "Failed to analyze food image. Please try again.";
         });
       }
     } catch (e) {
       setState(() {
         _isAnalyzing = false;
-        _errorMsg = "An error occurred: $e";
+        _errorMsg = "Connection error. Check your internet and try again.";
       });
     }
   }
