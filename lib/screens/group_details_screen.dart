@@ -8,17 +8,19 @@ import 'groups_tab.dart';
 import 'dm_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/groups_provider.dart';
 
-class GroupDetailsScreen extends StatefulWidget {
+class GroupDetailsScreen extends ConsumerStatefulWidget {
   final GroupItem group;
 
   const GroupDetailsScreen({super.key, required this.group});
 
   @override
-  State<GroupDetailsScreen> createState() => _GroupDetailsScreenState();
+  ConsumerState<GroupDetailsScreen> createState() => _GroupDetailsScreenState();
 }
 
-class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
+class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
   int _activeTab = 0; // 0: Leaderboard, 1: Activity Feed, 2: Group Chat
   int _rankMetric = 0; // 0: Steps, 1: Calories, 2: Workouts
 
@@ -776,7 +778,66 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             tooltip: 'Invite Friends',
             onPressed: _showInviteFriendsDialog,
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            onSelected: (value) async {
+              if (value == 'leave') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    title: const Text('Leave Group', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    content: Text('Are you sure you want to leave "${widget.group.title}"?', style: const TextStyle(color: Colors.white70)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Leave Group', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  // 1. Optimistic 0ms UI update via Riverpod!
+                  ref.read(groupsProvider.notifier).leaveGroupOptimistic(widget.group.id);
+                  if (mounted) {
+                    Navigator.pop(context); // Instant 0ms exit!
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Left "${widget.group.title}".'),
+                        backgroundColor: Colors.red.shade700,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'leave',
+                child: Row(
+                  children: [
+                    Icon(Icons.exit_to_app_rounded, color: Colors.redAccent, size: 20),
+                    SizedBox(width: 10),
+                    Text('Leave Group', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: _isLoading

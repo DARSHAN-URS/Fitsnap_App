@@ -12,6 +12,8 @@ import 'dm_screen.dart';
 import 'notifications_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/groups_provider.dart';
 
 class GroupItem {
   final String id;
@@ -41,6 +43,38 @@ class GroupItem {
     this.isPrivate = false,
     this.invitedFriends = const [],
   });
+
+  factory GroupItem.fromJson(Map<String, dynamic> json) => GroupItem.fromBackendJson(json);
+
+  GroupItem copyWith({
+    String? id,
+    String? title,
+    int? memberCount,
+    String? desc,
+    IconData? icon,
+    Color? color,
+    List<String>? avatars,
+    String? extraMemberText,
+    String? tag,
+    bool? isJoined,
+    bool? isPrivate,
+    List<String>? invitedFriends,
+  }) {
+    return GroupItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      memberCount: memberCount ?? this.memberCount,
+      desc: desc ?? this.desc,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
+      avatars: avatars ?? this.avatars,
+      extraMemberText: extraMemberText ?? this.extraMemberText,
+      tag: tag ?? this.tag,
+      isJoined: isJoined ?? this.isJoined,
+      isPrivate: isPrivate ?? this.isPrivate,
+      invitedFriends: invitedFriends ?? this.invitedFriends,
+    );
+  }
 
   factory GroupItem.fromBackendJson(Map<String, dynamic> json) {
     final String name = json['name'] ?? json['title'] ?? '';
@@ -114,17 +148,20 @@ class FriendItem {
   final String avatar;
   final String status;
 
+  factory FriendItem.fromJson(Map<String, dynamic> json) => FriendItem.fromBackendJson(json);
+
   FriendItem({
     required this.id,
-    required this.friendId,
+    this.friendId = '',
     required this.name,
     this.username = '',
-    required this.email,
+    this.email = '',
     this.profilePictureUrl,
-    required this.steps,
-    required this.calories,
-    required this.avatar,
-    required this.status,
+    this.steps = 0,
+    this.calories = 0,
+    this.avatar = 'FR',
+    this.status = 'Active',
+    String? activity,
   });
 
   factory FriendItem.fromBackendJson(Map<String, dynamic> json) {
@@ -152,14 +189,14 @@ class FriendItem {
   }
 }
 
-class GroupsTab extends StatefulWidget {
+class GroupsTab extends ConsumerStatefulWidget {
   const GroupsTab({super.key});
 
   @override
-  State<GroupsTab> createState() => _GroupsTabState();
+  ConsumerState<GroupsTab> createState() => _GroupsTabState();
 }
 
-class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
+class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateMixin {
   Widget _buildMeshBackground() {
     return Stack(
       children: [
@@ -452,33 +489,56 @@ class _GroupsTabState extends State<GroupsTab> with TickerProviderStateMixin {
   }
 
   Future<void> _toggleGroupJoin(GroupItem group) async {
-    if (mounted) setState(() => _isLoading = true);
-    
-    final res = group.isJoined 
+    final bool isLeaving = group.isJoined;
+
+    // 1. Optimistic 0ms UI update: update local list item immediately
+    setState(() {
+      group.isJoined = !isLeaving;
+      if (isLeaving) {
+        group.memberCount = (group.memberCount - 1).clamp(0, 999999);
+      } else {
+        group.memberCount += 1;
+      }
+      _filterGroups();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(!isLeaving ? 'Joined "${group.title}"!' : 'Left "${group.title}".'),
+          duration: const Duration(seconds: 1),
+          backgroundColor: !isLeaving ? Colors.green : AppTheme.primary,
+        ),
+      );
+    }
+
+    // 2. Perform network request in background without blocking screen
+    final res = isLeaving 
         ? await ApiService.leaveGroup(group.id)
         : await ApiService.joinGroup(group.id);
-        
-    if (res['success'] == true) {
-      await _fetchData();
+
+    if (res['success'] != true) {
+      // Revert local state on failure
       if (mounted) {
+        setState(() {
+          group.isJoined = isLeaving;
+          if (isLeaving) {
+            group.memberCount += 1;
+          } else {
+            group.memberCount = (group.memberCount - 1).clamp(0, 999999);
+          }
+          _filterGroups();
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(!group.isJoined ? 'Joined "${group.title}"!' : 'Left "${group.title}".'),
-            duration: const Duration(seconds: 1),
-            backgroundColor: !group.isJoined ? Colors.green : AppTheme.primary,
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['error'] ?? 'Operation failed'),
+            content: Text(res['error'] ?? 'Operation failed. Reverting.'),
             backgroundColor: Colors.red,
           ),
         );
       }
+    } else {
+      // Sync Riverpod state silently
+      ref.read(groupsProvider.notifier).fetchAllData(showLoading: false);
     }
   }
 
