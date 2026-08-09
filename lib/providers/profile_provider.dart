@@ -65,7 +65,8 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
     String nameTemp = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
     String usernameTemp = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
-    int ageTemp = await PreferencesHelper.readInt('profile_age') ?? 25;
+    final String? ageStr = await PreferencesHelper.readString('profile_age');
+    int ageTemp = ageStr != null ? (int.tryParse(ageStr) ?? 0) : (await PreferencesHelper.readInt('profile_age') ?? 0);
     String? picTemp = await PreferencesHelper.readString('profile_pic_url');
 
     int mealsCount = 0;

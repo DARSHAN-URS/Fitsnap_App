@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import '../utils/preferences_helper.dart';
 
 class FastingScreen extends StatefulWidget {
 
@@ -33,10 +34,20 @@ class _FastingScreenState extends State<FastingScreen> {
     '20:4': 20,
   };
 
+  bool _isUnder13 = false;
+
   @override
   void initState() {
     super.initState();
+    _checkAgeRestrictions();
     _loadCachedFastingData();
+  }
+
+  Future<void> _checkAgeRestrictions() async {
+    final under13 = await PreferencesHelper.isUnder13();
+    if (mounted) {
+      setState(() => _isUnder13 = under13);
+    }
   }
 
   @override
@@ -331,6 +342,52 @@ class _FastingScreenState extends State<FastingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isUnder13) {
+      return Scaffold(
+        backgroundColor: AppTheme.primary,
+        appBar: AppBar(
+          backgroundColor: AppTheme.primaryLight,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Fasting & Nutrition',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonEmerald.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.eco_rounded, color: AppTheme.neonEmerald, size: 64),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Healthy Growth First 🌱',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Intermittent fasting protocols are disabled for users 13 and under to support proper physiological growth and development. Focus on eating nutrient-dense balanced meals and staying active!',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 14, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final int totalFastHours = _protocols[_selectedProtocol]!;
     final double percentage = _isFasting
         ? (_elapsedTime.inSeconds / (totalFastHours * 3600)).clamp(0.0, 1.0)

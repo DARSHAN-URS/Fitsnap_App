@@ -21,7 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // State Variables gathered during onboarding
   String _gender = ''; // 'Male' or 'Female'
-  final TextEditingController _ageController = TextEditingController(text: '24');
+  final TextEditingController _ageController = TextEditingController(text: '');
   
   // Height & Weight units & controllers
   String _heightUnit = 'cm'; // 'cm' or 'ft'
@@ -92,7 +92,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (ApiService.isAuthenticated) {
         final res = await ApiService.updateProfile(
           name: displayName,
-          age: int.tryParse(_ageController.text) ?? 24,
+          age: int.tryParse(_ageController.text.trim()) ?? 0,
           weight: weightKg,
           height: heightCm,
           goals: _selectedGoal.isEmpty ? 'Build Muscle' : _selectedGoal,
@@ -1494,6 +1494,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           if (_ageController.text.trim().isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Please enter your age.')),
+                            );
+                            return;
+                          }
+                          final parsedAge = int.tryParse(_ageController.text.trim());
+                          if (parsedAge == null || parsedAge <= 0 || parsedAge > 120) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter a valid age.')),
                             );
                             return;
                           }

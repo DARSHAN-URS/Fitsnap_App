@@ -340,15 +340,31 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
 
   // Show export options dialog
   void _showExportDialog() {
+    // Dynamic recovery calculation based on workout burn and steps goal
+    final stepProgress = (_steps / _stepGoal).clamp(0.0, 1.2);
+    final calculatedRecovery = (75 + (stepProgress * 15) - (_workouts.length * 2)).clamp(50, 98).toInt();
+    final calculatedStrain = (5.0 + (_calorieBurned / 100.0) + (_workouts.length * 2.5)).clamp(1.0, 21.0);
+
     final dataMap = {
       'date': _getFormattedDate(widget.date),
       'steps': _steps,
+      'stepGoal': _stepGoal,
       'calorieBurned': _calorieBurned,
       'waterMl': _waterMl,
+      'waterGoal': _waterGoal,
       'calorieIntake': _calorieIntake,
-      'recoveryScore': 84, // optimal defaults
-      'strainScore': 14.2,
+      'calorieGoal': _calorieGoal.toInt(),
+      'proteinIntake': _proteinIntake,
+      'proteinGoal': _proteinGoal.toInt(),
+      'carbsIntake': _carbsIntake,
+      'carbsGoal': _carbsGoal.toInt(),
+      'fatsIntake': _fatsIntake,
+      'fatsGoal': _fatsGoal.toInt(),
+      'recoveryScore': calculatedRecovery,
+      'strainScore': double.parse(calculatedStrain.toStringAsFixed(1)),
       'aiSummary': _aiSummary.isNotEmpty ? _aiSummary : "Great workout volume! Steps and nutrition are on track.",
+      'workoutsCount': _workouts.length,
+      'mealsCount': _meals.length,
     };
     
     Navigator.push(
@@ -361,6 +377,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
       ),
     );
   }
+
 
   // Export the report as PNG (or JPEG placeholder) and save to device storage
   Future<void> _exportReport(bool transparent) async {

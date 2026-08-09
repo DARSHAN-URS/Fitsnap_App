@@ -641,14 +641,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         if (sumF > 0) fatVal = sumF.round();
       }
 
-      // If still 0 calories after all sources — analysis truly failed. Show error, do NOT log fake data.
       if (calVal == 0) {
         if (mounted) {
+          final errMsg = result['error'] as String? ?? 'Could not read nutrition from this photo. Try again with a clearer image.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text(
-                'Could not read nutrition from this photo. Try again with a clearer, well-lit image.',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              content: Text(
+                errMsg,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
               ),
               backgroundColor: Colors.red.shade700,
               behavior: SnackBarBehavior.floating,
@@ -659,6 +659,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
         return;
       }
+
+
 
       String mealName = (data['name'] as String? ?? '').trim();
       if (mealName.isEmpty || ['meal log', 'analyzed meal', 'unknown meal', 'analyzed food'].contains(mealName.toLowerCase())) {

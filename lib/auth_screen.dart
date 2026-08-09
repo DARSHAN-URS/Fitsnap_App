@@ -78,10 +78,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
 
         if (profileData['age'] != null && profileData['weight'] != null && profileData['height'] != null) {
           onboardingCompleted = true;
-          await PreferencesHelper.saveString('profile_age', (profileData['age'] ?? 24).toString());
+          await PreferencesHelper.saveString('profile_age', profileData['age'].toString());
           await PreferencesHelper.saveDouble('profile_height', (profileData['height'] as num?)?.toDouble() ?? 175.0);
           await PreferencesHelper.saveDouble('profile_weight', (profileData['weight'] as num?)?.toDouble() ?? 75.0);
           await PreferencesHelper.saveString('profile_goal', profileData['goals'] ?? 'Build Muscle');
+        } else {
+          onboardingCompleted = false;
         }
       }
     } else {

@@ -39,7 +39,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     super.initState();
     _nameController = TextEditingController(text: 'Guest User');
     _usernameController = TextEditingController(text: 'guest_user');
-    _ageController = TextEditingController(text: '25');
+    _ageController = TextEditingController(text: '');
     _loadPersonalDetails();
   }
 
@@ -55,7 +55,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   Future<void> _loadPersonalDetails() async {
     final name = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
     final username = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
-    final age = await PreferencesHelper.readString('profile_age') ?? '25';
+    final age = await PreferencesHelper.readString('profile_age') ?? '';
     final weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
     final targetWeight = await PreferencesHelper.readDouble('profile_target_weight') ?? 70.0;
     final height = await PreferencesHelper.readDouble('profile_height') ?? 178.0;
@@ -87,7 +87,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
           setState(() {
             _nameController.text = d['name'] ?? name;
             _usernameController.text = d['username'] ?? username;
-            _ageController.text = (d['age'] ?? age).toString();
+            _ageController.text = d['age'] != null ? d['age'].toString() : age;
             _weight = (d['weight'] as num?)?.toDouble() ?? weight;
             _targetWeight = (d['target_weight'] as num?)?.toDouble() ?? targetWeight;
             _height = (d['height'] as num?)?.toDouble() ?? height;
@@ -105,7 +105,13 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     final name = _nameController.text.trim();
     final username = _usernameController.text.trim();
     final ageStr = _ageController.text.trim();
-    final age = int.tryParse(ageStr) ?? 25;
+    if (ageStr.isEmpty) {
+      return 'Please enter your age.';
+    }
+    final age = int.tryParse(ageStr);
+    if (age == null || age <= 0 || age > 120) {
+      return 'Please enter a valid age.';
+    }
     
     if (ApiService.isAuthenticated) {
       final res = await ApiService.updateProfile(

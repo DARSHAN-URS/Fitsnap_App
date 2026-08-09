@@ -1760,7 +1760,99 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // --- Export Studio Backend Endpoints ---
+  static Future<Map<String, dynamic>> logExportImage({
+    required String metricType,
+    required String layoutType,
+    required String theme,
+    Map<String, dynamic>? customSettings,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/exports/image'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'metric_type': metricType,
+          'date_range': 'daily',
+          'layout_type': layoutType,
+          'output_format': 'png',
+          'theme': theme,
+          'custom_settings': customSettings ?? {},
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to log export image'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> logExportShare(String exportId, String platform, String message) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/exports/share/$exportId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'platform': platform,
+          'custom_message': message,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to log export share'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getExportHistory() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/exports/history'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to fetch export history'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getUserMeasurements({String? metricType}) async {
+    try {
+      final queryParam = metricType != null ? '?metric_type=$metricType' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/measurements$queryParam'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to fetch measurements'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
+
 
 
 

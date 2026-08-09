@@ -155,4 +155,28 @@ class PreferencesHelper {
   static Future<String?> getReminderTime() async {
     return await readString('reminder_time');
   }
+
+  // --- Neutral Age & Families Policy Helpers ---
+
+  /// Returns true if the user's saved age is 13 or below.
+  static Future<bool> isUnder13() async {
+    final ageStr = await readString('profile_age');
+    if (ageStr == null || ageStr.trim().isEmpty) {
+      final ageInt = await readInt('profile_age');
+      if (ageInt != null) return ageInt <= 13;
+      return false; // Default to false if unknown
+    }
+    final parsed = int.tryParse(ageStr.trim());
+    if (parsed == null) return false;
+    return parsed <= 13;
+  }
+
+  /// Helper to get user age as an integer, or null if not yet entered
+  static Future<int?> getUserAge() async {
+    final ageStr = await readString('profile_age');
+    if (ageStr != null && ageStr.trim().isNotEmpty) {
+      return int.tryParse(ageStr.trim());
+    }
+    return await readInt('profile_age');
+  }
 }

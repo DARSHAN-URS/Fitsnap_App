@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import '../utils/preferences_helper.dart';
 
 class DmScreen extends StatefulWidget {
   final String friendId;
@@ -38,11 +39,21 @@ class _DmScreenState extends State<DmScreen> {
   String? _myProfileName;
   String? _myUserId;
 
+  bool _isUnder13 = false;
+
   @override
   void initState() {
     super.initState();
+    _checkAgeRestrictions();
     _loadMessages();
     _startPolling();
+  }
+
+  Future<void> _checkAgeRestrictions() async {
+    final under13 = await PreferencesHelper.isUnder13();
+    if (mounted) {
+      setState(() => _isUnder13 = under13);
+    }
   }
 
   @override
@@ -213,6 +224,53 @@ class _DmScreenState extends State<DmScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isUnder13) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF1E293B),
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Direct Messaging',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shield_outlined, color: AppTheme.accent, size: 64),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Child Safety Protection',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Direct messaging is restricted for accounts under 13 to maintain user safety and privacy in accordance with Google Play Families Policies.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 14, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(

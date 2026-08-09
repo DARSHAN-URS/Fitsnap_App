@@ -267,19 +267,24 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
 
   // Export dialog and handling
   void _showExportDialog() {
+    // Dynamic strain score based on workout duration and calories burned
+    final strain = (6.0 + (widget.calories / 70.0) + (widget.durationSeconds / 600.0)).clamp(3.0, 21.0);
+    final recovery = (92 - (strain * 1.5)).clamp(40.0, 98.0).toInt();
+
     final dataMap = {
       'date': 'Workout Summary',
       'steps': 0,
       'calorieBurned': widget.calories,
       'waterMl': 0,
       'calorieIntake': 0,
-      'recoveryScore': 85, // optimal defaults
-      'strainScore': 14.8,
+      'recoveryScore': recovery,
+      'strainScore': double.parse(strain.toStringAsFixed(1)),
       'aiSummary': "Great aerobic performance! Your average pace of ${widget.avgPace} shows strong cardiovascular output.",
       'activityType': widget.activityType,
       'distance': '${widget.distance.toStringAsFixed(2)} km',
       'pace': '${widget.avgPace} /km',
       'duration': _formatDuration(widget.durationSeconds),
+      'activeMinutes': (widget.durationSeconds / 60).round(),
     };
     
     Navigator.push(
@@ -292,6 +297,7 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
       ),
     );
   }
+
 
   Future<void> _exportReport(bool transparent) async {
     setState(() { _transparentOverlay = transparent; });

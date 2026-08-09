@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../utils/share_helper.dart';
 import '../providers/profile_provider.dart';
+import '../services/api_service.dart';
 
 enum ExportType { daily, workout }
 
@@ -46,6 +47,10 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   String _photoUrl = "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=800";
 
   bool _isExporting = false;
+  int? _hrvMs;
+  double? _sleepHoursLogged;
+  int? _sleepScoreLogged;
+
 
   // Static list of layout presets
   final List<Map<String, String>> _layoutsList = [
@@ -100,8 +105,29 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-populate some parameters based on theme
     _updateThemeColors();
+    _fetchUserVitalsFromBackend();
+  }
+
+  Future<void> _fetchUserVitalsFromBackend() async {
+    try {
+      final res = await ApiService.getUserMeasurements();
+      if (res['success'] && res['data'] != null) {
+        final List<dynamic> list = res['data'];
+        for (var item in list) {
+          final type = item['metric_type'];
+          final val = double.tryParse(item['value'].toString());
+          if (val == null) continue;
+          if (type == 'hrv' && _hrvMs == null) {
+            if (mounted) setState(() => _hrvMs = val.round());
+          } else if (type == 'sleep_hours' && _sleepHoursLogged == null) {
+            if (mounted) setState(() => _sleepHoursLogged = val);
+          } else if (type == 'sleep_score' && _sleepScoreLogged == null) {
+            if (mounted) setState(() => _sleepScoreLogged = val.round());
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   void _updateThemeColors() {
@@ -146,14 +172,35 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
     setState(() => _isExporting = true);
     await Future.delayed(const Duration(milliseconds: 100)); // let frame draw
     try {
-      final fileName = 'SabtrackExport_${DateTime.now().millisecondsSinceEpoch}';
-      await ShareHelper.shareWidgetCapture(_repaintKey, 'My Sabtrack Fitness card: $_customTitle');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing export: $e')),
+      final metricType = widget.type == ExportType.daily ? 'daily' : 'workout';
+      final res = await ApiService.logExportImage(
+        metricType: metricType,
+        layoutType: _layout,
+        theme: _theme,
+        customSettings: {
+          'aspect_ratio': _aspectRatio,
+          'title': _customTitle,
+        },
       );
+
+      String? exportId;
+      if (res['success'] && res['data'] != null) {
+        exportId = res['data']['id']?.toString();
+      }
+
+      await ShareHelper.shareWidgetCapture(_repaintKey, 'My Sabtrack Fitness card: $_customTitle');
+
+      if (exportId != null) {
+        await ApiService.logExportShare(exportId, 'system_share', 'Shared export card');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing export: $e')),
+        );
+      }
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -161,25 +208,41 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
     setState(() => _isExporting = true);
     await Future.delayed(const Duration(milliseconds: 100));
     try {
+      final metricType = widget.type == ExportType.daily ? 'daily' : 'workout';
+      await ApiService.logExportImage(
+        metricType: metricType,
+        layoutType: _layout,
+        theme: _theme,
+        customSettings: {
+          'aspect_ratio': _aspectRatio,
+          'title': _customTitle,
+        },
+      );
+
       final fileName = 'Sabtrack_${widget.type == ExportType.daily ? "Daily" : "Workout"}_${DateTime.now().millisecondsSinceEpoch}';
       final path = await ShareHelper.saveWidgetCapture(_repaintKey, fileName: fileName);
-      if (path != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved successfully to gallery:\n$path')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save file to disk.')),
-        );
+      if (mounted) {
+        if (path != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved successfully to gallery:\n$path')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not save file to disk.')),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) setState(() => _isExporting = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -623,6 +686,18 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildAppleRingsLayout() {
+    final moveCalories = (widget.data['calorieBurned'] as num?)?.toDouble() ?? 480.0;
+    final moveGoal = (widget.data['calorieGoal'] as num?)?.toDouble() ?? 600.0;
+    final moveProgress = (moveCalories / moveGoal).clamp(0.0, 1.0);
+
+    final exerciseMins = (widget.data['activeMinutes'] as num?)?.toDouble() ?? 20.0;
+    final exerciseGoal = 30.0;
+    final exerciseProgress = (exerciseMins / exerciseGoal).clamp(0.0, 1.0);
+
+    final workoutsCount = (widget.data['workoutsCount'] as num?)?.toInt() ?? 1;
+    final standHours = (8 + workoutsCount).clamp(1, 12);
+    final standProgress = (standHours / 12.0).clamp(0.0, 1.0);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -633,7 +708,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
               width: 140,
               height: 140,
               child: CircularProgressIndicator(
-                value: 0.85, // Move (Move target 600)
+                value: moveProgress,
                 strokeWidth: 14,
                 backgroundColor: Colors.redAccent.withOpacity(0.12),
                 color: Colors.redAccent,
@@ -644,7 +719,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
               width: 106,
               height: 106,
               child: CircularProgressIndicator(
-                value: 0.65, // Exercise (Ex target 30)
+                value: exerciseProgress,
                 strokeWidth: 14,
                 backgroundColor: Colors.lightGreenAccent.withOpacity(0.12),
                 color: Colors.lightGreenAccent,
@@ -655,7 +730,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
               width: 72,
               height: 72,
               child: CircularProgressIndicator(
-                value: 0.75, // Stand (Stand target 12h)
+                value: standProgress,
                 strokeWidth: 14,
                 backgroundColor: Colors.cyanAccent.withOpacity(0.12),
                 color: Colors.cyanAccent,
@@ -669,11 +744,11 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildRingLabel('Move', '510 / 600 kcal', Colors.redAccent),
+            _buildRingLabel('Move', '${moveCalories.toInt()} / ${moveGoal.toInt()} kcal', Colors.redAccent),
             const SizedBox(height: 12),
-            _buildRingLabel('Exercise', '20 / 30 min', Colors.lightGreenAccent),
+            _buildRingLabel('Exercise', '${exerciseMins.toInt()} / 30 min', Colors.lightGreenAccent),
             const SizedBox(height: 12),
-            _buildRingLabel('Stand', '9 / 12 hr', Colors.cyanAccent),
+            _buildRingLabel('Stand', '$standHours / 12 hr', Colors.cyanAccent),
           ],
         ),
       ],
@@ -702,9 +777,9 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
 
   Widget _buildStravaLayout() {
     final activityName = widget.data['activityType'] ?? 'Cardio Workout';
-    final distance = widget.data['distance'] ?? '7.8 km';
+    final distance = widget.data['distance'] ?? '${((widget.data['steps'] ?? 10840) * 0.0008).toStringAsFixed(1)} km';
     final pace = widget.data['pace'] ?? '5:24 /km';
-    final duration = widget.data['duration'] ?? '42 min';
+    final duration = widget.data['duration'] ?? '${widget.data['activeMinutes'] ?? 42} min';
 
     return Container(
       alignment: Alignment.bottomCenter,
@@ -755,6 +830,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   Widget _buildWhoopLayout() {
     final recovery = widget.data['recoveryScore'] ?? 84;
     final strain = widget.data['strainScore'] ?? 14.8;
+    final hrvVal = _hrvMs ?? 74;
     
     Color whoopColor = Colors.redAccent;
     if (recovery >= 66) whoopColor = Colors.greenAccent;
@@ -795,7 +871,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
             Text('$strain / 21', style: GoogleFonts.inter(fontSize: 22, color: Colors.cyanAccent, fontWeight: FontWeight.w900)),
             const SizedBox(height: 12),
             Text('HRV AVERAGE', style: GoogleFonts.inter(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.bold)),
-            Text('74 ms', style: GoogleFonts.inter(fontSize: 22, color: Colors.white, fontWeight: FontWeight.w900)),
+            Text('$hrvVal ms', style: GoogleFonts.inter(fontSize: 22, color: Colors.white, fontWeight: FontWeight.w900)),
           ],
         ),
       ],
@@ -803,6 +879,12 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildOuraLayout() {
+    final readiness = widget.data['recoveryScore'] ?? 87;
+    final sleepScore = _sleepScoreLogged ?? ((readiness as int) - 3).clamp(50, 99);
+    final activityScore = (widget.data['strainScore'] != null
+        ? ((widget.data['strainScore'] as num) * 5.5).clamp(50, 99).toInt()
+        : 90);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -811,14 +893,14 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
           style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white38, letterSpacing: 1.0),
         ),
         const SizedBox(height: 6),
-        Text('87', style: GoogleFonts.inter(fontSize: 48, fontWeight: FontWeight.w900, color: _accentColor)),
+        Text('$readiness', style: GoogleFonts.inter(fontSize: 48, fontWeight: FontWeight.w900, color: _accentColor)),
         const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildOuraMiniDial('Sleep', 82, Colors.purpleAccent),
-            _buildOuraMiniDial('Activity', 90, Colors.orangeAccent),
-            _buildOuraMiniDial('Readiness', 87, Colors.blueAccent),
+            _buildOuraMiniDial('Sleep', sleepScore, Colors.purpleAccent),
+            _buildOuraMiniDial('Activity', activityScore, Colors.orangeAccent),
+            _buildOuraMiniDial('Readiness', readiness, Colors.blueAccent),
           ],
         )
       ],
@@ -852,10 +934,10 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
 
   Widget _buildGarminLayout() {
     final activityName = widget.data['activityType'] ?? 'Running';
-    final distance = widget.data['distance'] ?? '7.8 km';
+    final distance = widget.data['distance'] ?? '${((widget.data['steps'] ?? 10840) * 0.0008).toStringAsFixed(1)} km';
     final calories = widget.data['calorieBurned'] ?? 480;
     final pace = widget.data['pace'] ?? '5:24 /km';
-    final duration = widget.data['duration'] ?? '42 min';
+    final duration = widget.data['duration'] ?? '${widget.data['activeMinutes'] ?? 42} min';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -918,19 +1000,32 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildNutritionLayout() {
+    final intake = widget.data['calorieIntake'] ?? 1740;
+    final calGoal = widget.data['calorieGoal'] ?? 2000;
+    final protein = widget.data['proteinIntake'] ?? 118;
+    final proteinGoal = widget.data['proteinGoal'] ?? 130;
+    final carbs = widget.data['carbsIntake'] ?? 192;
+    final carbsGoal = widget.data['carbsGoal'] ?? 220;
+    final fats = widget.data['fatsIntake'] ?? 54;
+    final fatsGoal = widget.data['fatsGoal'] ?? 65;
+
+    final pRatio = (protein / proteinGoal).clamp(0.0, 1.0);
+    final cRatio = (carbs / carbsGoal).clamp(0.0, 1.0);
+    final fRatio = (fats / fatsGoal).clamp(0.0, 1.0);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text('CALORIES CONSUMED', style: GoogleFonts.inter(fontSize: 9, color: _textColor.withOpacity(0.5), fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Text('1740 / 2000 kcal', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: _textColor)),
+        Text('$intake / $calGoal kcal', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: _textColor)),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildMacroSegment('Protein', '118g', 0.85, Colors.indigoAccent),
-            _buildMacroSegment('Carbs', '192g', 0.78, Colors.amberAccent),
-            _buildMacroSegment('Fats', '54g', 0.70, Colors.tealAccent),
+            _buildMacroSegment('Protein', '${protein}g', pRatio, Colors.indigoAccent),
+            _buildMacroSegment('Carbs', '${carbs}g', cRatio, Colors.amberAccent),
+            _buildMacroSegment('Fats', '${fats}g', fRatio, Colors.tealAccent),
           ],
         ),
       ],
@@ -963,6 +1058,10 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildSleepLayout() {
+    final sleepHrs = _sleepHoursLogged ?? 7.75;
+    final hrs = sleepHrs.floor();
+    final mins = ((sleepHrs - hrs) * 60).round();
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -975,7 +1074,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
               children: [
                 Text('SLEEP DURATION', style: GoogleFonts.inter(fontSize: 9, color: Colors.white38, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 2),
-                Text('7 hrs 45 mins', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
+                Text('$hrs hrs $mins mins', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
               ],
             ),
             const Icon(Icons.nights_stay_rounded, color: Colors.indigoAccent, size: 36),
@@ -1015,6 +1114,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildHydrationLayout() {
+
     final water = widget.data['waterMl'] ?? 2100;
     final percent = ((water / 2500) * 100).toInt();
 
