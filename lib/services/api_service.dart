@@ -309,7 +309,11 @@ class ApiService {
       final response = await http.Response.fromStream(streamedResponse);
       
       if (response.statusCode == 200) {
-        return {'success': true, 'data': jsonDecode(response.body)};
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded['success'] == false) {
+          return {'success': false, 'error': decoded['error'] ?? decoded['detail'] ?? 'Failed to analyze food image'};
+        }
+        return {'success': true, 'data': decoded['data'] ?? decoded};
       }
       return {'success': false, 'error': 'Failed to analyze food image'};
     } catch (e) {
