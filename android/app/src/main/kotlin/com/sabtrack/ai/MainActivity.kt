@@ -10,9 +10,16 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.Manifest
+import android.os.Bundle
+import androidx.core.view.WindowCompat
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.sabtrack.ai/steps"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

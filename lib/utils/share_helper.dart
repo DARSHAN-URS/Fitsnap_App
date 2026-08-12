@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class ShareHelper {
   // Share PNG capture via share sheet (existing behavior)
@@ -38,13 +37,6 @@ class ShareHelper {
     bool asJpeg = false,
   }) async {
     try {
-      // Request storage / media permission
-      if (Platform.isAndroid) {
-        if (await Permission.photos.isDenied && await Permission.storage.isDenied) {
-          await [Permission.photos, Permission.storage].request();
-        }
-      }
-
       final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
 

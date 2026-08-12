@@ -25,7 +25,7 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
       _errorMsg = null;
     });
 
-    // Just-In-Time Permission Request before accessing camera or gallery
+    // Just-In-Time Permission Request before accessing camera
     if (source == ImageSource.camera) {
       final status = await Permission.camera.request();
       if (status.isPermanentlyDenied) {
@@ -34,13 +34,6 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
         return;
       }
       if (status.isDenied) return;
-    } else {
-      final status = await Permission.photos.request();
-      if (status.isPermanentlyDenied) {
-        if (!mounted) return;
-        _showPermissionDialog('Photo gallery permission is required to pick food images. Please enable it in Settings.');
-        return;
-      }
     }
 
     try {

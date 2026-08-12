@@ -9,6 +9,7 @@ import '../widgets/staggered_animation.dart';
 import '../utils/preferences_helper.dart';
 import 'group_details_screen.dart';
 import 'dm_screen.dart';
+import 'friend_profile_screen.dart';
 import 'notifications_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
@@ -1341,16 +1342,34 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
                 borderRadius: AppTheme.cardRadius,
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.6),
-                      borderRadius: AppTheme.cardRadius,
-                      boxShadow: AppTheme.cardShadow,
-                      border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
-                    ),
-                    child: Column(
+                  child: GestureDetector(
+                    onTap: () {
+                      final fId = friend.friendId.isNotEmpty ? friend.friendId : friend.id;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FriendProfileScreen(
+                            friendId: fId,
+                            friendName: friend.name,
+                            friendUsername: friend.username,
+                            friendEmail: friend.email,
+                            friendPicUrl: friend.profilePictureUrl,
+                            avatarInitials: friend.avatar,
+                            avatarColor: avatarCol,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.6),
+                        borderRadius: AppTheme.cardRadius,
+                        boxShadow: AppTheme.cardShadow,
+                        border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.5),
+                      ),
+                      child: Column(
                       children: [
                         Row(
                           children: [
@@ -1588,7 +1607,8 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
                     ),
                   ),
                 ),
-              );
+              ),
+            );
             },
           ),
       ],

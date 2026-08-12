@@ -1103,6 +1103,25 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getFriendActivity(String friendId, [String? date]) async {
+    try {
+      final dateParam = date != null ? '?date=$date' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends/$friendId/activity$dateParam'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)['data']};
+      }
+      return {'success': false, 'error': 'Failed to retrieve friend activity'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   static Future<Map<String, dynamic>> searchUsers(String query) async {
     try {
       final response = await http.get(
