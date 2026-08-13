@@ -436,9 +436,23 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200) {
-        return {'success': true, 'data': jsonDecode(response.body)['data']};
+        final decoded = jsonDecode(response.body);
+        return {'success': true, 'data': decoded['data'] ?? decoded};
       }
-      return {'success': false, 'error': jsonDecode(response.body)['error'] ?? 'Failed to update profile'};
+      dynamic bodyData;
+      try {
+        bodyData = jsonDecode(response.body);
+      } catch (_) {}
+      String errorMsg = 'Failed to update profile';
+      if (bodyData is Map) {
+        final err = bodyData['detail'] ?? bodyData['error'] ?? bodyData['message'];
+        if (err is String) {
+          errorMsg = err;
+        } else if (err is List && err.isNotEmpty) {
+          errorMsg = err.map((e) => e is Map ? (e['msg'] ?? e.toString()) : e.toString()).join(', ');
+        }
+      }
+      return {'success': false, 'error': errorMsg};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

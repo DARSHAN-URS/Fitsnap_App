@@ -95,15 +95,15 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
       if (res['success'] && res['data'] != null) {
         final data = res['data'];
         setState(() {
-          _calorieIntake = data['calorieIntake'] ?? 0;
-          _proteinIntake = data['proteinIntake'] ?? 0;
-          _carbsIntake = data['carbsIntake'] ?? 0;
-          _fatsIntake = data['fatsIntake'] ?? 0;
-          _calorieBurned = data['calorieBurned'] ?? 0;
-          _stepsCalorieBurn = data['stepsCalorieBurn'] ?? 0;
-          _workoutsCalorieBurn = data['workoutsCalorieBurn'] ?? 0;
-          _steps = data['steps'] ?? 0;
-          _waterMl = data['waterMl'] ?? 0;
+          _calorieIntake = (data['calorieIntake'] as num?)?.round() ?? 0;
+          _proteinIntake = (data['proteinIntake'] as num?)?.round() ?? 0;
+          _carbsIntake = (data['carbsIntake'] as num?)?.round() ?? 0;
+          _fatsIntake = (data['fatsIntake'] as num?)?.round() ?? 0;
+          _calorieBurned = (data['calorieBurned'] as num?)?.round() ?? 0;
+          _stepsCalorieBurn = (data['stepsCalorieBurn'] as num?)?.round() ?? 0;
+          _workoutsCalorieBurn = (data['workoutsCalorieBurn'] as num?)?.round() ?? 0;
+          _steps = (data['steps'] as num?)?.toInt() ?? 0;
+          _waterMl = (data['waterMl'] as num?)?.toInt() ?? 0;
           _meals = data['meals'] ?? [];
           _workouts = data['workouts'] ?? [];
 
@@ -160,8 +160,6 @@ class _DailyReportScreenState extends State<DailyReportScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    final formattedDateStr = _getFormattedDate(widget.date);
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       floatingActionButton: FloatingActionButton.extended(

@@ -49,7 +49,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       try {
         final enrollment = jsonDecode(cachedEnrollment);
         _isJoined = true;
-        _completedWorkouts = enrollment['completed_workouts'] ?? 0;
+        _completedWorkouts = (enrollment['progress'] ?? enrollment['completed_workouts'] ?? 0) as int;
         _isLoading = false;
         hasCached = true;
       } catch (_) {}
@@ -104,7 +104,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       
       if (enrollment != null) {
         newIsJoined = true;
-        newCompletedWorkouts = enrollment['completed_workouts'] ?? 0;
+        newCompletedWorkouts = (enrollment['progress'] ?? enrollment['completed_workouts'] ?? 0) as int;
         await PreferencesHelper.saveString('cache_challenge_enrollment', jsonEncode(enrollment));
       } else {
         newIsJoined = false;
