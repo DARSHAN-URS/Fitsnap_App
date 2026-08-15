@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../theme/sabtrack_logo.dart';
 import '../utils/share_helper.dart';
@@ -31,6 +33,7 @@ class ExportStudioScreen extends ConsumerStatefulWidget {
 class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   // Key to capture layout
   final GlobalKey _repaintKey = GlobalKey();
+  final ImagePicker _imagePicker = ImagePicker();
 
   // Customization States
   int _activeStep = 0; // 0: Layouts, 1: Styles, 2: Ratios
@@ -44,13 +47,46 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   bool _showLogo = true;
   String _customTitle = "Sabtrack AI Performance";
   String _backgroundType = "color"; // color, photo
-  String _photoUrl = "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=800";
+  String _photoUrl = "https://images.unsplash.com/photo-1502680390469-be75c86b636f?q=80&w=1200";
+  String? _localPhotoPath;
+  double _photoDimming = 0.25; // 0.0 to 0.8
+  String _stravaPosition = 'top_right'; // top_right, top_left, bottom_right, bottom_left, center
+  bool _showRouteLine = true;
+  Color _routeLineColor = const Color(0xFFFC5200); // Signature Strava/Sabtrack Athletic Orange
+  double _routeStrokeWidth = 3.5;
+  String _watermarkStyle = 'SABTRACK'; // SABTRACK, STRAVA, SABTRACK AI, CUSTOM, NONE
+
+  final List<Map<String, String>> _curatedBackdrops = [
+    {
+      'title': 'Tea Hills Trail',
+      'url': 'https://images.unsplash.com/photo-1502680390469-be75c86b636f?q=80&w=1200',
+    },
+    {
+      'title': 'Mountain Summit',
+      'url': 'https://images.unsplash.com/photo-1483721074575-47000966a3d1?q=80&w=1200',
+    },
+    {
+      'title': 'Morning Run',
+      'url': 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?q=80&w=1200',
+    },
+    {
+      'title': 'Scenic Road',
+      'url': 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=1200',
+    },
+    {
+      'title': 'Cycling Trail',
+      'url': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=1200',
+    },
+    {
+      'title': 'Training Gym',
+      'url': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200',
+    },
+  ];
 
   bool _isExporting = false;
   int? _hrvMs;
   double? _sleepHoursLogged;
   int? _sleepScoreLogged;
-
 
   // Static list of layout presets
   final List<Map<String, String>> _layoutsList = [
@@ -105,6 +141,21 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.data['initialLayout'] != null) {
+      _layout = widget.data['initialLayout'].toString();
+      if (_layout == 'strava') {
+        _backgroundType = 'photo';
+        _aspectRatio = 'story';
+      }
+    }
+    if (widget.data['photoUrl'] != null) {
+      _photoUrl = widget.data['photoUrl'].toString();
+      _backgroundType = 'photo';
+    }
+    if (widget.data['localPhotoPath'] != null) {
+      _localPhotoPath = widget.data['localPhotoPath'].toString();
+      _backgroundType = 'photo';
+    }
     _updateThemeColors();
     _fetchUserVitalsFromBackend();
   }
@@ -286,19 +337,21 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
                       width: canvasSize.width,
                       height: canvasSize.height,
                       decoration: _buildCanvasDecoration(),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildCanvasHeader(profileState),
-                          Expanded(
-                            child: Center(
-                              child: _buildLayoutContent(),
+                      padding: _layout == 'strava' ? EdgeInsets.zero : const EdgeInsets.all(24),
+                      child: _layout == 'strava'
+                          ? _buildStravaFullCanvasLayout(profileState, canvasSize)
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildCanvasHeader(profileState),
+                                Expanded(
+                                  child: Center(
+                                    child: _buildLayoutContent(),
+                                  ),
+                                ),
+                                _buildCanvasFooter(),
+                              ],
                             ),
-                          ),
-                          _buildCanvasFooter(),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -342,13 +395,22 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
     BorderRadius radius = BorderRadius.circular(_cornerRadius);
     
     // Background images overrides
-    if (_backgroundType == "photo") {
+    if (_backgroundType == "photo" || _layout == 'strava') {
+      ImageProvider photoProvider;
+      if (_localPhotoPath != null && File(_localPhotoPath!).existsSync()) {
+        photoProvider = FileImage(File(_localPhotoPath!));
+      } else {
+        photoProvider = NetworkImage(_photoUrl);
+      }
+
       return BoxDecoration(
         borderRadius: radius,
         image: DecorationImage(
-          image: NetworkImage(_photoUrl),
+          image: photoProvider,
           fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.65), BlendMode.srcOver),
+          colorFilter: _photoDimming > 0
+              ? ColorFilter.mode(Colors.black.withOpacity(_photoDimming), BlendMode.darken)
+              : null,
         ),
       );
     }
@@ -776,55 +838,244 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Widget _buildStravaLayout() {
-    final activityName = widget.data['activityType'] ?? 'Cardio Workout';
-    final distance = widget.data['distance'] ?? '${((widget.data['steps'] ?? 10840) * 0.0008).toStringAsFixed(1)} km';
-    final pace = widget.data['pace'] ?? '5:24 /km';
+    final distance = widget.data['distance'] ?? '${((widget.data['steps'] ?? 10840) * 0.0008).toStringAsFixed(2)} km';
+    final pace = widget.data['pace'] ?? '6:15 /km';
     final duration = widget.data['duration'] ?? '${widget.data['activeMinutes'] ?? 42} min';
 
     return Container(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.directions_run_rounded, color: Colors.orange, size: 20),
-                const SizedBox(width: 8),
-                Text(activityName, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white)),
-              ],
-            ),
-            const Divider(height: 20, color: Colors.white10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildStravaMetric('Distance', distance),
-                _buildStravaMetric('Pace', pace),
-                _buildStravaMetric('Time', duration),
-              ],
-            )
-          ],
-        ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _buildStravaStatItem('Distance', distance),
+          const SizedBox(height: 10),
+          _buildStravaStatItem('Pace', pace),
+          const SizedBox(height: 10),
+          _buildStravaStatItem('Time', duration),
+        ],
       ),
     );
   }
 
-  Widget _buildStravaMetric(String label, String val) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildStravaFullCanvasLayout(ProfileState profileState, Size canvasSize) {
+    final distance = widget.data['distance'] ?? '${((widget.data['steps'] ?? 10840) * 0.0008).toStringAsFixed(2)} km';
+    final pace = widget.data['pace'] ?? '6:15 /km';
+    final duration = widget.data['duration'] ?? '${widget.data['activeMinutes'] ?? 42} min';
+    final routePoints = _getRoutePoints();
+
+    String watermarkText = _watermarkStyle;
+    if (watermarkText == 'CUSTOM') {
+      watermarkText = _customTitle.isNotEmpty ? _customTitle.toUpperCase() : 'SABTRACK';
+    }
+
+    CrossAxisAlignment statAlign = CrossAxisAlignment.end;
+    if (_stravaPosition == 'top_left' || _stravaPosition == 'bottom_left') {
+      statAlign = CrossAxisAlignment.start;
+    } else if (_stravaPosition == 'center') {
+      statAlign = CrossAxisAlignment.center;
+    }
+
+    final statsColumn = Column(
+      crossAxisAlignment: statAlign,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: GoogleFonts.inter(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(val, style: GoogleFonts.inter(fontSize: 16, color: Colors.orange, fontWeight: FontWeight.w900)),
+        _buildStravaStatItem('Distance', distance, align: statAlign),
+        const SizedBox(height: 14),
+        _buildStravaStatItem('Pace', pace, align: statAlign),
+        const SizedBox(height: 14),
+        _buildStravaStatItem('Time', duration, align: statAlign),
+        if (_showRouteLine) ...[
+          const SizedBox(height: 18),
+          SizedBox(
+            width: 140,
+            height: 60,
+            child: CustomPaint(
+              painter: _StravaRoutePolylinePainter(
+                points: routePoints,
+                routeColor: _routeLineColor,
+                strokeWidth: _routeStrokeWidth,
+              ),
+            ),
+          ),
+        ],
+        if (_showLogo && watermarkText != 'NONE') ...[
+          const SizedBox(height: 18),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: statAlign == CrossAxisAlignment.start
+                ? MainAxisAlignment.start
+                : (statAlign == CrossAxisAlignment.center
+                    ? MainAxisAlignment.center
+                    : MainAxisAlignment.end),
+            children: [
+              if (watermarkText == 'SABTRACK' || watermarkText == 'SABTRACK AI') ...[
+                const SabtrackLogo(size: 22, color: Colors.white),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                watermarkText,
+                style: GoogleFonts.inter(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2.0,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withOpacity(0.9),
+                      offset: const Offset(0, 2),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_cornerRadius),
+      child: Stack(
+        children: [
+          // Subtle gradient vignette to protect legibility on bright backgrounds
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [
+                    Colors.black.withOpacity(0.32),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.25),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Main Stats Block Position
+          if (_stravaPosition == 'top_right')
+            Positioned(
+              top: 28,
+              right: 28,
+              child: statsColumn,
+            )
+          else if (_stravaPosition == 'top_left')
+            Positioned(
+              top: 28,
+              left: 28,
+              child: statsColumn,
+            )
+          else if (_stravaPosition == 'bottom_right')
+            Positioned(
+              bottom: 32,
+              right: 28,
+              child: statsColumn,
+            )
+          else if (_stravaPosition == 'bottom_left')
+            Positioned(
+              bottom: 32,
+              left: 28,
+              child: statsColumn,
+            )
+          else
+            Positioned.fill(
+              child: Center(
+                child: statsColumn,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStravaStatItem(String label, String value, {CrossAxisAlignment align = CrossAxisAlignment.end}) {
+    return Column(
+      crossAxisAlignment: align,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            letterSpacing: 0.3,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.85),
+                offset: const Offset(0, 1.5),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 27,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            letterSpacing: -0.5,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.9),
+                offset: const Offset(0, 2),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Offset> _getRoutePoints() {
+    if (widget.data['routePoints'] != null) {
+      final raw = widget.data['routePoints'];
+      if (raw is List<Offset> && raw.isNotEmpty) {
+        return raw;
+      }
+      if (raw is List) {
+        final List<Offset> pts = [];
+        for (var item in raw) {
+          if (item is Offset) {
+            pts.add(item);
+          } else if (item is Map) {
+            final x = (item['x'] as num?)?.toDouble() ?? 0.0;
+            final y = (item['y'] as num?)?.toDouble() ?? 0.0;
+            pts.add(Offset(x, y));
+          }
+        }
+        if (pts.isNotEmpty) return pts;
+      }
+    }
+    return _getDefaultTrailRoute();
+  }
+
+  List<Offset> _getDefaultTrailRoute() {
+    return const [
+      Offset(10, 30),
+      Offset(25, 28),
+      Offset(40, 35),
+      Offset(55, 32),
+      Offset(70, 42),
+      Offset(85, 48),
+      Offset(100, 45),
+      Offset(115, 52),
+      Offset(130, 56),
+      Offset(145, 54),
+      Offset(160, 60),
+      Offset(175, 58),
+      Offset(190, 65),
+      Offset(205, 70),
+      Offset(210, 85),
+      Offset(212, 100),
+    ];
   }
 
   Widget _buildWhoopLayout() {
@@ -1638,81 +1889,285 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Theme Picker
-          const Text('THEME SELECTOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildStyleTab('dark', 'Dark Theme'),
-              _buildStyleTab('light', 'Light Theme'),
-              _buildStyleTab('glass', 'Glassmorphic'),
-              _buildStyleTab('gradient', 'Gradient Glow'),
-              _buildStyleTab('black', 'AMOLED Black'),
-              _buildStyleTab('transparent', 'Transparent'),
-            ],
-          ),
-          const SizedBox(height: 20),
-          
-          // Background Type Picker
-          const Text('BACKGROUND DECORATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: ChoiceChip(
-                  label: const Text('Solid Theme'),
-                  selected: _backgroundType == "color",
-                  onSelected: (_) => setState(() => _backgroundType = "color"),
+          // If Strava layout is selected, show dedicated Strava controls
+          if (_layout == 'strava') ...[
+            _buildStravaStyleControls(),
+          ] else ...[
+            // Standard Styles controls for other layouts
+            const Text('THEME SELECTOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildStyleTab('dark', 'Dark Theme'),
+                _buildStyleTab('light', 'Light Theme'),
+                _buildStyleTab('glass', 'Glassmorphic'),
+                _buildStyleTab('gradient', 'Gradient Glow'),
+                _buildStyleTab('black', 'AMOLED Black'),
+                _buildStyleTab('transparent', 'Transparent'),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            // Background Type Picker
+            const Text('BACKGROUND DECORATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Solid Theme'),
+                    selected: _backgroundType == "color",
+                    onSelected: (_) => setState(() => _backgroundType = "color"),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ChoiceChip(
-                  label: const Text('Photo backdrop'),
-                  selected: _backgroundType == "photo",
-                  onSelected: (_) => setState(() => _backgroundType = "photo"),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Photo backdrop'),
+                    selected: _backgroundType == "photo",
+                    onSelected: (_) => setState(() => _backgroundType = "photo"),
+                  ),
                 ),
-              ),
+              ],
+            ),
+            if (_backgroundType == "photo") ...[
+              const SizedBox(height: 12),
+              _buildPhotoPickerButtons(),
             ],
-          ),
-          if (_backgroundType == "photo") ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+
+            // Accent Color picker
+            const Text('ACCENT THEME COLOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              children: [
+                _buildColorSelector(AppTheme.accent),
+                _buildColorSelector(AppTheme.neonIndigo),
+                _buildColorSelector(AppTheme.neonPink),
+                _buildColorSelector(AppTheme.neonCyan),
+                _buildColorSelector(AppTheme.neonEmerald),
+                _buildColorSelector(AppTheme.neonAmber),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Custom title
+            const Text('CUSTOM INFOGRAPHIC TITLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
+            const SizedBox(height: 10),
             TextField(
-              controller: TextEditingController(text: _photoUrl),
-              onChanged: (val) => setState(() => _photoUrl = val),
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              controller: TextEditingController(text: _customTitle),
+              onChanged: (val) => setState(() => _customTitle = val),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.04),
-                hintText: "Backdrop photo URL",
+                hintText: "Type custom header text...",
                 hintStyle: const TextStyle(color: Colors.white30),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
             ),
+            
+            const SizedBox(height: 16),
+            // Logo checkbox
+            CheckboxListTile(
+              title: const Text('Display logo brand watermark', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+              value: _showLogo,
+              activeColor: AppTheme.accent,
+              checkColor: Colors.black,
+              contentPadding: EdgeInsets.zero,
+              onChanged: (val) => setState(() => _showLogo = val ?? true),
+            ),
           ],
-          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
 
-          // Accent Color picker
-          const Text('ACCENT THEME COLOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
-          const SizedBox(height: 10),
+  Widget _buildStravaStyleControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. ATHLETE PHOTO BACKDROP
+        const Text(
+          'ATHLETE WORKOUT PHOTO',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0),
+        ),
+        const SizedBox(height: 10),
+        _buildPhotoPickerButtons(),
+        const SizedBox(height: 14),
+        
+        // Curated Running Backdrops presets
+        const Text(
+          'OR PICK A RUNNING BACKDROP PRESET',
+          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white38, letterSpacing: 0.5),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 72,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _curatedBackdrops.length,
+            itemBuilder: (context, index) {
+              final item = _curatedBackdrops[index];
+              final isSelected = _localPhotoPath == null && _photoUrl == item['url'];
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _localPhotoPath = null;
+                    _photoUrl = item['url']!;
+                    _backgroundType = 'photo';
+                  });
+                },
+                child: Container(
+                  width: 72,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.accent : Colors.white24,
+                      width: isSelected ? 2.5 : 1,
+                    ),
+                    image: DecorationImage(
+                      image: NetworkImage(item['url']!),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.65),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(10),
+                        bottomRight: Radius.circular(10),
+                      ),
+                    ),
+                    child: Text(
+                      item['title']!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Photo Contrast / Dimming Slider
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Photo Dimming (Contrast Protection)', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+            Text('${(_photoDimming * 100).round()}%', style: const TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        Slider(
+          value: _photoDimming,
+          min: 0.0,
+          max: 0.75,
+          divisions: 15,
+          activeColor: AppTheme.accent,
+          inactiveColor: Colors.white12,
+          onChanged: (val) => setState(() => _photoDimming = val),
+        ),
+        const SizedBox(height: 16),
+
+        // 2. OVERLAY POSITION
+        const Text(
+          'OVERLAY STATS POSITION',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildPositionChip('top_right', 'Top Right (Strava)'),
+            _buildPositionChip('top_left', 'Top Left'),
+            _buildPositionChip('bottom_right', 'Bottom Right'),
+            _buildPositionChip('bottom_left', 'Bottom Left'),
+            _buildPositionChip('center', 'Center Focus'),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // 3. GPS ROUTE POLYLINE
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'GPS ROUTE POLYLINE MAP',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0),
+            ),
+            Switch(
+              value: _showRouteLine,
+              activeColor: AppTheme.accent,
+              onChanged: (val) => setState(() => _showRouteLine = val),
+            ),
+          ],
+        ),
+        if (_showRouteLine) ...[
+          const SizedBox(height: 6),
+          const Text('Route Color', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             children: [
-              _buildColorSelector(AppTheme.accent),
-              _buildColorSelector(AppTheme.neonIndigo),
-              _buildColorSelector(AppTheme.neonPink),
-              _buildColorSelector(AppTheme.neonCyan),
-              _buildColorSelector(AppTheme.neonEmerald),
-              _buildColorSelector(AppTheme.neonAmber),
+              _buildRouteColorSelector(const Color(0xFFFC5200), 'Strava Orange'),
+              _buildRouteColorSelector(AppTheme.neonCyan, 'Cyan'),
+              _buildRouteColorSelector(AppTheme.neonEmerald, 'Emerald'),
+              _buildRouteColorSelector(AppTheme.neonPink, 'Pink'),
+              _buildRouteColorSelector(Colors.white, 'White'),
+              _buildRouteColorSelector(AppTheme.neonAmber, 'Amber'),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Route Stroke Width', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Text('${_routeStrokeWidth.toStringAsFixed(1)}px', style: const TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: _routeStrokeWidth,
+            min: 2.0,
+            max: 6.0,
+            divisions: 8,
+            activeColor: AppTheme.accent,
+            inactiveColor: Colors.white12,
+            onChanged: (val) => setState(() => _routeStrokeWidth = val),
+          ),
+        ],
+        const SizedBox(height: 16),
 
-          // Custom title
-          const Text('CUSTOM INFOGRAPHIC TITLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
+        // 4. WATERMARK BRANDING
+        const Text(
+          'WATERMARK BRANDING',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildWatermarkChip('SABTRACK', 'SABTRACK'),
+            _buildWatermarkChip('STRAVA', 'STRAVA'),
+            _buildWatermarkChip('SABTRACK AI', 'SABTRACK AI'),
+            _buildWatermarkChip('CUSTOM', 'Custom Text'),
+            _buildWatermarkChip('NONE', 'Hide Watermark'),
+          ],
+        ),
+        if (_watermarkStyle == 'CUSTOM') ...[
           const SizedBox(height: 10),
           TextField(
             controller: TextEditingController(text: _customTitle),
@@ -1721,24 +2176,172 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white.withOpacity(0.04),
-              hintText: "Type custom header text...",
+              hintText: "Enter custom watermark text...",
               hintStyle: const TextStyle(color: Colors.white30),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
           ),
-          
-          const SizedBox(height: 16),
-          // Logo checkbox
-          CheckboxListTile(
-            title: const Text('Display logo brand watermark', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-            value: _showLogo,
-            activeColor: AppTheme.accent,
-            checkColor: Colors.black,
-            contentPadding: EdgeInsets.zero,
-            onChanged: (val) => setState(() => _showLogo = val ?? true),
-          ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildPhotoPickerButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E293B),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: _localPhotoPath != null ? AppTheme.accent : Colors.white12),
+              ),
+            ),
+            icon: const Icon(Icons.photo_library_rounded, size: 18, color: AppTheme.accent),
+            label: const Text('Pick Gallery Photo', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+            onPressed: _pickPhotoFromGallery,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E293B),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Colors.white12),
+              ),
+            ),
+            icon: const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.neonCyan),
+            label: const Text('Take Photo', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+            onPressed: _takePhotoWithCamera,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickPhotoFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 90,
+      );
+      if (image != null) {
+        setState(() {
+          _localPhotoPath = image.path;
+          _backgroundType = 'photo';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking photo from gallery: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not pick photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _takePhotoWithCamera() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 90,
+      );
+      if (image != null) {
+        setState(() {
+          _localPhotoPath = image.path;
+          _backgroundType = 'photo';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error capturing photo from camera: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not capture photo: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildPositionChip(String id, String label) {
+    final isSelected = _stravaPosition == id;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: AppTheme.accent.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color: isSelected ? AppTheme.accent : Colors.white70,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        fontSize: 11,
+      ),
+      side: BorderSide(color: isSelected ? AppTheme.accent : Colors.white12),
+      onSelected: (selected) {
+        if (selected) {
+          setState(() => _stravaPosition = id);
+        }
+      },
+    );
+  }
+
+  Widget _buildWatermarkChip(String id, String label) {
+    final isSelected = _watermarkStyle == id;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: AppTheme.accent.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color: isSelected ? AppTheme.accent : Colors.white70,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        fontSize: 11,
+      ),
+      side: BorderSide(color: isSelected ? AppTheme.accent : Colors.white12),
+      onSelected: (selected) {
+        if (selected) {
+          setState(() => _watermarkStyle = id);
+        }
+      },
+    );
+  }
+
+  Widget _buildRouteColorSelector(Color c, String tooltip) {
+    final isSelected = _routeLineColor.value == c.value;
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: () => setState(() => _routeLineColor = c),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: c,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected ? Colors.white : Colors.transparent,
+              width: 2.5,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: c.withOpacity(0.5),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    )
+                  ]
+                : null,
+          ),
+        ),
       ),
     );
   }
@@ -1813,6 +2416,100 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
         ),
       ),
     );
+  }
+}
+
+// Custom Painter for Strava Route Polyline Trace
+class _StravaRoutePolylinePainter extends CustomPainter {
+  final List<Offset> points;
+  final Color routeColor;
+  final double strokeWidth;
+
+  _StravaRoutePolylinePainter({
+    required this.points,
+    required this.routeColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    double minX = double.infinity;
+    double maxX = -double.infinity;
+    double minY = double.infinity;
+    double maxY = -double.infinity;
+
+    for (var pt in points) {
+      if (pt.dx < minX) minX = pt.dx;
+      if (pt.dx > maxX) maxX = pt.dx;
+      if (pt.dy < minY) minY = pt.dy;
+      if (pt.dy > maxY) maxY = pt.dy;
+    }
+
+    final pathW = maxX - minX;
+    final pathH = maxY - minY;
+
+    const double pad = 8.0;
+    final double targetW = size.width - pad * 2;
+    final double targetH = size.height - pad * 2;
+
+    double scale = 1.0;
+    if (pathW > 0 && pathH > 0) {
+      scale = math.min(targetW / pathW, targetH / pathH);
+    }
+
+    final double shiftX = pad + (targetW - pathW * scale) / 2 - minX * scale;
+    final double shiftY = pad + (targetH - pathH * scale) / 2 - minY * scale;
+
+    final List<Offset> scaled = points.map((p) {
+      return Offset(p.dx * scale + shiftX, p.dy * scale + shiftY);
+    }).toList();
+
+    // Route shadow / glow
+    final glowPaint = Paint()
+      ..color = routeColor.withOpacity(0.45)
+      ..strokeWidth = strokeWidth + 4.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+
+    // Route stroke
+    final strokePaint = Paint()
+      ..color = routeColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    path.moveTo(scaled.first.dx, scaled.first.dy);
+    for (int i = 1; i < scaled.length; i++) {
+      path.lineTo(scaled[i].dx, scaled[i].dy);
+    }
+
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, strokePaint);
+
+    // Start marker (green dot)
+    final startDot = Paint()
+      ..color = Colors.greenAccent
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(scaled.first, strokeWidth + 1.2, startDot);
+
+    // End marker (white dot)
+    final endDot = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(scaled.last, strokeWidth + 1.2, endDot);
+  }
+
+  @override
+  bool shouldRepaint(covariant _StravaRoutePolylinePainter oldDelegate) {
+    return oldDelegate.points != points ||
+        oldDelegate.routeColor != routeColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
 

@@ -9,11 +9,11 @@ class TransparentReportWidget extends StatelessWidget {
   final double blurSigma;
 
   const TransparentReportWidget({
-    Key? key,
+    super.key,
     required this.child,
     this.opacity = 0.4,
     this.blurSigma = 8.0,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

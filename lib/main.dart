@@ -30,7 +30,7 @@ void main() async {
     ),
   );
 
-  ApiService.configureBaseUrl(isDevelopment: false);
+  ApiService.configureBaseUrl(isDevelopment: kDebugMode);
 
   try {
     await ApiService.initToken();

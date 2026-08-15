@@ -12,14 +12,38 @@ class ApiService {
 
   static String get localUrl => 'http://$_localHost:3000/api';
   static const String productionUrl = 'https://api.sabtrack.in/api';
-  static String baseUrl = productionUrl; // Default to Railway live backend
+  static String baseUrl = productionUrl; // Default base URL
   static String? _token;
   static String? _refreshToken;
   static bool _isRefreshing = false;
 
-  // Always use live production Railway backend
-  static void configureBaseUrl({required bool isDevelopment}) {
-    baseUrl = productionUrl;
+  /// Configures base URL based on build environment or optional custom URL
+  static void configureBaseUrl({required bool isDevelopment, String? customUrl}) {
+    if (customUrl != null && customUrl.isNotEmpty) {
+      baseUrl = customUrl;
+    } else if (isDevelopment) {
+      baseUrl = localUrl;
+    } else {
+      baseUrl = productionUrl;
+    }
+  }
+
+  /// Formats raw exceptions (SocketException, Failed host lookup, ClientException)
+  /// into user-friendly error messages.
+  static String formatErrorMessage(dynamic e) {
+    final str = e.toString();
+    if (str.contains('SocketException') ||
+        str.contains('Failed host lookup') ||
+        str.contains('Connection refused') ||
+        str.contains('Network is unreachable') ||
+        str.contains('ClientException') ||
+        str.contains('errno = 7')) {
+      return 'Network Error: Unable to connect to server ($baseUrl). Please check internet connection or server host settings.';
+    }
+    if (str.contains('TimeoutException') || str.contains('timed out')) {
+      return 'Connection timed out. Please check your network connection and try again.';
+    }
+    return str;
   }
 
   // Initialize both JWT access token and refresh token from storage on startup.
@@ -217,7 +241,7 @@ class ApiService {
         return {'success': false, 'error': 'Invalid credentials (Status: ${response.statusCode})'};
       }
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
@@ -245,7 +269,7 @@ class ApiService {
         return {'success': false, 'error': 'Signup failed (Status: ${response.statusCode})'};
       }
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
@@ -282,7 +306,7 @@ class ApiService {
         return {'success': false, 'error': 'Google authentication failed (Status: ${response.statusCode})'};
       }
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
@@ -317,7 +341,7 @@ class ApiService {
       }
       return {'success': false, 'error': 'Failed to analyze food image'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
@@ -347,7 +371,7 @@ class ApiService {
       } catch (_) {}
       return {'success': false, 'error': errorMsg};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
@@ -377,7 +401,7 @@ class ApiService {
       }
       return {'success': false, 'error': 'Failed to analyze nutrition label image'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 

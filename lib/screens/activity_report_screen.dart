@@ -266,14 +266,14 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
   }
 
   // Export dialog and handling
-  void _showExportDialog() {
+  void _showExportDialog({String? initialLayout}) {
     // Dynamic strain score based on workout duration and calories burned
     final strain = (6.0 + (widget.calories / 70.0) + (widget.durationSeconds / 600.0)).clamp(3.0, 21.0);
     final recovery = (92 - (strain * 1.5)).clamp(40.0, 98.0).toInt();
 
     final dataMap = {
       'date': 'Workout Summary',
-      'steps': 0,
+      'steps': (widget.distance * 1250).toInt(),
       'calorieBurned': widget.calories,
       'waterMl': 0,
       'calorieIntake': 0,
@@ -285,6 +285,8 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
       'pace': '${widget.avgPace} /km',
       'duration': _formatDuration(widget.durationSeconds),
       'activeMinutes': (widget.durationSeconds / 60).round(),
+      'routePoints': widget.routePoints,
+      if (initialLayout != null) 'initialLayout': initialLayout,
     };
     
     Navigator.push(
@@ -296,6 +298,10 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
         ),
       ),
     );
+  }
+
+  void _openStravaPhotoExport() {
+    _showExportDialog(initialLayout: 'strava');
   }
 
 
@@ -557,6 +563,94 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
             ),
             const SizedBox(height: 28),
 
+            // Strava Photo Overlay Featured Card
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFC5200), Color(0xFFE04400)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFC5200).withOpacity(0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: _openStravaPhotoExport,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.add_a_photo_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Strava Photo Overlay',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black26,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'HOT',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Overlay your GPS route & stats on your workout photo',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
             // Share section
             Align(
               alignment: Alignment.centerLeft,
@@ -630,14 +724,22 @@ class _ActivityReportScreenState extends State<ActivityReportScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _showExportDialog,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonIndigo,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            SizedBox(
+              height: 50,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showExportDialog(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  side: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                icon: const Icon(Icons.dashboard_customize_rounded, size: 20),
+                label: Text(
+                  'Open Export & Share Studio',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
               ),
-              child: Text('Export Report'),
             ),
             const SizedBox(height: 12),
             TextButton(

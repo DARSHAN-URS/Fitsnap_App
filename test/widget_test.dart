@@ -16,8 +16,11 @@ void main() {
       ),
     );
 
-    // Wait for animations/loading
-    await tester.pump();
+    // Advance fakeAsync timers sequentially for splash sequence & navigation to complete
+    for (int i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await tester.pumpAndSettle();
 
     // Verify AuthScreen is loaded
     expect(find.byType(AuthScreen), findsOneWidget);
