@@ -516,7 +516,12 @@ class ApiService {
         final decoded = jsonDecode(response.body);
         return {'success': true, 'url': decoded['url']};
       }
-      return {'success': false, 'error': 'Failed to upload profile picture'};
+      try {
+        final decoded = jsonDecode(response.body);
+        return {'success': false, 'error': decoded['detail'] ?? decoded['error'] ?? 'Failed to upload profile picture'};
+      } catch (_) {
+        return {'success': false, 'error': 'Failed to upload profile picture (${response.statusCode})'};
+      }
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
