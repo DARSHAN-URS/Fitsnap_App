@@ -46,6 +46,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   double _glassOpacity = 0.2;
   bool _showLogo = true;
   String _customTitle = "Sabtrack AI Performance";
+  late final TextEditingController _customTitleController = TextEditingController(text: _customTitle);
   String _backgroundType = "color"; // color, photo
   String _photoUrl = "https://images.unsplash.com/photo-1502680390469-be75c86b636f?q=80&w=1200";
   String? _localPhotoPath;
@@ -158,6 +159,12 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
     }
     _updateThemeColors();
     _fetchUserVitalsFromBackend();
+  }
+
+  @override
+  void dispose() {
+    _customTitleController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchUserVitalsFromBackend() async {
@@ -1958,7 +1965,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
             const Text('CUSTOM INFOGRAPHIC TITLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.0)),
             const SizedBox(height: 10),
             TextField(
-              controller: TextEditingController(text: _customTitle),
+              controller: _customTitleController,
               onChanged: (val) => setState(() => _customTitle = val),
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
@@ -2170,7 +2177,7 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
         if (_watermarkStyle == 'CUSTOM') ...[
           const SizedBox(height: 10),
           TextField(
-            controller: TextEditingController(text: _customTitle),
+            controller: _customTitleController,
             onChanged: (val) => setState(() => _customTitle = val),
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(

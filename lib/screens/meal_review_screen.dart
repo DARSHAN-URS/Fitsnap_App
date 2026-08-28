@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
+import 'dart:ui';
 import '../services/ai_food_logging_service.dart';
 import '../theme/app_theme.dart';
 import '../dashboard_screen.dart';
@@ -21,7 +24,10 @@ class MealReviewScreen extends StatefulWidget {
 
 class _MealReviewScreenState extends State<MealReviewScreen> {
   late List<Map<String, dynamic>> _foods;
+  late String _currentImagePath;
   bool _isSaving = false;
+  bool _isRetaking = false;
+  String _retakeStatusText = "AI Recognizing New Photo...";
   String? _errorMsg;
 
   // Local helper to track macro densities per gram for live zero-latency weight edits
@@ -30,6 +36,7 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
   @override
   void initState() {
     super.initState();
+    _currentImagePath = widget.imagePath;
     // Deep copy initial foods list to allow mutability
     _foods = widget.initialFoods.map((f) => Map<String, dynamic>.from(f)).toList();
     _calculateDensities();
@@ -275,7 +282,7 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
       "carbs": double.parse(_totalCarbs.toStringAsFixed(1)),
       "fat": double.parse(_totalFat.toStringAsFixed(1)),
       "fiber": double.parse(_totalFiber.toStringAsFixed(1)),
-      "image_url": widget.imagePath,
+      "image_url": _currentImagePath,
       "foods": _foods.map((f) => {
         "food_name": f['food_name'],
         "weight_g": (f['weight_g'] as num).toDouble(),
@@ -319,151 +326,468 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
     }
   }
 
+  void _confirmDiscardScan() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFF334155), width: 1.5),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.undo_rounded, color: Color(0xFFEF4444), size: 24),
+            const SizedBox(width: 10),
+            Text(
+              'Discard Food Scan?',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to undo and discard this meal scan? No nutrition data will be saved to your journal.',
+          style: GoogleFonts.inter(
+            color: const Color(0xFF94A3B8),
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Keep Editing',
+              style: GoogleFonts.inter(color: Colors.white70, fontWeight: FontWeight.w600),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: Text(
+              'Discard & Exit',
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _retakePhoto(ImageSource source) async {
+    if (source == ImageSource.camera) {
+      final status = await Permission.camera.request();
+      if (status.isPermanentlyDenied) {
+        if (!mounted) return;
+        openAppSettings();
+        return;
+      }
+      if (status.isDenied) return;
+    }
+
+    try {
+      final picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      setState(() {
+        _isRetaking = true;
+        _retakeStatusText = "AI Recognizing New Photo...";
+        _errorMsg = null;
+      });
+
+      final res = await AiFoodLoggingService.analyzeMeal(pickedFile.path);
+
+      if (res['success'] == true && res['data'] != null) {
+        final rawData = res['data'];
+        List<Map<String, dynamic>> newFoodsList = [];
+        if (rawData is Map && rawData['foods'] is List) {
+          newFoodsList = (rawData['foods'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList();
+        } else if (rawData is Map && rawData.containsKey('name')) {
+          newFoodsList = [Map<String, dynamic>.from(rawData)];
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _currentImagePath = pickedFile.path;
+          _foods = newFoodsList;
+          _macroDensities.clear();
+          _calculateDensities();
+          _isRetaking = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('New meal photo scanned successfully!'),
+            backgroundColor: const Color(0xFF007AFF),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _isRetaking = false;
+          _errorMsg = res['error'] as String? ?? "Failed to analyze new image.";
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isRetaking = false;
+        _errorMsg = "Failed to retake photo. Please try again.";
+      });
+    }
+  }
+
+  void _showRetakeModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(28),
+            topRight: Radius.circular(28),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Retake or Replace Photo',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Take a clearer picture or pick another photo from gallery',
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF007AFF).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF007AFF)),
+              ),
+              title: Text('Take New Photo', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+              subtitle: Text('Open camera to capture plate again', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _retakePhoto(ImageSource.camera);
+              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.photo_library_rounded, color: Colors.purple),
+              ),
+              title: Text('Upload from Gallery', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+              subtitle: Text('Choose a different photo from your photos', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _retakePhoto(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color accentBlue = Color(0xFF007AFF);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppTheme.primary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Confirm Meal Logging',
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.primary,
+    return WillPopScope(
+      onWillPop: () async {
+        _confirmDiscardScan();
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded, color: AppTheme.primary),
+            onPressed: _confirmDiscardScan,
           ),
-        ),
-        centerTitle: true,
-      ),
-      body: _isSaving
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: accentBlue),
-                  SizedBox(height: 16),
-                  Text('Saving to Nutrition Journal...', style: TextStyle(fontWeight: FontWeight.w600)),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Image Preview & Total Calories Card
-                  _buildHeaderSummaryCard(),
-                  const SizedBox(height: 20),
-                  
-                  if (_errorMsg != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.red[100]!),
-                      ),
-                      child: Text(
-                        _errorMsg!,
-                        style: GoogleFonts.inter(color: Colors.red[700], fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-
-                  Text(
-                    'Detected Food Items',
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _foods.length,
-                    itemBuilder: (context, index) {
-                      return _buildFoodItemCard(index);
-                    },
-                  ),
-
-                  const SizedBox(height: 12),
-                  // Add Custom Item Button
-                  GestureDetector(
-                    onTap: _addCustomFood,
-                    child: Container(
-                      width: double.infinity,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                      ),
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.add_rounded, color: accentBlue, size: 20),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Add Missing Food Item',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: accentBlue,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 80),
-                ],
-              ),
+          title: Text(
+            'Review Meal',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.primary,
             ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey[200]!)),
-        ),
-        child: GestureDetector(
-          onTap: _saveMeal,
-          child: Container(
-            width: double.infinity,
-            height: 54,
-            decoration: BoxDecoration(
-              color: accentBlue,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: accentBlue.withOpacity(0.24),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                )
-              ],
-            ),
-            child: Center(
+          ),
+          centerTitle: true,
+          actions: [
+            TextButton(
+              onPressed: _confirmDiscardScan,
               child: Text(
-                'Save Meal & Sync Stats',
+                'Discard',
                 style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
             ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            _isSaving
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: accentBlue),
+                        SizedBox(height: 16),
+                        Text('Saving to Nutrition Journal...', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Image Preview & Total Calories Card
+                        _buildHeaderSummaryCard(),
+                        const SizedBox(height: 20),
+                        
+                        if (_errorMsg != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.red[100]!),
+                            ),
+                            child: Text(
+                              _errorMsg!,
+                              style: GoogleFonts.inter(color: Colors.red[700], fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+
+                        Text(
+                          'Detected Food Items',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _foods.length,
+                          itemBuilder: (context, index) {
+                            return _buildFoodItemCard(index);
+                          },
+                        ),
+
+                        const SizedBox(height: 12),
+                        // Add Custom Item Button
+                        GestureDetector(
+                          onTap: _addCustomFood,
+                          child: Container(
+                            width: double.infinity,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                            ),
+                            child: Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.add_rounded, color: accentBlue, size: 20),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Add Missing Food Item',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: accentBlue,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 80),
+                      ],
+                    ),
+                  ),
+
+            // High Contrast Retaking Overlay
+            if (_isRetaking)
+              Container(
+                color: Colors.black.withOpacity(0.7),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.5)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 3.5),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            _retakeStatusText,
+                            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Colors.grey[200]!)),
+          ),
+          child: Row(
+            children: [
+              // Discard / Undo Button
+              Expanded(
+                flex: 1,
+                child: GestureDetector(
+                  onTap: _confirmDiscardScan,
+                  child: Container(
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.undo_rounded, color: Color(0xFF64748B), size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Discard',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Save Meal Button
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  onTap: _saveMeal,
+                  child: Container(
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: accentBlue,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentBlue.withOpacity(0.24),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        )
+                      ],
+                    ),
+                    child: Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Save Meal',
+                            style: GoogleFonts.inter(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -481,16 +805,53 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // Image Preview
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
-              width: 90,
-              height: 90,
-              child: Image.file(
-                File(widget.imagePath),
-                fit: BoxFit.cover,
-              ),
+          // Image Preview with interactive Retake badge
+          GestureDetector(
+            onTap: _showRetakeModal,
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: 90,
+                    height: 90,
+                    child: Image.file(
+                      File(_currentImagePath),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.refresh_rounded, color: Colors.white, size: 12),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Retake',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 18),

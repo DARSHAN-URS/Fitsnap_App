@@ -310,7 +310,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Enter an invite code from a friend to earn 100 bonus points! (Optional)',
+          'Enter an invite code from a friend to connect! (Optional)',
           style: GoogleFonts.inter(
             fontSize: 14,
             color: const Color(0xFF64748B),

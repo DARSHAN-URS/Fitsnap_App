@@ -106,17 +106,33 @@ class ApiService {
   // Set the refresh token after login
   static void setRefreshToken(String token) {
     _refreshToken = token.isEmpty ? null : token;
-    if (token.isNotEmpty) {
+    if (token.isEmpty) {
+      PreferencesHelper.delete('auth_refresh_token').catchError((e) {
+        debugPrint('Error deleting refresh token: $e');
+      });
+    } else {
       PreferencesHelper.saveString('auth_refresh_token', token).catchError((e) {
         debugPrint('Error saving refresh token: $e');
       });
     }
   }
 
+  /// Clears stored access token and refresh token from memory and persistent storage
+  static void clearSession() {
+    _token = null;
+    _refreshToken = null;
+    PreferencesHelper.delete('auth_token').catchError((e) {
+      debugPrint('Error deleting auth_token: $e');
+    });
+    PreferencesHelper.delete('auth_refresh_token').catchError((e) {
+      debugPrint('Error deleting auth_refresh_token: $e');
+    });
+  }
+
   // Attempt to silently refresh the access token using the stored refresh token.
   // Returns true if successful.
   static Future<bool> _refreshAccessToken() async {
-    if (_refreshToken == null || _isRefreshing) return false;
+    if (_refreshToken == null || _refreshToken!.isEmpty || _isRefreshing) return false;
     _isRefreshing = true;
     try {
       final response = await http.post(
@@ -126,12 +142,16 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final newToken = data['token'] as String?;
-        final newRefresh = data['refresh_token'] as String?;
+        final newToken = (data['token'] ?? data['data']?['token']) as String?;
+        final newRefresh = (data['refresh_token'] ?? data['data']?['refresh_token']) as String?;
         if (newToken != null) setToken(newToken);
         if (newRefresh != null) setRefreshToken(newRefresh);
         _isRefreshing = false;
         return true;
+      } else {
+        debugPrint('Token refresh failed with status ${response.statusCode}: ${response.body}');
+        // Refresh token invalid/revoked (e.g. 400 Bad Request from Supabase). Clear stored session to prevent endless retry loops.
+        clearSession();
       }
     } catch (e) {
       debugPrint('Token refresh failed: $e');
@@ -1325,14 +1345,7 @@ class ApiService {
   // --- Step Tracking Endpoints ---
   static Future<Map<String, dynamic>> syncSteps(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/steps/sync'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode(data),
-      );
+      final response = await _authPost('$baseUrl/steps/sync', body: data);
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)};
       }
@@ -1344,13 +1357,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> getDailySteps(String date) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/steps/daily?date=$date'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/steps/daily?date=$date');
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};
       }
@@ -1362,13 +1369,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> getStepsHistory(int days) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/steps/history?days=$days'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/steps/history?days=$days');
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
         return {'success': true, 'data': list};
@@ -1382,13 +1383,7 @@ class ApiService {
   // --- Supplements ---
   static Future<Map<String, dynamic>> getSupplements() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/supplements'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/supplements');
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)};
       }
@@ -1404,17 +1399,13 @@ class ApiService {
     required String time,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/supplements'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
+      final response = await _authPost(
+        '$baseUrl/supplements',
+        body: {
           'name': name,
           'dosage': dosage.isEmpty ? null : dosage,
           'time': time,
-        }),
+        },
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)};
@@ -1427,13 +1418,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> deleteSupplement(String supplementId) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/supplements/$supplementId'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authDelete('$baseUrl/supplements/$supplementId');
       if (response.statusCode == 200) {
         return {'success': true, 'message': 'Supplement deleted'};
       }
@@ -1446,13 +1431,7 @@ class ApiService {
   // --- Referrals ---
   static Future<Map<String, dynamic>> getReferralInfo() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/referrals'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/referrals');
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)};
       }
@@ -1464,14 +1443,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> claimReferralCode(String code) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/referrals/claim'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({'code': code}),
-      );
+      final response = await _authPost('$baseUrl/referrals/claim', body: {'code': code});
       final responseData = jsonDecode(response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'message': responseData['message'] ?? 'Claimed successfully!'};
@@ -1492,17 +1464,13 @@ class ApiService {
     required String message,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/support/tickets'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
+      final response = await _authPost(
+        '$baseUrl/support/tickets',
+        body: {
           'email': email,
           'category': category,
           'message': message,
-        }),
+        },
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true};
@@ -1516,13 +1484,7 @@ class ApiService {
   // --- Badges ---
   static Future<Map<String, dynamic>> getUserBadges() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/user/badges'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/user/badges');
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body)['data'] ?? [];
         return {'success': true, 'data': list};
@@ -1535,14 +1497,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> awardBadge(String badgeId) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/user/badges'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({'badge_id': badgeId}),
-      );
+      final response = await _authPost('$baseUrl/user/badges', body: {'badge_id': badgeId});
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};
       }
@@ -1555,13 +1510,7 @@ class ApiService {
   // --- Nutrition Goals ---
   static Future<Map<String, dynamic>> getNutritionGoals() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/user/nutrition-goals'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
+      final response = await _authGet('$baseUrl/user/nutrition-goals');
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};
       }
@@ -1578,18 +1527,14 @@ class ApiService {
     required double fatsGoal,
   }) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/user/nutrition-goals'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
+      final response = await _authPut(
+        '$baseUrl/user/nutrition-goals',
+        body: {
           'calorie_goal': calorieGoal,
           'protein_goal': proteinGoal,
           'carbs_goal': carbsGoal,
           'fats_goal': fatsGoal,
-        }),
+        },
       );
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)['data']};

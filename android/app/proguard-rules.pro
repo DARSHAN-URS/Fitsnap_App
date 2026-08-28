@@ -10,3 +10,15 @@
 
 # Keep application native classes
 -keep class com.sabtrack.ai.** { *; }
+
+# Google Sign In & Play Services
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# Local Notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+
+# Health Connect
+-keep class androidx.health.** { *; }
+-keep class androidx.health.connect.** { *; }
+-dontwarn androidx.health.**

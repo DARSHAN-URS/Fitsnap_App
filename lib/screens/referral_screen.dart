@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:math' as math;
 import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
 import '../services/api_service.dart';
@@ -32,16 +33,23 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final res = await ApiService.getReferralInfo();
     if (res['success'] && res['data'] != null) {
       final data = res['data'];
+      final code = data['code'] as String? ?? '';
+      if (code.isNotEmpty) {
+        await PreferencesHelper.setReferralCode(code);
+      }
       setState(() {
-        _referralCode = data['code'] ?? '';
+        _referralCode = code;
         _referredFriends = data['referrals'] ?? [];
         _points = data['points'] ?? 0;
         _isLoading = false;
       });
     } else {
       String? code = await PreferencesHelper.getReferralCode();
-      if (code == null || code.isEmpty) {
-        code = 'FIT-LOCAL';
+      if (code == null || code.isEmpty || code == 'FIT-LOCAL') {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        final randomChars = List.generate(6, (_) => chars[math.Random().nextInt(chars.length)]).join();
+        code = 'FIT-$randomChars';
+        await PreferencesHelper.setReferralCode(code);
       }
       setState(() {
         _referralCode = code!;
@@ -65,7 +73,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 
   void _shareCode() {
-    final message = "Join me on SABTRACK AI to level up your fitness journey! Use my referral code: $_referralCode to earn 100 bonus points. Download now!";
+    final message = "Join me on SABTRACK AI to level up your fitness journey! Use my invite code: $_referralCode to connect with me. Download now!";
     Share.share(message);
   }
 
@@ -106,11 +114,11 @@ class _ReferralScreenState extends State<ReferralScreen> {
                         shape: BoxShape.circle,
                         color: AppTheme.primary.withOpacity(0.1),
                       ),
-                      child: const Icon(Icons.card_giftcard_rounded, size: 54, color: AppTheme.accent),
+                      child: const Icon(Icons.people_alt_rounded, size: 54, color: AppTheme.accent),
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Invite & Get Rewards',
+                      'Invite Your Friends',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
@@ -119,7 +127,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Share your invite code with friends. For every friend who registers and joins, you both get 100 bonus reward points!',
+                      'Share your invite code with friends to connect, share workout routines, and track your fitness journeys together.',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: 14,
@@ -139,7 +147,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                       child: Column(
                         children: [
                           Text(
-                            'Your Unique Referral Code',
+                            'Your Unique Invite Code',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: Colors.white38,
@@ -215,59 +223,46 @@ class _ReferralScreenState extends State<ReferralScreen> {
                     
                     // Stats section card
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.02),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: Colors.white.withOpacity(0.05)),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Column(
-                            children: [
-                              Text(
-                                _referredFriends.length.toString(),
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Friends Invited',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: Colors.white38,
-                                ),
-                              ),
-                            ],
-                          ),
                           Container(
-                            height: 40,
-                            width: 1,
-                            color: Colors.white.withOpacity(0.1),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(Icons.group_rounded, color: AppTheme.accent, size: 24),
                           ),
-                          Column(
-                            children: [
-                              Text(
-                                _points.toString(),
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppTheme.accent,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_referredFriends.length} ${_referredFriends.length == 1 ? "Friend" : "Friends"} Joined',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Rewards Earned',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: Colors.white38,
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Active connections on your network',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: Colors.white38,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -294,7 +289,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 36),
                         child: Center(
                           child: Text(
-                            'No friends referred yet.\nShare your invite code to start earning rewards!',
+                            'No friends connected yet.\nShare your invite code to connect with friends!',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               color: Colors.white38,
@@ -354,18 +349,25 @@ class _ReferralScreenState extends State<ReferralScreen> {
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF10B981).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Text(
-                                    '+100 pts',
-                                    style: GoogleFonts.inter(
-                                      color: const Color(0xFF10B981),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 12),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Connected',
+                                        style: GoogleFonts.inter(
+                                          color: const Color(0xFF10B981),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],

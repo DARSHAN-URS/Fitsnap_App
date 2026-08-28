@@ -824,17 +824,11 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             animationController: _entryAnimController,
             child: _buildHeroCarousel(),
           ),
-          const SizedBox(height: 24),          // BMI Section
-          StaggeredListItem(
-            index: 3,
-            animationController: _entryAnimController,
-            child: _buildBmiSection(),
-          ),
           const SizedBox(height: 24),
 
           // Weight Progress Section
           StaggeredListItem(
-            index: 4,
+            index: 3,
             animationController: _entryAnimController,
             child: _buildWeightProgressSection(),
           ),
@@ -842,7 +836,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
           // Quick Actions Title
           StaggeredListItem(
-            index: 5,
+            index: 4,
             animationController: _entryAnimController,
             child: Text(
             'Quick Actions',
@@ -857,7 +851,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
           // Quick Actions horizontal list
           StaggeredListItem(
-            index: 6,
+            index: 5,
             animationController: _entryAnimController,
             child: SizedBox(
             height: 52,
@@ -909,37 +903,16 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 24),
 
-          // Challenge Section
-          StaggeredListItem(
-            index: 7,
-            animationController: _entryAnimController,
-            child: Text(
-            'Challenges',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: textPrimary,
-            ),
-          ),
-          ),
-          const SizedBox(height: 12),
-          StaggeredListItem(
-            index: 8,
-            animationController: _entryAnimController,
-            child: _buildChallengeCard(),
-          ),
-          const SizedBox(height: 24),
-
           // Favorites & Recents Quick Log Section
           StaggeredListItem(
-            index: 9,
+            index: 6,
             animationController: _entryAnimController,
             child: _buildQuickFoodList(),
           ),
 
           // Recently Uploaded Food Feed
           StaggeredListItem(
-            index: 10,
+            index: 7,
             animationController: _entryAnimController,
             child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1605,34 +1578,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const Spacer(),
-                            // Connect box
-                            GestureDetector(
-                              onTap: _addSteps,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE2E8F0),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.favorite_rounded, color: Colors.red.shade700, size: 14),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        'Connect Fit',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                          color: textPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -2279,7 +2224,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
               TextField(
                 controller: weightController,
                 keyboardType: TextInputType.number,
-                autofocus: true,
                 style: GoogleFonts.inter(fontSize: 15, color: textPrimary, fontWeight: FontWeight.bold),
                 decoration: InputDecoration(
                   hintText: 'e.g. 100',

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
@@ -112,24 +113,26 @@ String getSmartDisplayName(String? name, String? username, String? email) {
   final u = (username ?? '').trim();
   final e = (email ?? '').trim();
 
-  if (n.isNotEmpty && !['user', 'friend user', 'user user', 'none', 'null'].contains(n.toLowerCase())) {
+  if (n.isNotEmpty && !['user', 'friend user', 'user user', 'none', 'null', 'guest user'].contains(n.toLowerCase())) {
     return n;
   }
-  if (u.isNotEmpty && !['user', 'none', 'null'].contains(u.toLowerCase())) {
+  if (u.isNotEmpty && !['user', 'none', 'null', 'guest_user'].contains(u.toLowerCase())) {
     return u;
   }
   if (e.isNotEmpty && e.contains('@')) {
     final prefix = e.split('@').first.trim();
-    if (prefix.isNotEmpty && !['user', 'none', 'null'].contains(prefix.toLowerCase())) {
-      return prefix;
+    if (prefix.isNotEmpty && !['user', 'none', 'null', 'guest'].contains(prefix.toLowerCase())) {
+      return prefix.substring(0, 1).toUpperCase() + prefix.substring(1);
     }
   }
-  return n.isNotEmpty ? n : (u.isNotEmpty ? u : 'User');
+  if (n.isNotEmpty && n.toLowerCase() != 'user') return n;
+  if (u.isNotEmpty && u.toLowerCase() != 'user') return u;
+  return 'Friend';
 }
 
 String getAvatarInitials(String displayName) {
   final cleaned = displayName.trim();
-  if (cleaned.isEmpty) return 'U';
+  if (cleaned.isEmpty) return 'FR';
   final parts = cleaned.split(' ').where((e) => e.isNotEmpty).toList();
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -253,11 +256,11 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
   final List<dynamic> _suggestions = [];
   String _lastSearchQuery = '';
   bool _isSearching = false;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_filterGroups);
     _entryAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -268,6 +271,7 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _friendEmailController.dispose();
     _entryAnimController.dispose();
@@ -446,20 +450,25 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
 
   void _onSearchTextChanged(String val) {
     final query = val.trim();
-    setState(() {
-      _lastSearchQuery = query;
-    });
+    _lastSearchQuery = query;
 
     if (query.length < 2) {
-      setState(() {
-        _searchSuggestions.clear();
-        _isSearching = false;
-      });
+      _searchDebounce?.cancel();
+      if (_searchSuggestions.isNotEmpty || _isSearching) {
+        setState(() {
+          _searchSuggestions.clear();
+          _isSearching = false;
+        });
+      }
       return;
     }
 
-    setState(() => _isSearching = true);
-    _fetchSearchSuggestions(query);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() => _isSearching = true);
+      _fetchSearchSuggestions(query);
+    });
   }
 
   Future<void> _fetchSearchSuggestions(String query) async {

@@ -390,8 +390,10 @@ class _DmScreenState extends State<DmScreen> {
             padding: EdgeInsets.only(
               left: 12,
               right: 12,
-              top: 12,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              top: 10,
+              bottom: MediaQuery.of(context).padding.bottom > 0
+                  ? MediaQuery.of(context).padding.bottom + 8
+                  : 12,
             ),
             decoration: const BoxDecoration(
               color: Color(0xFF1E293B),
