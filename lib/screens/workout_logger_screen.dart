@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
-
 import '../data/exercise_database.dart';
 import '../services/api_service.dart';
+import '../providers/subscription_provider.dart';
 
-class WorkoutLoggerScreen extends StatefulWidget {
+class WorkoutLoggerScreen extends ConsumerStatefulWidget {
   const WorkoutLoggerScreen({super.key});
 
   @override
-  State<WorkoutLoggerScreen> createState() => _WorkoutLoggerScreenState();
+  ConsumerState<WorkoutLoggerScreen> createState() => _WorkoutLoggerScreenState();
 }
 
-class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> with SingleTickerProviderStateMixin {
+class _WorkoutLoggerScreenState extends ConsumerState<WorkoutLoggerScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   List<Exercise> _searchResults = [];
   bool _isSearching = false;
@@ -61,6 +61,13 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> with SingleTi
   }
 
   Future<void> _logWorkoutToApi(Exercise exercise, Map<String, dynamic> data) async {
+    // 7-day trial / Pro subscription gatekeeper
+    final canAccess = ref.read(subscriptionProvider.notifier).guardPremiumFeature(
+      context,
+      featureName: 'Workout Logging',
+    );
+    if (!canAccess) return;
+
     // Optimistic UI updates
     if (!_recent.contains(exercise)) {
       setState(() {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
 import 'dart:ui';
 import '../services/ai_food_logging_service.dart';
 import '../theme/app_theme.dart';
@@ -46,25 +47,213 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
 
       if (pickedFile == null) return;
 
+      if (!mounted) return;
+      _showPreScanConfirmation(pickedFile);
+    } catch (e) {
       setState(() {
-        _isAnalyzing = true;
-        _statusText = "Compressing Image...";
+        _errorMsg = "Could not access camera or gallery. Please try again.";
       });
+    }
+  }
 
+  void _showPreScanConfirmation(XFile pickedFile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 26),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(28),
+            topRight: Radius.circular(28),
+          ),
+          border: Border(
+            top: BorderSide(color: Color(0xFF334155), width: 1.5),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF475569),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Captured Meal Thumbnail Preview
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                height: 190,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Image.file(
+                  File(pickedFile.path),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // AI Vision Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF007AFF).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: Color(0xFF38BDF8), size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'AI VISION SCANNER READY',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF38BDF8),
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Text(
+              'Analyze Meal with Vision AI?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Our AI engine will scan your photo to detect each food item, calculate portion weights, and estimate calories, protein, carbs, fats & fiber.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: const Color(0xFF94A3B8),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Send to AI CTA Button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _analyzeImage(pickedFile.path);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF007AFF),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 4,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Scan with AI Now',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Retake / Cancel
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _getImage(ImageSource.camera);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Color(0xFF334155)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'Retake Photo',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF64748B),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _analyzeImage(String imagePath) async {
+    setState(() {
+      _isAnalyzing = true;
+      _statusText = "Compressing Image...";
+      _errorMsg = null;
+    });
+
+    try {
       // Simple artificial delay for fluid status presentation
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
       setState(() {
         _statusText = "AI Recognizing Food...";
       });
 
-      final res = await AiFoodLoggingService.analyzeMeal(pickedFile.path);
+      final res = await AiFoodLoggingService.analyzeMeal(imagePath);
 
       if (res['success'] == true && res['data'] != null) {
+        if (!mounted) return;
         setState(() {
           _statusText = "Running Nutrition Engine...";
         });
         await Future.delayed(const Duration(milliseconds: 300));
-        
+
         if (!mounted) return;
         setState(() {
           _isAnalyzing = false;
@@ -84,17 +273,19 @@ class _AiFoodLoggingScreenState extends State<AiFoodLoggingScreen> {
           MaterialPageRoute(
             builder: (context) => MealReviewScreen(
               initialFoods: foodsList,
-              imagePath: pickedFile.path,
+              imagePath: imagePath,
             ),
           ),
         );
       } else {
+        if (!mounted) return;
         setState(() {
           _isAnalyzing = false;
           _errorMsg = res['error'] as String? ?? "Failed to analyze food image. Please try again.";
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isAnalyzing = false;
         _errorMsg = "Connection error. Check your internet and try again.";

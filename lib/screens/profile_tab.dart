@@ -24,10 +24,12 @@ import 'terms_privacy_screen.dart';
 import 'referral_screen.dart';
 import 'workout_library_screen.dart';
 import 'supplements_screen.dart';
+import 'subscription_screen.dart';
 import '../services/notification_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/profile_provider.dart';
+import '../providers/subscription_provider.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -221,6 +223,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
+    final subState = ref.watch(subscriptionProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
@@ -349,10 +352,16 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Premium Member • ${profileState.age} years old',
+                          subState.isPro
+                              ? 'SABTRACK PRO • ${subState.planName ?? "Active"}'
+                              : (subState.isTrialActive
+                                  ? '7-Day Free Trial • ${subState.trialDaysRemaining} days left'
+                                  : 'Free Plan • Steps Only'),
                           style: GoogleFonts.inter(
-                            color: Colors.black45,
-                            fontWeight: FontWeight.w500,
+                            color: subState.isPro
+                                ? const Color(0xFFD97706)
+                                : (subState.isTrialActive ? const Color(0xFF38BDF8) : Colors.black45),
+                            fontWeight: (subState.isPro || subState.isTrialActive) ? FontWeight.w700 : FontWeight.w500,
                             fontSize: 13,
                           ),
                         ),
@@ -380,7 +389,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
             ],
           ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
+
+          // SABTRACK PRO Upgrade / Manage Banner
+          StaggeredListItem(
+            index: 3,
+            animationController: _entryAnimController,
+            child: _buildSubscriptionBanner(subState),
+          ),
+          const SizedBox(height: 20),
 
           // Invite Friends Banner (marketing style)
           StaggeredListItem(
@@ -828,6 +845,285 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
             ],
           ),
           child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionBanner(SubscriptionState subState) {
+    if (subState.isPro) {
+      return GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: AppTheme.cardRadius,
+            border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF59E0B).withOpacity(0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'SABTRACK PRO ACTIVE',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: const Color(0xFFFBBF24),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'PRO',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF34D399),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${subState.planName ?? "Annual Plan"} • ${subState.daysRemaining} days remaining',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 24),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (subState.isTrialActive) {
+      return GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: AppTheme.cardRadius,
+            border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.4), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF38BDF8).withOpacity(0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.timer_outlined, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '7-DAY FREE TRIAL',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: const Color(0xFF38BDF8),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${subState.trialDaysRemaining}D LEFT',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF38BDF8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'All features unlocked. Upgrade now to lock in 22% OFF for the year.',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 24),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Free tier (trial ended): high-converting upgrade banner
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: AppTheme.cardRadius,
+          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF59E0B).withOpacity(0.15),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Unlock SABTRACK PRO',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '22% OFF',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFFFBBF24),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '7-Day trial ended. Unlimited AI scans & exports starting at ₹233/mo.',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'Upgrade',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

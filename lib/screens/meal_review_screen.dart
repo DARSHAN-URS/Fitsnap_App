@@ -4,11 +4,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/ai_food_logging_service.dart';
 import '../theme/app_theme.dart';
 import '../dashboard_screen.dart';
+import '../providers/subscription_provider.dart';
 
-class MealReviewScreen extends StatefulWidget {
+class MealReviewScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> initialFoods;
   final String imagePath;
 
@@ -19,10 +21,10 @@ class MealReviewScreen extends StatefulWidget {
   });
 
   @override
-  State<MealReviewScreen> createState() => _MealReviewScreenState();
+  ConsumerState<MealReviewScreen> createState() => _MealReviewScreenState();
 }
 
-class _MealReviewScreenState extends State<MealReviewScreen> {
+class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   late List<Map<String, dynamic>> _foods;
   late String _currentImagePath;
   bool _isSaving = false;
@@ -243,6 +245,13 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
   }
 
   Future<void> _saveMeal() async {
+    // 7-day trial / Pro subscription gatekeeper
+    final canAccess = ref.read(subscriptionProvider.notifier).guardPremiumFeature(
+      context,
+      featureName: 'AI Meal Scans',
+    );
+    if (!canAccess) return;
+
     if (_foods.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log at least one food item.')),
@@ -407,52 +416,227 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
 
       if (pickedFile == null) return;
 
-      setState(() {
-        _isRetaking = true;
-        _retakeStatusText = "AI Recognizing New Photo...";
-        _errorMsg = null;
-      });
-
-      final res = await AiFoodLoggingService.analyzeMeal(pickedFile.path);
-
-      if (res['success'] == true && res['data'] != null) {
-        final rawData = res['data'];
-        List<Map<String, dynamic>> newFoodsList = [];
-        if (rawData is Map && rawData['foods'] is List) {
-          newFoodsList = (rawData['foods'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList();
-        } else if (rawData is Map && rawData.containsKey('name')) {
-          newFoodsList = [Map<String, dynamic>.from(rawData)];
-        }
-
-        if (!mounted) return;
-        setState(() {
-          _currentImagePath = pickedFile.path;
-          _foods = newFoodsList;
-          _macroDensities.clear();
-          _calculateDensities();
-          _isRetaking = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('New meal photo scanned successfully!'),
-            backgroundColor: const Color(0xFF007AFF),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _isRetaking = false;
-          _errorMsg = res['error'] as String? ?? "Failed to analyze new image.";
-        });
-      }
+      if (!mounted) return;
+      _showPreScanModal(pickedFile);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isRetaking = false;
-        _errorMsg = "Failed to retake photo. Please try again.";
+        _errorMsg = "Failed to access photo. Please try again.";
+      });
+    }
+  }
+
+  void _showPreScanModal(XFile pickedFile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 26),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(28),
+            topRight: Radius.circular(28),
+          ),
+          border: Border(
+            top: BorderSide(color: Color(0xFF334155), width: 1.5),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF475569),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                height: 190,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Image.file(
+                  File(pickedFile.path),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF007AFF).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: Color(0xFF38BDF8), size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'AI VISION SCANNER READY',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF38BDF8),
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Text(
+              'Analyze New Meal Photo?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Our AI engine will scan your new photo to recalculate food items, portion weights, and macro breakdown.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: const Color(0xFF94A3B8),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _processRetakeMeal(pickedFile.path);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF007AFF),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 4,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Scan with AI Now',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _retakePhoto(ImageSource.camera);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Color(0xFF334155)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'Retake Photo',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF64748B),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processRetakeMeal(String imagePath) async {
+    setState(() {
+      _isRetaking = true;
+      _retakeStatusText = "AI Recognizing New Photo...";
+      _errorMsg = null;
+    });
+
+    final res = await AiFoodLoggingService.analyzeMeal(imagePath);
+
+    if (res['success'] == true && res['data'] != null) {
+      final rawData = res['data'];
+      List<Map<String, dynamic>> newFoodsList = [];
+      if (rawData is Map && rawData['foods'] is List) {
+        newFoodsList = (rawData['foods'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList();
+      } else if (rawData is Map && rawData.containsKey('name')) {
+        newFoodsList = [Map<String, dynamic>.from(rawData)];
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _currentImagePath = imagePath;
+        _foods = newFoodsList;
+        _macroDensities.clear();
+        _calculateDensities();
+        _isRetaking = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('New meal photo scanned successfully!'),
+          backgroundColor: const Color(0xFF007AFF),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      setState(() {
+        _isRetaking = false;
+        _errorMsg = res['error'] as String? ?? "Failed to analyze new image.";
       });
     }
   }

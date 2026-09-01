@@ -1862,6 +1862,119 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // ── Payment & Subscription APIs ─────────────────────────────────────────
+
+  /// Fetches available subscription plans (Monthly, 6 Months, Yearly)
+  static Future<Map<String, dynamic>> getPaymentPlans() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/payments/plans'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to fetch payment plans'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Creates a Razorpay order on the backend for the given plan ID
+  static Future<Map<String, dynamic>> createPaymentOrder(String planId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/payments/create-order'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'plan_id': planId}),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Failed to create payment order'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Verifies Razorpay payment signature and activates Pro membership
+  static Future<Map<String, dynamic>> verifyPayment({
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+    required String planId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/payments/verify'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'razorpay_order_id': razorpayOrderId,
+          'razorpay_payment_id': razorpayPaymentId,
+          'razorpay_signature': razorpaySignature,
+          'plan_id': planId,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Payment verification failed'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Retrieves user's current subscription status, active plan, and validity
+  static Future<Map<String, dynamic>> getSubscriptionStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/payments/status'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'error': 'Failed to retrieve subscription status'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Apply promo code (e.g. VIGATRON100) to activate free VIP Pro access
+  static Future<Map<String, dynamic>> applyPromoCode(String promoCode) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/payments/apply-promo'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'promo_code': promoCode.trim()}),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Invalid promo code'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
 }
 
 

@@ -11,6 +11,7 @@ import '../theme/sabtrack_logo.dart';
 import '../utils/share_helper.dart';
 import '../providers/profile_provider.dart';
 import '../services/api_service.dart';
+import '../providers/subscription_provider.dart';
 
 enum ExportType { daily, workout }
 
@@ -227,6 +228,13 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Future<void> _shareExport() async {
+    // 7-day trial / Pro subscription gatekeeper
+    final canAccess = ref.read(subscriptionProvider.notifier).guardPremiumFeature(
+      context,
+      featureName: 'Activity Export Studio',
+    );
+    if (!canAccess) return;
+
     setState(() => _isExporting = true);
     await Future.delayed(const Duration(milliseconds: 100)); // let frame draw
     try {
@@ -263,6 +271,13 @@ class _ExportStudioScreenState extends ConsumerState<ExportStudioScreen> {
   }
 
   Future<void> _saveExport() async {
+    // 7-day trial / Pro subscription gatekeeper
+    final canAccess = ref.read(subscriptionProvider.notifier).guardPremiumFeature(
+      context,
+      featureName: 'Activity Export Studio',
+    );
+    if (!canAccess) return;
+
     setState(() => _isExporting = true);
     await Future.delayed(const Duration(milliseconds: 100));
     try {
