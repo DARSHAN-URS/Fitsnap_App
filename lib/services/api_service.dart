@@ -1955,7 +1955,7 @@ class ApiService {
     }
   }
 
-  /// Apply promo code (e.g. VIGATRON100) to activate free VIP Pro access
+  /// Apply promo code to activate VIP Pro access
   static Future<Map<String, dynamic>> applyPromoCode(String promoCode) async {
     try {
       final response = await http.post(

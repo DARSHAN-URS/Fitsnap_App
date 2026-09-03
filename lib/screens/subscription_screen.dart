@@ -56,7 +56,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
     final code = _promoController.text.trim();
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a promo code (e.g. VIGATRON100)')),
+        const SnackBar(content: Text('Please enter a promo code')),
       );
       return;
     }
@@ -333,6 +333,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1120),
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -354,39 +355,43 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Background ambient glows
-          Positioned(
-            top: -60,
-            right: -60,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.primary.withOpacity(0.18),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Stack(
+          children: [
+            // Background ambient glows
+            Positioned(
+              top: -60,
+              right: -60,
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.primary.withOpacity(0.18),
+                ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: 100,
-            left: -80,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF8B5CF6).withOpacity(0.15),
+            Positioned(
+              bottom: 100,
+              left: -80,
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                ),
               ),
             ),
-          ),
 
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              physics: const BouncingScrollPhysics(),
-              child: Column(
+            SafeArea(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                physics: const BouncingScrollPhysics(),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Crown Badge
@@ -529,7 +534,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildPromoCodeSection() {
@@ -592,6 +598,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                   child: TextField(
                     controller: _promoController,
                     textCapitalization: TextCapitalization.characters,
+                    scrollPadding: const EdgeInsets.only(bottom: 140),
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -599,7 +606,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                       letterSpacing: 1.1,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Enter code (e.g. VIGATRON100)',
+                      hintText: 'Enter promo code',
                       hintStyle: GoogleFonts.inter(
                         fontSize: 13,
                         color: const Color(0xFF64748B),

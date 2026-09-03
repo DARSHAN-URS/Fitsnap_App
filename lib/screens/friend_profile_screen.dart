@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -270,27 +269,36 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   color: widget.avatarColor.withOpacity(0.12),
                   shape: BoxShape.circle,
                   border: Border.all(color: widget.avatarColor.withOpacity(0.3), width: 2),
-                  image: picUrl != null && picUrl.isNotEmpty
-                      ? DecorationImage(
-                          image: picUrl.startsWith('http')
-                              ? CachedNetworkImageProvider(picUrl)
-                              : FileImage(File(picUrl)) as ImageProvider,
-                          fit: BoxFit.cover,
-                        )
-                      : null,
                 ),
-                child: picUrl == null || picUrl.isEmpty
-                    ? Center(
-                        child: Text(
-                          widget.avatarInitials,
-                          style: GoogleFonts.inter(
-                            color: widget.avatarColor,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 20,
+                child: ClipOval(
+                  child: picUrl != null && picUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: picUrl,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, url, error) => Center(
+                            child: Text(
+                              widget.avatarInitials,
+                              style: GoogleFonts.inter(
+                                color: widget.avatarColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            widget.avatarInitials,
+                            style: GoogleFonts.inter(
+                              color: widget.avatarColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                            ),
                           ),
                         ),
-                      )
-                    : null,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(

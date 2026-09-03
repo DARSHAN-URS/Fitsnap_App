@@ -113,20 +113,22 @@ String getSmartDisplayName(String? name, String? username, String? email) {
   final u = (username ?? '').trim();
   final e = (email ?? '').trim();
 
-  if (n.isNotEmpty && !['user', 'friend user', 'user user', 'none', 'null', 'guest user'].contains(n.toLowerCase())) {
+  final genericNames = {'user', 'friend', 'friend user', 'user user', 'none', 'null', 'guest user', 'guest'};
+
+  if (n.isNotEmpty && !genericNames.contains(n.toLowerCase())) {
     return n;
   }
-  if (u.isNotEmpty && !['user', 'none', 'null', 'guest_user'].contains(u.toLowerCase())) {
+  if (u.isNotEmpty && !genericNames.contains(u.toLowerCase())) {
     return u;
   }
   if (e.isNotEmpty && e.contains('@')) {
     final prefix = e.split('@').first.trim();
-    if (prefix.isNotEmpty && !['user', 'none', 'null', 'guest'].contains(prefix.toLowerCase())) {
+    if (prefix.isNotEmpty && !genericNames.contains(prefix.toLowerCase())) {
       return prefix.substring(0, 1).toUpperCase() + prefix.substring(1);
     }
   }
-  if (n.isNotEmpty && n.toLowerCase() != 'user') return n;
-  if (u.isNotEmpty && u.toLowerCase() != 'user') return u;
+  if (n.isNotEmpty && !genericNames.contains(n.toLowerCase())) return n;
+  if (u.isNotEmpty && !genericNames.contains(u.toLowerCase())) return u;
   return 'Friend';
 }
 
@@ -170,13 +172,15 @@ class FriendItem {
 
   factory FriendItem.fromBackendJson(Map<String, dynamic> json) {
     final rawName = json['name'];
-    final uname = json['username'] ?? '';
-    final mail = json['email'] ?? '';
+    final uname = (json['username'] ?? '').toString().trim();
+    final mail = (json['email'] ?? '').toString().trim();
     final resolvedName = getSmartDisplayName(rawName, uname, mail);
     final rawAvatar = json['avatar'];
     final avatarInit = (rawAvatar != null && rawAvatar != 'FR' && rawAvatar != 'US' && rawAvatar.toString().trim().isNotEmpty)
         ? rawAvatar.toString()
         : getAvatarInitials(resolvedName);
+
+    final picUrl = json['profile_picture_url'] ?? json['avatar_url'] ?? json['picture'] ?? json['photo_url'];
 
     return FriendItem(
       id: (json['id'] ?? '').toString(),
@@ -184,7 +188,7 @@ class FriendItem {
       name: resolvedName,
       username: uname,
       email: mail,
-      profilePictureUrl: json['profile_picture_url'],
+      profilePictureUrl: picUrl is String && picUrl.trim().isNotEmpty ? picUrl.trim() : null,
       steps: json['steps'] ?? 0,
       calories: json['calories'] ?? 0,
       avatar: avatarInit,
@@ -1392,27 +1396,36 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
                                     color: avatarCol.withOpacity(0.12),
                                     shape: BoxShape.circle,
                                     border: Border.all(color: avatarCol.withOpacity(0.25), width: 1.5),
-                                    image: friend.profilePictureUrl != null && friend.profilePictureUrl!.isNotEmpty
-                                        ? DecorationImage(
-                                            image: friend.profilePictureUrl!.startsWith('http')
-                                                ? CachedNetworkImageProvider(friend.profilePictureUrl!)
-                                                : FileImage(File(friend.profilePictureUrl!)) as ImageProvider,
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
                                   ),
-                                  child: friend.profilePictureUrl == null || friend.profilePictureUrl!.isEmpty
-                                      ? Center(
-                                          child: Text(
-                                            friend.avatar,
-                                            style: GoogleFonts.inter(
-                                              color: avatarCol,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
+                                  child: ClipOval(
+                                    child: friend.profilePictureUrl != null && friend.profilePictureUrl!.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: friend.profilePictureUrl!,
+                                            width: 44,
+                                            height: 44,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (context, url, error) => Center(
+                                              child: Text(
+                                                friend.avatar,
+                                                style: GoogleFonts.inter(
+                                                  color: avatarCol,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : Center(
+                                            child: Text(
+                                              friend.avatar,
+                                              style: GoogleFonts.inter(
+                                                color: avatarCol,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
                                             ),
                                           ),
-                                        )
-                                      : null,
+                                  ),
                                 ),
                                 Positioned(
                                   right: 1,
@@ -1431,7 +1444,7 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
                             ),
                             const SizedBox(width: 14),
 
-                            // Name/Email
+                            // Name/Username/Email
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1447,7 +1460,9 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    friend.email,
+                                    friend.username.isNotEmpty
+                                        ? '@${friend.username}'
+                                        : (friend.email.isNotEmpty ? friend.email : 'FitFlow Member'),
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       color: Colors.black45,
