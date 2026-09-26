@@ -27,17 +27,17 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
       'name': 'Weight',
       'icon': Icons.monitor_weight_outlined,
       'unit': 'kg',
-      'data': [78.5, 78.2, 77.8, 78.0, 77.3, 76.9, 76.4],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.accent,
-      'insight': '-2.1 kg from goal',
+      'insight': '0.0 kg from goal',
     },
     {
       'name': 'Distance Traveled',
       'icon': Icons.directions_run_rounded,
       'unit': 'km',
-      'data': [3.2, 4.5, 2.8, 5.0, 3.6, 4.2, 5.8],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonCyan,
       'insight': '0.0 km total',
     },
@@ -45,46 +45,46 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
       'name': 'Strength Gain',
       'icon': Icons.fitness_center_rounded,
       'unit': 'kg',
-      'data': [5.0, 5.0, 5.0, 7.5, 7.5, 7.5, 10.0],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonPink,
-      'insight': '+5.0 kg progress',
+      'insight': '0.0 kg progress',
     },
     {
       'name': 'Waist Size',
       'icon': Icons.accessibility_new_rounded,
       'unit': 'in',
-      'data': [34.0, 33.8, 33.5, 33.6, 33.2, 33.0, 32.8],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonCyan,
-      'insight': '-1.2 in shredded',
+      'insight': '0.0 in shredded',
     },
     {
       'name': 'Chest Size',
       'icon': Icons.sports_gymnastics_rounded,
       'unit': 'in',
-      'data': [38.5, 38.6, 38.8, 39.0, 39.2, 39.3, 39.5],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonAmber,
-      'insight': '+1.0 in gained',
+      'insight': '0.0 in gained',
     },
     {
       'name': 'Thighs Size',
       'icon': Icons.directions_run_rounded,
       'unit': 'in',
-      'data': [22.0, 22.1, 22.1, 22.3, 22.4, 22.4, 22.6],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonEmerald,
-      'insight': '+0.6 in volume',
+      'insight': '0.0 in volume',
     },
     {
       'name': 'Arms Size',
       'icon': Icons.gesture_rounded,
       'unit': 'in',
-      'data': [13.2, 13.3, 13.3, 13.5, 13.6, 13.7, 13.8],
-      'labels': ['May 1', 'May 5', 'May 10', 'May 15', 'May 20', 'May 25', 'Jun 1'],
+      'data': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      'labels': ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
       'color': AppTheme.neonIndigo,
-      'insight': '+0.6 in peak',
+      'insight': '0.0 in peak',
     },
   ];
 
@@ -204,7 +204,13 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
     Map<String, List<double>> chartValues = {};
     Map<String, List<String>> chartLabels = {};
 
-
+    final now = DateTime.now();
+    final List<String> months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final List<String> defaultLabels = List.generate(7, (i) {
+      final d = now.subtract(Duration(days: 6 - i));
+      return '${months[d.month - 1]} ${d.day}';
+    });
+    final List<double> defaultZeros = List.filled(7, 0.0);
 
     for (var type in ['weight', 'waist', 'chest', 'arms', 'thighs', 'strength']) {
       List<double> vals = [];
@@ -226,8 +232,8 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
       }
       
       if (vals.isEmpty) {
-        chartValues[type] = [];
-        chartLabels[type] = [];
+        chartValues[type] = List.from(defaultZeros);
+        chartLabels[type] = List.from(defaultLabels);
       } else {
         chartValues[type] = vals;
         chartLabels[type] = lbls;
@@ -249,7 +255,6 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
         final String dateStr = parts.length > 4 ? parts[4] : DateTime.now().toIso8601String();
         final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
         
-        final List<String> months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         final String dayKey = "${months[parsedDate.month - 1]} ${parsedDate.day}";
         distanceByDay[dayKey] = (distanceByDay[dayKey] ?? 0.0) + dist;
       }
@@ -266,8 +271,8 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
     }
     
     if (distanceData.isEmpty) {
-      distanceData = [];
-      distanceLabels = [];
+      distanceData = List.from(defaultZeros);
+      distanceLabels = List.from(defaultLabels);
       totalDistance = 0.0;
     }
 
@@ -543,50 +548,20 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
                           const SizedBox(height: 24),
                           
                           // Custom Bar Chart
-                          metric['data'] == null || (metric['data'] as List).isEmpty
-                              ? Container(
-                                  height: 160,
-                                  width: double.infinity,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.analytics_outlined,
-                                        size: 32,
-                                        color: const Color(0xFF64748B).withOpacity(0.5),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'No data logged yet',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Start tracking to view charts',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11,
-                                          color: const Color(0xFF64748B).withOpacity(0.7),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : ProgressBarChart(
-                                  dataPoints: List<double>.from(metric['data']),
-                                  labels: List<String>.from(metric['labels']),
-                                  chartColor: metric['color'],
-                                  unit: metric['unit'],
-                                ),
+                          ProgressBarChart(
+                            dataPoints: (metric['data'] != null && (metric['data'] as List).isNotEmpty)
+                                ? List<double>.from(metric['data'])
+                                : List.filled(7, 0.0),
+                            labels: (metric['labels'] != null && (metric['labels'] as List).isNotEmpty)
+                                ? List<String>.from(metric['labels'])
+                                : List.generate(7, (i) {
+                                    final d = DateTime.now().subtract(Duration(days: 6 - i));
+                                    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                    return '${months[d.month - 1]} ${d.day}';
+                                  }),
+                            chartColor: metric['color'],
+                            unit: metric['unit'],
+                          ),
                         ],
                       ),
                     ),
@@ -893,15 +868,26 @@ class _ProgressBarChartPainter extends CustomPainter {
     final double height = size.height;
 
     // Determine min and max
-    double minVal = dataPoints.reduce((a, b) => a < b ? a : b);
-    double maxVal = dataPoints.reduce((a, b) => a > b ? a : b);
-    
-    // Add small buffer to top and bottom of chart
-    double range = maxVal - minVal;
-    if (range == 0) range = 1.0;
-    minVal = (minVal - range * 0.25).clamp(0.0, double.infinity);
-    maxVal += range * 0.15;
-    range = maxVal - minVal;
+    final bool allZero = dataPoints.every((v) => v == 0.0);
+    double minVal;
+    double maxVal;
+    double range;
+
+    if (allZero) {
+      minVal = 0.0;
+      maxVal = (unit == 'km' || unit == 'in') ? 10.0 : 50.0;
+      range = maxVal;
+    } else {
+      minVal = dataPoints.reduce((a, b) => a < b ? a : b);
+      maxVal = dataPoints.reduce((a, b) => a > b ? a : b);
+      
+      // Add small buffer to top and bottom of chart
+      double diff = maxVal - minVal;
+      if (diff == 0) diff = 1.0;
+      minVal = (minVal - diff * 0.25).clamp(0.0, double.infinity);
+      maxVal += diff * 0.15;
+      range = maxVal - minVal;
+    }
 
     final double stepX = width / dataPoints.length;
     final double barWidth = (stepX * 0.55).clamp(6.0, 32.0);
@@ -934,32 +920,37 @@ class _ProgressBarChartPainter extends CustomPainter {
       double barHeight = ((val - minVal) / range * height) * progress;
       if (barHeight < 0.0) barHeight = 0.0;
 
+      // Show a sleek capsule baseline indicator (4px) when at zero
+      final double displayHeight = (val == 0.0 || barHeight < 4.0) ? 4.0 : barHeight;
+
       // Center the bar within its step segment
       final double x = (i * stepX) + (stepX - barWidth) / 2;
-      final double y = height - barHeight;
+      final double y = height - displayHeight;
 
       final barRect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
+        Rect.fromLTWH(x, y, barWidth, displayHeight),
         topLeft: const Radius.circular(5),
         topRight: const Radius.circular(5),
+        bottomLeft: const Radius.circular(5),
+        bottomRight: const Radius.circular(5),
       );
 
       final barPaint = Paint()
         ..shader = LinearGradient(
           colors: [
-            color,
-            color.withOpacity(0.35),
+            color.withOpacity(val == 0.0 ? 0.35 : 1.0),
+            color.withOpacity(val == 0.0 ? 0.15 : 0.35),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-        ).createShader(Rect.fromLTWH(x, y, barWidth, barHeight))
+        ).createShader(Rect.fromLTWH(x, y, barWidth, displayHeight))
         ..style = PaintingStyle.fill;
 
       canvas.drawRRect(barRect, barPaint);
 
       // Subtle stroke border for premium definition
       final borderPaint = Paint()
-        ..color = color.withOpacity(0.7)
+        ..color = color.withOpacity(val == 0.0 ? 0.4 : 0.7)
         ..strokeWidth = 1.0
         ..style = PaintingStyle.stroke;
       canvas.drawRRect(barRect, borderPaint);

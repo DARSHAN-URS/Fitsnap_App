@@ -12,7 +12,6 @@ import androidx.core.content.ContextCompat
 import android.Manifest
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
 
 class MainActivity: FlutterFragmentActivity() {
     private val CHANNEL = "com.sabtrack.ai/steps"
@@ -20,7 +19,6 @@ class MainActivity: FlutterFragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {

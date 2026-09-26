@@ -333,7 +333,7 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
     }
 
     if (progress.isEmpty) {
-      return [0.0];
+      return List.filled(7, 0.0);
     }
     return progress;
   }
@@ -351,7 +351,11 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
     }
 
     if (labels.isEmpty) {
-      return ['No data'];
+      final now = DateTime.now();
+      return List.generate(7, (i) {
+        final d = now.subtract(Duration(days: 6 - i));
+        return "${months[d.month - 1]} ${d.day}";
+      });
     }
     return labels;
   }
@@ -603,22 +607,11 @@ class _StrengthChainWidgetState extends State<StrengthChainWidget> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                if (progressPoints.length <= 1 && progressPoints[0] == 0.0)
-                  Container(
-                    height: 160,
-                    width: double.infinity,
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Log multiple workouts to see progression chart.',
-                      style: GoogleFonts.inter(color: Colors.grey, fontSize: 13),
-                    ),
-                  )
-                else
-                  StrengthLineChart(
-                    dataPoints: progressPoints,
-                    labels: progressLabels,
-                    chartColor: categoryColor,
-                  ),
+                StrengthLineChart(
+                  dataPoints: progressPoints,
+                  labels: progressLabels,
+                  chartColor: categoryColor,
+                ),
               ],
             ),
           ),
@@ -1140,15 +1133,26 @@ class StrengthLineChartPainter extends CustomPainter {
     final double height = size.height;
 
     // Get min and max
-    double minVal = dataPoints.reduce((a, b) => a < b ? a : b);
-    double maxVal = dataPoints.reduce((a, b) => a > b ? a : b);
+    final bool allZero = dataPoints.every((v) => v == 0.0);
+    double minVal;
+    double maxVal;
+    double range;
 
-    // Padding buffer
-    double range = maxVal - minVal;
-    if (range == 0) range = 10.0;
-    minVal = (minVal - range * 0.15).clamp(0.0, double.infinity);
-    maxVal += range * 0.15;
-    range = maxVal - minVal;
+    if (allZero) {
+      minVal = 0.0;
+      maxVal = 50.0;
+      range = 50.0;
+    } else {
+      minVal = dataPoints.reduce((a, b) => a < b ? a : b);
+      maxVal = dataPoints.reduce((a, b) => a > b ? a : b);
+
+      // Padding buffer
+      double diff = maxVal - minVal;
+      if (diff == 0) diff = 10.0;
+      minVal = (minVal - diff * 0.15).clamp(0.0, double.infinity);
+      maxVal += diff * 0.15;
+      range = maxVal - minVal;
+    }
 
     // Grid lines (3 horizontal)
     final gridPaint = Paint()
@@ -1181,7 +1185,9 @@ class StrengthLineChartPainter extends CustomPainter {
     final List<Offset> points = [];
     for (int i = 0; i < dataPoints.length; i++) {
       final double x = i * stepX;
-      final double targetY = height - ((dataPoints[i] - minVal) / range * height);
+      final double targetY = allZero
+          ? height - 8.0
+          : (height - 8.0) - ((dataPoints[i] - minVal) / range * (height - 24.0));
       final double animatedY = height - (height - targetY) * progress;
       points.add(Offset(x, animatedY));
     }

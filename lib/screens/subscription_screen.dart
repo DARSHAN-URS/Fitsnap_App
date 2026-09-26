@@ -22,6 +22,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
   String? _appliedPromoCode;
   String? _userEmail;
   final TextEditingController _promoController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _promoFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -32,6 +34,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+
+    _promoFocusNode.addListener(() {
+      if (_promoFocusNode.hasFocus) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    });
 
     _loadUserInfo();
   }
@@ -49,6 +65,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
   void dispose() {
     _razorpay.clear();
     _promoController.dispose();
+    _scrollController.dispose();
+    _promoFocusNode.dispose();
     super.dispose();
   }
 
@@ -355,43 +373,40 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
           ),
         ],
       ),
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Stack(
-          children: [
-            // Background ambient glows
-            Positioned(
-              top: -60,
-              right: -60,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.primary.withOpacity(0.18),
-                ),
+      body: Stack(
+        children: [
+          // Background ambient glows
+          Positioned(
+            top: -60,
+            right: -60,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primary.withOpacity(0.18),
               ),
             ),
-            Positioned(
-              bottom: 100,
-              left: -80,
-              child: Container(
-                width: 280,
-                height: 280,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF8B5CF6).withOpacity(0.15),
-                ),
+          ),
+          Positioned(
+            bottom: 100,
+            left: -80,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF8B5CF6).withOpacity(0.15),
               ),
             ),
+          ),
 
-            SafeArea(
-              child: SingleChildScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                physics: const BouncingScrollPhysics(),
-                child: Column(
+          SafeArea(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              physics: const ClampingScrollPhysics(),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Crown Badge
@@ -534,8 +549,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
           ),
         ],
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildPromoCodeSection() {
@@ -597,8 +611,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                   ),
                   child: TextField(
                     controller: _promoController,
+                    focusNode: _promoFocusNode,
+                    onTapOutside: (_) => _promoFocusNode.unfocus(),
                     textCapitalization: TextCapitalization.characters,
-                    scrollPadding: const EdgeInsets.only(bottom: 140),
+                    scrollPadding: const EdgeInsets.only(bottom: 80),
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

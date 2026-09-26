@@ -1975,6 +1975,75 @@ class ApiService {
       return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
+
+  /// Fetch today's assigned diet plan from coach (SabCoach unified ecosystem)
+  static Future<Map<String, dynamic>> getClientTodayDietPlan({String? date}) async {
+    try {
+      final queryParam = date != null ? '?date=$date' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/client/diet-plan/today$queryParam'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to retrieve today\'s diet plan'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Get user's nutrition goals
+  static Future<Map<String, dynamic>> getNutritionGoals() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/nutrition-goals'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to get nutrition goals'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Update user's nutrition goals
+  static Future<Map<String, dynamic>> updateNutritionGoals({
+    required double calorieGoal,
+    required double proteinGoal,
+    required double carbsGoal,
+    required double fatsGoal,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/user/nutrition-goals'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'calorie_goal': calorieGoal,
+          'protein_goal': proteinGoal,
+          'carbs_goal': carbsGoal,
+          'fats_goal': fatsGoal,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to update nutrition goals'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
 }
 
 

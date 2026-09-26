@@ -17,7 +17,6 @@ import '../providers/profile_provider.dart';
 import '../widgets/staggered_animation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/preferences_helper.dart';
-import '../theme/app_theme.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   final int consumed;
@@ -58,7 +57,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   String? _aiInsight;
   double _height = 175.0;
   double _weight = 75.0;
-  double _targetWeight = 70.0;
   int _age = 25;
   String _gender = 'Male';
   String _goal = 'Build Muscle';
@@ -72,9 +70,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
   String? _customBmiCategory;
   double? _customBmr;
   double? _customTdee;
-
-  List<Map<String, dynamic>> _weightHistory = [];
-  bool _isLoadingWeightHistory = false;
 
   // Carousel Controller
   late PageController _pageController;
@@ -140,7 +135,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     final String? picTemp = await PreferencesHelper.readString('profile_pic_url');
     final double heightTemp = await PreferencesHelper.readDouble('profile_height') ?? 175.0;
     final double weightTemp = await PreferencesHelper.readDouble('profile_weight') ?? 75.0;
-    final double targetWeightTemp = await PreferencesHelper.readDouble('profile_target_weight') ?? 70.0;
     final String ageStr = await PreferencesHelper.readString('profile_age') ?? '25';
     final int ageTemp = int.tryParse(ageStr) ?? 25;
     final String genderTemp = await PreferencesHelper.readString('profile_gender') ?? 'Male';
@@ -163,7 +157,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
       _profilePicUrl = picTemp;
       _height = heightTemp;
       _weight = weightTemp;
-      _targetWeight = targetWeightTemp;
       _age = ageTemp;
       _gender = genderTemp;
       _goal = goalTemp;
@@ -179,8 +172,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
       _customTdee = customTdeeTemp;
     });
 
-    _loadWeightHistory();
-    
     if (ApiService.isAuthenticated) {
       ApiService.getWorkoutInsight().then((res) {
         if (res['success'] && res['data'] != null) {
@@ -826,14 +817,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
           ),
           const SizedBox(height: 24),
 
-          // Weight Progress Section
-          StaggeredListItem(
-            index: 3,
-            animationController: _entryAnimController,
-            child: _buildWeightProgressSection(),
-          ),
-          const SizedBox(height: 24),
-
           // Quick Actions Title
           StaggeredListItem(
             index: 4,
@@ -980,45 +963,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
    );
   }
 
-  Future<void> _loadWeightHistory() async {
-    if (!ApiService.isAuthenticated) return;
-    setState(() {
-      _isLoadingWeightHistory = true;
-    });
-    final res = await ApiService.getProfileHistory();
-    if (res['success'] && res['data'] != null) {
-      if (mounted) {
-        setState(() {
-          _weightHistory = List<Map<String, dynamic>>.from(res['data']['history'] ?? []);
-          _isLoadingWeightHistory = false;
-        });
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _isLoadingWeightHistory = false;
-        });
-      }
-    }
-  }
 
-  String _formatRecordDate(String dateStr) {
-    try {
-      final DateTime dt = DateTime.parse(dateStr).toLocal();
-      final now = DateTime.now();
-      if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
-        return 'Today';
-      }
-      final yesterday = DateTime.now().subtract(const Duration(days: 1));
-      if (dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day) {
-        return 'Yesterday';
-      }
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${months[dt.month - 1]} ${dt.day}';
-    } catch (_) {
-      return dateStr;
-    }
-  }
 
   int get _dailyCalorieGoal {
     if (_customCalorieGoal != null) {
@@ -1062,238 +1007,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
     return 2500;
   }
 
-  Widget _buildWeightProgressSection() {
-    if (_isLoadingWeightHistory) {
-      return Container(
-        height: 140,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.55),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      );
-    }
 
-    if (_weightHistory.isEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-              color: Colors.white.withOpacity(0.55),
-              boxShadow: AppTheme.cardShadow,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.scale_rounded, color: AppTheme.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Weight Progress',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No weight updates logged yet.',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Your weight history will appear here as you log changes to your weight in Profile settings.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final weights = _weightHistory.map((e) => (e['weight'] as num).toDouble()).toList();
-    
-    double firstWeight = weights.first;
-    double currentWeight = weights.last;
-    double diff = currentWeight - firstWeight;
-    String diffText = diff >= 0 ? '+${diff.toStringAsFixed(1)} kg' : '${diff.toStringAsFixed(1)} kg';
-    Color diffColor = diff <= 0 ? Colors.green.shade700 : Colors.orange.shade800;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
-            color: Colors.white.withOpacity(0.55),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.scale_rounded, color: AppTheme.accent),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Weight Progress',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: diffColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: diffColor.withOpacity(0.2)),
-                    ),
-                    child: Text(
-                      diffText,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: diffColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    currentWeight.toStringAsFixed(1),
-                    style: GoogleFonts.inter(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w900,
-                      color: textPrimary,
-                      letterSpacing: -1.0,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'kg',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: textSecondary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Target: ${_targetWeight.toStringAsFixed(1)} kg',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 80,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _WeightSparklinePainter(
-                    weights: weights,
-                    lineColor: AppTheme.accent,
-                    fillGradientStart: AppTheme.accent.withOpacity(0.2),
-                    fillGradientEnd: AppTheme.accent.withOpacity(0.0),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Recent Logs',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: textSecondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ..._weightHistory.reversed.take(3).map((log) {
-                final double w = (log['weight'] as num).toDouble();
-                final double b = (log['bmi'] as num).toDouble();
-                final String dateStr = log['recorded_at'] ?? '';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatRecordDate(dateStr),
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: textSecondary,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            '${w.toStringAsFixed(1)} kg',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: textPrimary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'BMI: ${b.toStringAsFixed(1)}',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildHeroCarousel() {
     final int targetCal = _dailyCalorieGoal;
@@ -2491,84 +2205,4 @@ class _RadialPainter extends CustomPainter {
   }
 }
 
-class _WeightSparklinePainter extends CustomPainter {
-  final List<double> weights;
-  final Color lineColor;
-  final Color fillGradientStart;
-  final Color fillGradientEnd;
 
-  _WeightSparklinePainter({
-    required this.weights,
-    required this.lineColor,
-    required this.fillGradientStart,
-    required this.fillGradientEnd,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (weights.length < 2) return;
-
-    final double minWeight = weights.reduce(min);
-    final double maxWeight = weights.reduce(max);
-    final double weightRange = maxWeight - minWeight;
-    final double rangeAdjustment = weightRange == 0 ? 1.0 : weightRange;
-
-    final double widthBetweenPoints = size.width / (weights.length - 1);
-
-    final Path path = Path();
-    final Path fillPath = Path();
-
-    double getX(int index) => index * widthBetweenPoints;
-    double getY(double weight) {
-      final double normalized = (weight - minWeight) / rangeAdjustment;
-      return size.height - (normalized * (size.height - 20) + 10);
-    }
-
-    path.moveTo(getX(0), getY(weights[0]));
-    fillPath.moveTo(getX(0), size.height);
-    fillPath.lineTo(getX(0), getY(weights[0]));
-
-    for (int i = 1; i < weights.length; i++) {
-      final double x = getX(i);
-      final double y = getY(weights[i]);
-      path.lineTo(x, y);
-      fillPath.lineTo(x, y);
-    }
-
-    fillPath.lineTo(size.width, size.height);
-    fillPath.close();
-
-    final Paint fillPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [fillGradientStart, fillGradientEnd],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(fillPath, fillPaint);
-
-    final Paint linePaint = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(path, linePaint);
-
-    final double lastX = getX(weights.length - 1);
-    final double lastY = getY(weights.last);
-    
-    final Paint glowPaint = Paint()
-      ..color = lineColor.withOpacity(0.3)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(lastX, lastY), 8.0, glowPaint);
-
-    final Paint dotPaint = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(lastX, lastY), 4.0, dotPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _WeightSparklinePainter oldDelegate) =>
-      oldDelegate.weights != weights;
-}
