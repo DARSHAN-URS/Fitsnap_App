@@ -22,3 +22,20 @@
 -keep class androidx.health.** { *; }
 -keep class androidx.health.connect.** { *; }
 -dontwarn androidx.health.**
+
+# Razorpay SDK
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes JavascriptInterface
+-keepattributes *Annotation*
+-dontwarn com.razorpay.**
+-keep class com.razorpay.** { *; }
+
+# Flutter Secure Storage
+-keep class com.it_nomads.fluttersecurestorage.** { *; }
+
+# Desugaring & AndroidX Activity
+-dontwarn java.lang.invoke.**
+-dontwarn java.lang.constant.**
+

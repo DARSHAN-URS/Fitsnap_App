@@ -21,6 +21,15 @@
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
     <uses-permission android:name="android.permission.health.READ_WATER"/>
 
+    <!-- Support large screens, tablets, and foldables without restrictions -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+        android:anyDensity="true"
+        android:resizeable="true" />
+
     <application
         android:label="SABTRACK AI"
         android:name="${applicationName}"
