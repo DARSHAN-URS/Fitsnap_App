@@ -31,10 +31,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   // 1. Add these Android SHA-1 keys to your Google Cloud Console / Supabase Google provider settings:
   //    Debug SHA-1: 03:A0:8B:4B:FF:CF:81:E8:E3:7D:2C:C5:21:28:88:DC:65:A3:C8:EB
   //    Release SHA-1: 9C:DB:09:EE:5D:0E:16:37:72:7F:60:1C:BC:28:F5:CE:3F:A0:AE:ED
-  // 2. Uncomment serverClientId below and paste your Web Client ID from Google Cloud Console.
+  //    App Signing SHA-1: 18:FF:B4:C7:A4:EB:BB:51:CC:A6:B7:CF:58:58:1D:63:18:D5:D4:66
+  // 2. serverClientId must be the Web Client ID from Google Cloud Console.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    serverClientId: '443720579971-1cp910a8alpjr5o4t1gi198kl3g5a0sl.apps.googleusercontent.com',
+    serverClientId: '443720579971-vinvs4st5v892u20jtb9h61aimh84pq5.apps.googleusercontent.com',
   );
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;

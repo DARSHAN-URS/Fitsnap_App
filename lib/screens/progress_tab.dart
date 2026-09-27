@@ -11,7 +11,8 @@ import '../providers/badge_provider.dart';
 import 'badges_screen.dart';
 
 class ProgressTab extends ConsumerStatefulWidget {
-  const ProgressTab({super.key});
+  final bool showBackButton;
+  const ProgressTab({super.key, this.showBackButton = false});
 
   @override
   ConsumerState<ProgressTab> createState() => _ProgressTabState();
@@ -329,15 +330,28 @@ class _ProgressTabState extends ConsumerState<ProgressTab> with TickerProviderSt
           StaggeredListItem(
             index: 0,
             animationController: _entryAnimController,
-            child: Text(
-            'Progress',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.primary,
-              letterSpacing: -1,
+            child: Row(
+              children: [
+                if (widget.showBackButton) ...[
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Text(
+                  widget.showBackButton ? 'Progress & Charts' : 'Progress',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primary,
+                    letterSpacing: -1,
+                  ),
+                ),
+              ],
             ),
-          ),
           ),
           const SizedBox(height: 24),
           

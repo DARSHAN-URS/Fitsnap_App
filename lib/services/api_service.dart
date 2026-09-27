@@ -1996,11 +1996,12 @@ class ApiService {
     }
   }
 
-  /// Get user's nutrition goals
-  static Future<Map<String, dynamic>> getNutritionGoals() async {
+  /// Get connected Coach profile, today's prescribed protocol, adherence, and feedback
+  static Future<Map<String, dynamic>> getMyCoach({String? date}) async {
     try {
+      final queryParam = date != null ? '?date=$date' : '';
       final response = await http.get(
-        Uri.parse('$baseUrl/user/nutrition-goals'),
+        Uri.parse('$baseUrl/coach/my-coach$queryParam'),
         headers: {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
@@ -2009,37 +2010,124 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      return {'success': false, 'error': 'Failed to get nutrition goals'};
+      return {'success': false, 'error': 'Failed to fetch coach profile'};
     } catch (e) {
       return {'success': false, 'error': formatErrorMessage(e)};
     }
   }
 
-  /// Update user's nutrition goals
-  static Future<Map<String, dynamic>> updateNutritionGoals({
-    required double calorieGoal,
-    required double proteinGoal,
-    required double carbsGoal,
-    required double fatsGoal,
+  /// Connect to a coach via invite code or coach id
+  static Future<Map<String, dynamic>> connectCoach({
+    required String inviteCode,
+    String? coachId,
+    String? name,
+    String? email,
   }) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/user/nutrition-goals'),
+      final response = await http.post(
+        Uri.parse('$baseUrl/coach/connect-coach'),
         headers: {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
         body: jsonEncode({
-          'calorie_goal': calorieGoal,
-          'protein_goal': proteinGoal,
-          'carbs_goal': carbsGoal,
-          'fats_goal': fatsGoal,
+          'invite_code': inviteCode,
+          if (coachId != null) 'coach_id': coachId,
+          if (name != null) 'name': name,
+          if (email != null) 'email': email,
         }),
       );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      return {'success': false, 'error': 'Failed to update nutrition goals'};
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Failed to connect coach'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Respond to a coach request (accept / decline)
+  static Future<Map<String, dynamic>> respondCoachingRequest({
+    required String clientId,
+    required bool accept,
+    String? coachId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/coach/clients/$clientId/respond-request'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'accept': accept,
+          if (coachId != null) 'coach_id': coachId,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Failed to respond to coaching request'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Send message to assigned coach
+  static Future<Map<String, dynamic>> sendCoachMessage({
+    required String text,
+    String? coachId,
+    String? clientId,
+    String? senderName,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/coach/messages/send'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'text': text,
+          if (coachId != null) 'coach_id': coachId,
+          if (clientId != null) 'client_id': clientId,
+          if (senderName != null) 'sender_name': senderName,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Failed to send message to coach'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Fetch message thread with assigned coach
+  static Future<Map<String, dynamic>> getCoachMessages({
+    String? coachId,
+    String? clientId,
+  }) async {
+    try {
+      final params = <String>[];
+      if (coachId != null) params.add('coach_id=$coachId');
+      if (clientId != null) params.add('client_id=$clientId');
+      final q = params.isNotEmpty ? '?${params.join('&')}' : '';
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/coach/messages/thread$q'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to retrieve messages'};
     } catch (e) {
       return {'success': false, 'error': formatErrorMessage(e)};
     }

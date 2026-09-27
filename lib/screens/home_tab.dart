@@ -17,6 +17,8 @@ import '../providers/profile_provider.dart';
 import '../widgets/staggered_animation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/preferences_helper.dart';
+import '../theme/app_theme.dart';
+import 'my_coach_tab.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   final int consumed;
@@ -808,6 +810,118 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             ),
           ),
           const SizedBox(height: 20),
+
+          // Coach Protocol Active Banner
+          FutureBuilder<Map<String, dynamic>>(
+            future: ApiService.getMyCoach(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data?['has_coach'] == true) {
+                final coach = snapshot.data?['coach'] as Map?;
+                final plan = snapshot.data?['today_plan'] as Map?;
+                final adherence = snapshot.data?['adherence'] as Map?;
+                final double score = ((adherence?['adherence_percentage'] ?? 92) as num).toDouble();
+                final coachName = coach?['name'] ?? 'Your Coach';
+                final planTitle = plan?['title'] ?? 'Prescribed Protocol';
+                final int targetCal = (plan?['total_calories'] ?? 2250) as int;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const Scaffold(
+                            backgroundColor: Color(0xFFF8FAFC),
+                            body: SafeArea(bottom: false, child: MyCoachTab()),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6366F1).withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundImage: NetworkImage(
+                              coach?['avatar'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: AppTheme.neonEmerald,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'COACH PROTOCOL ACTIVE',
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white70,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$coachName: $planTitle',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  'Target: $targetCal kcal • Compliance: ${score.toInt()}%',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white.withOpacity(0.85),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
 
           // Hero Carousel of Dashboard Cards (Calories, Steps, Water, Burned)
           StaggeredListItem(

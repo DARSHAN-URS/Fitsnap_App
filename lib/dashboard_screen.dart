@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'screens/home_tab.dart';
 import 'screens/activity_tab.dart';
 import 'screens/progress_tab.dart';
+import 'screens/my_coach_tab.dart';
 import 'screens/groups_tab.dart';
 import 'screens/profile_tab.dart';
 import 'services/api_service.dart';
@@ -74,7 +75,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       },
     ),
     const ActivityTab(),
-    const ProgressTab(),
+    const MyCoachTab(),
     const GroupsTab(),
     const ProfileTab(),
   ];
@@ -1304,7 +1305,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Expanded(child: _buildNavItem(2, Icons.bar_chart_rounded, 'Progress', customIcon: _buildProgressIcon())),
+                              Expanded(child: _buildNavItem(2, Icons.sports_rounded, 'My Coach')),
                               Expanded(child: _buildNavItem(3, Icons.explore_outlined, 'Groups')),
                             ],
                           ),

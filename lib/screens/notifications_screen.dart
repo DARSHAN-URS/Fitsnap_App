@@ -1,11 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({Key? key}) : super(key: key);
+  const NotificationsScreen({super.key});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -48,6 +47,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.person_add_rounded;
       case 'friend_accept':
         return Icons.people_alt_rounded;
+      case 'coaching_request':
+        return Icons.sports_rounded;
+      case 'coaching_accepted':
+        return Icons.verified_user_rounded;
+      case 'program_assigned':
+      case 'program_shared':
+        return Icons.fitness_center_rounded;
+      case 'coach_feedback':
+        return Icons.rate_review_rounded;
       case 'group_message':
         return Icons.forum_rounded;
       case 'dm':
@@ -65,6 +73,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return const Color(0xFF6366F1);
       case 'friend_accept':
         return const Color(0xFF10B981);
+      case 'coaching_request':
+        return const Color(0xFF6366F1);
+      case 'coaching_accepted':
+        return const Color(0xFF10B981);
+      case 'program_assigned':
+      case 'program_shared':
+        return const Color(0xFF10B981);
+      case 'coach_feedback':
+        return const Color(0xFF06B6D4);
       case 'group_message':
         return const Color(0xFFF59E0B);
       case 'dm':
@@ -223,6 +240,94 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         height: 1.4,
                                       ),
                                     ),
+                                    if (type == 'coaching_request') ...[
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () async {
+                                                final extraData = item['extra_data'] as Map?;
+                                                final clientId = (extraData?['client_id'] ?? '').toString();
+                                                if (clientId.isNotEmpty) {
+                                                  await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
+                                                }
+                                                if (notifId.isNotEmpty) {
+                                                  _markRead(notifId, index);
+                                                }
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(content: Text('Coaching request declined.')),
+                                                  );
+                                                }
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              ),
+                                              child: Text('Decline', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: ElevatedButton(
+                                              onPressed: () async {
+                                                final extraData = item['extra_data'] as Map?;
+                                                final clientId = (extraData?['client_id'] ?? '').toString();
+                                                if (clientId.isNotEmpty) {
+                                                  await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                                                }
+                                                if (notifId.isNotEmpty) {
+                                                  _markRead(notifId, index);
+                                                }
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('Connected to Coach! Live telemetry linked.'),
+                                                      backgroundColor: AppTheme.neonEmerald,
+                                                    ),
+                                                  );
+                                                  Navigator.pop(context);
+                                                }
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF6366F1),
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              ),
+                                              child: Text('Accept & Connect', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    if (type == 'program_assigned' || type == 'program_shared') ...[
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            if (notifId.isNotEmpty) {
+                                              _markRead(notifId, index);
+                                            }
+                                            Navigator.pop(context);
+                                          },
+                                          icon: const Icon(Icons.fitness_center_rounded, size: 16),
+                                          label: const Text('View Program in My Coach'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF10B981),
+                                            foregroundColor: Colors.white,
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

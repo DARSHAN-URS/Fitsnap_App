@@ -25,6 +25,7 @@ import 'referral_screen.dart';
 import 'workout_library_screen.dart';
 import 'supplements_screen.dart';
 import 'subscription_screen.dart';
+import 'progress_tab.dart';
 import '../services/notification_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -546,6 +547,23 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
             child: _buildCard(
             child: Column(
               children: [
+                _buildListTile(
+                  Icons.bar_chart_rounded,
+                  'Charts & Progress Analytics',
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const Scaffold(
+                        backgroundColor: Color(0xFFF8FAFC),
+                        body: SafeArea(
+                          bottom: false,
+                          child: ProgressTab(showBackButton: true),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _buildDivider(),
                 _buildListTile(
                   Icons.medication_rounded,
                   'Supplements Reminders',
