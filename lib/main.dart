@@ -32,7 +32,10 @@ void main() async {
     ),
   );
 
-  ApiService.configureBaseUrl(isDevelopment: kDebugMode);
+  // Always use production URL.
+  // To use the local emulator during development, change useLocalEmulator to true
+  // ONLY when running on the Android emulator (NOT on a real device).
+  ApiService.configureBaseUrl(useLocalEmulator: false);
 
   try {
     await ApiService.initToken();

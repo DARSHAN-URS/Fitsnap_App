@@ -16,12 +16,20 @@ class ApiService {
   static String? _token;
   static String? _refreshToken;
   static bool _isRefreshing = false;
+  static void Function(String? token)? onTokenChanged;
 
-  /// Configures base URL based on build environment or optional custom URL
-  static void configureBaseUrl({required bool isDevelopment, String? customUrl}) {
+  /// Configures base URL.
+  /// [useLocalEmulator] must be explicitly set to true to use the local
+  /// emulator address — prevents physical devices in debug mode from
+  /// accidentally hitting localhost instead of api.sabtrack.in.
+  static void configureBaseUrl({
+    @Deprecated('Use useLocalEmulator instead') bool isDevelopment = false,
+    bool useLocalEmulator = false,
+    String? customUrl,
+  }) {
     if (customUrl != null && customUrl.isNotEmpty) {
       baseUrl = customUrl;
-    } else if (isDevelopment) {
+    } else if (useLocalEmulator) {
       baseUrl = localUrl;
     } else {
       baseUrl = productionUrl;
@@ -92,6 +100,7 @@ class ApiService {
   // Set the JWT access token after login
   static void setToken(String token) {
     _token = token.isEmpty ? null : token;
+    onTokenChanged?.call(_token);
     if (token.isEmpty) {
       PreferencesHelper.delete('auth_token').catchError((e) {
         debugPrint('Error deleting token: $e');
@@ -1055,6 +1064,46 @@ class ApiService {
         },
       );
     } catch (_) {}
+  }
+
+  /// Returns the unread notification count from the server.
+  /// Lightweight poll \u2014 does not load the full notification list.
+  static Future<int> getUnreadNotificationCount() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications/unread-count'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['unread_count'] as num?)?.toInt() ?? 0;
+      }
+      return 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Registers the device's FCM push token with the backend.
+  /// Call this after Firebase initialises and whenever onTokenRefresh fires.
+  static Future<void> registerFcmToken(String fcmToken) async {
+    if (fcmToken.isEmpty) return;
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/notifications/fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'token': fcmToken}),
+      );
+      debugPrint('FCM token registered with backend');
+    } catch (e) {
+      debugPrint('Failed to register FCM token: $e');
+    }
   }
 
   static Future<Map<String, dynamic>> joinGroup(String groupId) async {

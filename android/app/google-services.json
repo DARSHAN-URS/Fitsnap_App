@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "821113233483",
+    "project_id": "sabtrack-92980",
+    "storage_bucket": "sabtrack-92980.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:821113233483:android:bcb73c0c9210541d8c2dce",
+        "android_client_info": {
+          "package_name": "com.sabtrack.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtvedUYrsSiqzsiOVoNI0mBmvugWiO76s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

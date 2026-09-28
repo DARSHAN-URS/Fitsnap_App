@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
@@ -13,11 +14,23 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _notifications = [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _loadNotifications();
+    // Poll every 5 minutes so new coach notifications appear without FCM.
+    // Timer is cancelled in dispose to prevent memory leaks.
+    _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (mounted) _loadNotifications();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNotifications() async {
