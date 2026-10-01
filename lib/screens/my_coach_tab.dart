@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'notifications_screen.dart';
 
 class MyCoachTab extends StatefulWidget {
   const MyCoachTab({super.key});
@@ -24,6 +26,18 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   List<dynamic> _availableCoaches = [];
   Map<String, dynamic>? _pendingInvitation;
 
+  // SabCoach Inbox
+  List<Map<String, dynamic>> _sabcoachUpdates = [];
+  int _unreadCoachingCount = 0;
+
+  // Quick-stat toggles
+  bool _showDisconnectConfirm = false;
+  Timer? _pollTimer;
+
+  String _coachSearchQuery = '';
+  String _selectedCoachSpecialty = 'All';
+  final Map<String, String> _feedbackReactions = {};
+
   final Set<String> _loggedMealNames = {};
   late AnimationController _animController;
   final TextEditingController _inviteCodeController = TextEditingController();
@@ -34,13 +48,64 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 800),
     );
-    _loadCoachData();
+    _refreshAll();
+    // Light background poll every 5 min so inbox badge stays fresh
+    _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (mounted) _loadSabcoachUpdates();
+    });
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_loadCoachData(), _loadSabcoachUpdates()]);
+  }
+
+  Future<void> _loadSabcoachUpdates() async {
+    try {
+      final res = await ApiService.getNotifications();
+      if (res['success'] == true && res['data'] != null) {
+        final List<dynamic> all = res['data'];
+        // Filter to coaching-related notification types only
+        const coachingTypes = {
+          'coaching_request',
+          'coaching_accepted',
+          'coaching_declined',
+          'program_assigned',
+          'program_shared',
+          'coach_feedback',
+        };
+        final filtered = all
+            .whereType<Map>()
+            .where((n) {
+              final type = n['type'] ?? n['notif_type'];
+              if (!coachingTypes.contains(type)) return false;
+              final extraData = (n['extra_data'] ?? n['data']) as Map? ?? {};
+              final status = extraData['status']?.toString().toLowerCase();
+              final bool responded = extraData['responded'] == true || status == 'accepted' || status == 'declined';
+              // If it's a coaching_request that is already responded or read or if the user is already connected to coach, don't show pending invitation
+              if (type == 'coaching_request' && (responded || n['is_read'] == true || _hasCoach)) {
+                return false;
+              }
+              return true;
+            })
+            .map((n) => Map<String, dynamic>.from(n))
+            .toList();
+        if (mounted) {
+          setState(() {
+            _sabcoachUpdates = filtered;
+            _unreadCoachingCount = filtered.where((n) => n['is_read'] != true).length;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading SabCoach updates: $e');
+    }
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _animController.dispose();
     _inviteCodeController.dispose();
     super.dispose();
@@ -59,7 +124,11 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           _adherence = res['adherence'] != null ? Map<String, dynamic>.from(res['adherence']) : null;
           _feedbacks = res['feedbacks'] is List ? List.from(res['feedbacks']) : [];
           _availableCoaches = res['available_coaches'] is List ? List.from(res['available_coaches']) : [];
-          _pendingInvitation = res['pending_invitation'] != null ? Map<String, dynamic>.from(res['pending_invitation']) : null;
+          if (_hasCoach) {
+            _pendingInvitation = null;
+          } else {
+            _pendingInvitation = res['pending_invitation'] != null ? Map<String, dynamic>.from(res['pending_invitation']) : null;
+          }
           _isLoading = false;
         });
         _animController.forward(from: 0.0);
@@ -216,7 +285,10 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     final clientId = _pendingInvitation!['id'] ?? '';
     if (clientId.isEmpty) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _pendingInvitation = null;
+    });
     final res = await ApiService.respondCoachingRequest(
       clientId: clientId,
       accept: accept,
@@ -231,7 +303,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           backgroundColor: accept ? AppTheme.neonEmerald : Colors.grey.shade800,
         ),
       );
-      _loadCoachData();
+      await _refreshAll();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(res['error'] ?? 'Action failed')),
@@ -493,11 +565,11 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
+      return _buildLoadingSkeleton();
     }
 
     return RefreshIndicator(
-      onRefresh: _loadCoachData,
+      onRefresh: _refreshAll,
       color: AppTheme.accent,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -507,30 +579,93 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           children: [
             _buildHeader(),
             const SizedBox(height: 20),
-            if (_pendingInvitation != null) ...[
-              _buildPendingInvitationCard(),
+            // SabCoach Inbox — coaching invitations + updates
+            if (_pendingInvitation != null || _sabcoachUpdates.isNotEmpty) ...[
+              _buildSabcoachInbox(),
               const SizedBox(height: 20),
             ],
             if (_hasCoach) ...[
               _buildCoachProfileCard(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _buildQuickStatsStrip(),
+              const SizedBox(height: 16),
               if (_hasAssignedProgram) ...[
                 _buildAssignedProgramCard(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
               _buildAdherenceTelemetryCard(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               if (_todayPlan != null) ...[
                 _buildTodayPrescribedPlanCard(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
               _buildCoachFeedbackCard(),
+              const SizedBox(height: 16),
+              _buildDisconnectSection(),
             ] else ...[
               _buildNotConnectedState(),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  // ── Loading Skeleton ────────────────────────────────────────────────────────
+  Widget _buildLoadingSkeleton() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header shimmer
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _shimmer(width: 130, height: 32, radius: 10),
+                  const SizedBox(height: 8),
+                  _shimmer(width: 200, height: 14, radius: 7),
+                ],
+              ),
+              _shimmer(width: 44, height: 44, radius: 14),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _shimmer(width: double.infinity, height: 140, radius: 22),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: _shimmer(width: double.infinity, height: 72, radius: 16)),
+            const SizedBox(width: 10),
+            Expanded(child: _shimmer(width: double.infinity, height: 72, radius: 16)),
+            const SizedBox(width: 10),
+            Expanded(child: _shimmer(width: double.infinity, height: 72, radius: 16)),
+          ]),
+          const SizedBox(height: 14),
+          _shimmer(width: double.infinity, height: 170, radius: 22),
+          const SizedBox(height: 14),
+          _shimmer(width: double.infinity, height: 220, radius: 22),
+        ],
+      ),
+    );
+  }
+
+  Widget _shimmer({required double width, required double height, required double radius}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.4, end: 1.0),
+      duration: const Duration(milliseconds: 900),
+      builder: (context, value, _) {
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: Color.lerp(const Color(0xFFE2E8F0), const Color(0xFFF1F5F9), value),
+            borderRadius: BorderRadius.circular(radius),
+          ),
+        );
+      },
     );
   }
 
@@ -574,39 +709,494 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ),
           ],
         ),
-        if (_hasCoach)
-          GestureDetector(
-            onTap: _openChatModal,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.accent,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.accent.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
+        Row(
+          children: [
+            // Notification bell with unread badge
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                ).then((_) => _loadSabcoachUpdates());
+              },
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Chat',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: AppTheme.primary,
+                      size: 22,
                     ),
                   ),
+                  if (_unreadCoachingCount > 0)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          _unreadCoachingCount > 9 ? '9+' : '$_unreadCoachingCount',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ),
+            if (_hasCoach) ...[
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: _openChatModal,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.accent.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Chat',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ],
+    );
+  }
+
+  // ── SabCoach Inbox ──────────────────────────────────────────────────────────
+  Widget _buildSabcoachInbox() {
+    final items = <Widget>[];
+
+    // 1. Pending coaching invitation from getMyCoach()
+    if (_pendingInvitation != null) {
+      final inv = _pendingInvitation!;
+      final coachName = inv['coach_name'] ?? 'Your Coach';
+      final program = inv['program_name'] ?? 'Coaching Protocol';
+      final clientId = (inv['id'] ?? '').toString();
+      items.add(_buildInboxItem(
+        icon: Icons.mail_outline_rounded,
+        color: const Color(0xFF6366F1),
+        title: 'Coaching Invitation',
+        subtitle: 'From $coachName · $program',
+        body: 'Accept to stream live meals, workouts & biometrics to SabCoach and receive personalized protocols.',
+        isUnread: true,
+        actions: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () async {
+                  if (clientId.isNotEmpty) {
+                    setState(() {
+                      _isLoading = true;
+                      _pendingInvitation = null;
+                    });
+                    await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
+                    await _refreshAll();
+                  }
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF64748B),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text('Decline', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (clientId.isNotEmpty) {
+                    setState(() {
+                      _isLoading = true;
+                      _pendingInvitation = null;
+                    });
+                    await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                    await _refreshAll();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🎉 Connected! Live telemetry is now streaming to your coach.'),
+                          backgroundColor: AppTheme.neonEmerald,
+                        ),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text('Accept & Link', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    // 2. Coaching-related notifications from the notification feed
+    for (int i = 0; i < _sabcoachUpdates.length; i++) {
+      final n = _sabcoachUpdates[i];
+      final type = n['type'] as String? ?? '';
+      final isUnread = n['is_read'] != true;
+      final notifId = (n['id'] ?? '').toString();
+      final extraData = n['extra_data'] as Map? ?? {};
+      final clientId = (extraData['client_id'] ?? '').toString();
+
+      Color itemColor;
+      IconData itemIcon;
+      switch (type) {
+        case 'coaching_request':
+          itemColor = const Color(0xFF6366F1);
+          itemIcon = Icons.sports_rounded;
+          break;
+        case 'coaching_accepted':
+          itemColor = AppTheme.neonEmerald;
+          itemIcon = Icons.verified_user_rounded;
+          break;
+        case 'coaching_declined':
+          itemColor = const Color(0xFF94A3B8);
+          itemIcon = Icons.cancel_outlined;
+          break;
+        case 'program_assigned':
+        case 'program_shared':
+          itemColor = const Color(0xFF10B981);
+          itemIcon = Icons.fitness_center_rounded;
+          break;
+        case 'coach_feedback':
+          itemColor = const Color(0xFF06B6D4);
+          itemIcon = Icons.rate_review_rounded;
+          break;
+        default:
+          itemColor = AppTheme.accent;
+          itemIcon = Icons.notifications_rounded;
+      }
+
+      Widget? actionWidget;
+      if (type == 'coaching_request' && clientId.isNotEmpty) {
+        actionWidget = Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () async {
+                  setState(() {
+                    _sabcoachUpdates.removeAt(i);
+                    _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
+                  });
+                  await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
+                  if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
+                  await _refreshAll();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF64748B),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                ),
+                child: Text('Decline', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () async {
+                  setState(() {
+                    _isLoading = true;
+                    _pendingInvitation = null;
+                    _sabcoachUpdates.removeAt(i);
+                    _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
+                  });
+                  await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                  if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
+                  await _refreshAll();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('🎉 Connected! SabCoach telemetry link is live.'),
+                        backgroundColor: AppTheme.neonEmerald,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                ),
+                child: Text('Accept & Connect', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+              ),
+            ),
+          ],
+        );
+      } else if (type == 'program_assigned' || type == 'program_shared') {
+        actionWidget = SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
+              _loadSabcoachUpdates();
+            },
+            icon: const Icon(Icons.fitness_center_rounded, size: 15),
+            label: Text('View in My Coach', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        );
+      }
+
+      items.add(_buildInboxItem(
+        icon: itemIcon,
+        color: itemColor,
+        title: n['title'] ?? 'SabCoach Update',
+        subtitle: type == 'coach_feedback'
+            ? 'Coach Feedback'
+            : type == 'coaching_accepted'
+                ? 'Request Accepted'
+                : type == 'coaching_declined'
+                    ? 'Request Declined'
+                    : type.replaceAll('_', ' ').toUpperCase(),
+        body: n['body'] ?? '',
+        isUnread: isUnread,
+        actions: actionWidget,
+        onTap: () async {
+          if (isUnread && notifId.isNotEmpty) {
+            await ApiService.markNotificationRead(notifId);
+            setState(() {
+              _sabcoachUpdates[i]['is_read'] = true;
+              _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
+            });
+          }
+        },
+      ));
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.inbox_rounded, color: Color(0xFF6366F1), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'SabCoach Inbox',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                if (_unreadCoachingCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$_unreadCoachingCount new',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                ).then((_) => _loadSabcoachUpdates());
+              },
+              child: Text(
+                'See All',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF6366F1),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...items,
+      ],
+    );
+  }
+
+  Widget _buildInboxItem({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required String body,
+    required bool isUnread,
+    Widget? actions,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isUnread ? color.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isUnread ? color.withOpacity(0.28) : const Color(0xFFE2E8F0),
+            width: isUnread ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ),
+                          if (isUnread)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.only(left: 6),
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                body,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: const Color(0xFF475569),
+                  height: 1.4,
+                ),
+              ),
+            ],
+            if (actions != null) ...[
+              const SizedBox(height: 12),
+              actions,
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -705,6 +1295,75 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         progName != 'Not Assigned' &&
         progName != 'Standard Protocol' &&
         progName != 'null';
+  }
+
+  // ── Quick Stats Strip ──────────────────────────────────────────────────────
+  Widget _buildQuickStatsStrip() {
+    final adh = _adherence ?? {};
+    final double score = ((adh['adherence_percentage'] ?? 92.0) as num).toDouble();
+    final int streak = ((adh['streak_days'] ?? _client?['streak_days'] ?? 0) as num).toInt();
+    final int sessions = ((adh['sessions_this_week'] ?? _client?['sessions_this_week'] ?? 0) as num).toInt();
+
+    return Row(
+      children: [
+        _buildStatTile('${score.toInt()}%', 'Adherence', Icons.bolt_rounded, const Color(0xFF6366F1)),
+        const SizedBox(width: 10),
+        _buildStatTile('${streak}d', 'Streak', Icons.local_fire_department_rounded, const Color(0xFFF97316)),
+        const SizedBox(width: 10),
+        _buildStatTile('$sessions', 'Sessions', Icons.fitness_center_rounded, AppTheme.neonEmerald),
+      ],
+    );
+  }
+
+  Widget _buildStatTile(String value, String label, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 17),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: AppTheme.primary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF94A3B8),
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildAssignedProgramCard() {
@@ -827,133 +1486,313 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     final avatar = _coach?['avatar'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
     final rating = (_coach?['rating'] ?? 4.95).toString();
     final certs = (_coach?['certifications'] as List?) ?? ['ISSA Master Trainer', 'Nutrition Specialist'];
+    final since = _client?['created_at'] != null
+        ? (() {
+            try {
+              final dt = DateTime.parse(_client!['created_at'].toString());
+              return 'Since ${dt.day}/${dt.month}/${dt.year}';
+            } catch (_) {
+              return 'Active';
+            }
+          })()
+        : 'Active';
 
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+            color: const Color(0xFF6366F1).withOpacity(0.10),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundImage: NetworkImage(avatar),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonEmerald,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2.5),
-                      ),
-                    ),
-                  ),
-                ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: [
+            // Gradient hero banner
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primary,
-                            ),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.35), width: 3),
+                        ),
+                        child: CircleAvatar(
+                          radius: 36,
+                          backgroundImage: NetworkImage(avatar),
+                          backgroundColor: Colors.white24,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 2,
+                        right: 2,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonEmerald,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          title,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          specialty,
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: Colors.white.withOpacity(0.65),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFCD34D)),
+                            const SizedBox(width: 3),
+                            Text(
+                              rating,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: _openChatModal,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
+                            color: Colors.white.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.star_rounded, size: 14, color: Color(0xFFD97706)),
-                              const SizedBox(width: 3),
+                              const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 14),
+                              const SizedBox(width: 5),
                               Text(
-                                rating,
+                                'Chat',
                                 style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFFB45309),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.accent,
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      specialty,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: const Color(0xFF64748B),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Certs + since row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.link_rounded, size: 14, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Connected · $since',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF94A3B8),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: certs.map((c) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Text(
+                          c.toString(),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF475569),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Disconnect Section ──────────────────────────────────────────────────────
+  Widget _buildDisconnectSection() {
+    if (!_showDisconnectConfirm) {
+      return GestureDetector(
+        onTap: () => setState(() => _showDisconnectConfirm = true),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.link_off_rounded, size: 16, color: Color(0xFFEF4444)),
+              const SizedBox(width: 8),
+              Text(
+                'Disconnect from Coach',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFEF4444),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: certs.map((c) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Text(
-                  c.toString(),
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF475569),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Are you sure you want to disconnect?',
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: const Color(0xFF991B1B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your coach will lose access to your live telemetry stream.',
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              color: const Color(0xFFB91C1C),
+              height: 1.3,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _showDisconnectConfirm = false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF64748B),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                   ),
+                  child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
                 ),
-              );
-            }).toList(),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    // Disconnect by clearing — no dedicated API needed; just reload
+                    setState(() {
+                      _hasCoach = false;
+                      _coach = null;
+                      _client = null;
+                      _todayPlan = null;
+                      _feedbacks = [];
+                      _showDisconnectConfirm = false;
+                    });
+                    await _loadCoachData();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                  child: Text('Disconnect', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -967,27 +1806,30 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     final prescribed = adh['prescribed'] as Map? ?? {};
     final actual = adh['actual'] as Map? ?? {};
 
-    final int targetCal = (prescribed['calories'] ?? _todayPlan?['total_calories'] ?? 2250) as int;
-    final int actualCal = (actual['calories'] ?? 0) as int;
+    final int targetCal = ((prescribed['calories'] ?? _todayPlan?['total_calories'] ?? 2250) as num).toInt();
+    final int actualCal = ((actual['calories'] ?? 0) as num).toInt();
     final double targetProt = ((prescribed['protein'] ?? _todayPlan?['protein_g'] ?? 165.0) as num).toDouble();
     final double actualProt = ((actual['protein'] ?? 0.0) as num).toDouble();
+    final double targetCarbs = ((prescribed['carbs'] ?? _todayPlan?['carbs_g'] ?? 240.0) as num).toDouble();
+    final double actualCarbs = ((actual['carbs'] ?? 0.0) as num).toDouble();
+    final double targetFats = ((prescribed['fats'] ?? _todayPlan?['fats_g'] ?? 65.0) as num).toDouble();
+    final double actualFats = ((actual['fats'] ?? 0.0) as num).toDouble();
+
+    double pct(double a, double t) => t > 0 ? (a / t).clamp(0.0, 1.0) : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF0F172A),
-            const Color(0xFF1E293B),
-          ],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1A2744)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.2),
-            blurRadius: 16,
+            color: const Color(0xFF0F172A).withOpacity(0.22),
+            blurRadius: 18,
             offset: const Offset(0, 6),
           ),
         ],
@@ -995,6 +1837,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1003,28 +1846,28 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonCyan.withOpacity(0.2),
+                      color: AppTheme.neonCyan.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.bolt_rounded, color: AppTheme.neonCyan, size: 20),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Coach Telemetry Stream',
+                    'Live Telemetry',
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                      fontSize: 17,
                     ),
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppTheme.neonEmerald.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.neonEmerald.withOpacity(0.4)),
+                  border: Border.all(color: AppTheme.neonEmerald.withOpacity(0.35)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1052,29 +1895,41 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ],
           ),
           const SizedBox(height: 18),
+          // Score ring + calorie info
           Row(
             children: [
-              // Circular progress
               SizedBox(
-                width: 72,
-                height: 72,
+                width: 78,
+                height: 78,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     CircularProgressIndicator(
-                      value: (adherenceScore / 100).clamp(0.0, 1.0),
+                      value: pct(adherenceScore, 100),
                       strokeWidth: 7,
-                      backgroundColor: Colors.white.withOpacity(0.1),
+                      backgroundColor: Colors.white.withOpacity(0.08),
                       valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.neonCyan),
                     ),
                     Center(
-                      child: Text(
-                        '${adherenceScore.toInt()}%',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '${adherenceScore.toInt()}%',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            'Score',
+                            style: GoogleFonts.inter(
+                              color: Colors.white54,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1086,29 +1941,42 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Live Compliance Tracking',
+                      'Calorie Compliance',
                       style: GoogleFonts.inter(
-                        color: Colors.white70,
-                        fontSize: 12,
+                        color: Colors.white60,
+                        fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$actualCal / $targetCal kcal logged',
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    const SizedBox(height: 5),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$actualCal kcal',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'of $targetCal',
+                          style: GoogleFonts.inter(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Protein: ${actualProt.toInt()}g of ${targetProt.toInt()}g target',
-                      style: GoogleFonts.inter(
-                        color: AppTheme.neonCyan,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: pct(actualCal.toDouble(), targetCal.toDouble()),
+                        minHeight: 6,
+                        backgroundColor: Colors.white.withOpacity(0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.neonCyan),
                       ),
                     ),
                   ],
@@ -1116,28 +1984,79 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
+          // Macro progress bars
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: Column(
               children: [
-                const Icon(Icons.info_outline_rounded, color: Colors.white70, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Your coach sees each logged plate in real time to adjust your macro targets and recovery pacing.',
-                    style: GoogleFonts.inter(color: Colors.white70, fontSize: 11.5, height: 1.3),
-                  ),
-                ),
+                _buildMacroBar('Protein', actualProt, targetProt, const Color(0xFF818CF8)),
+                const SizedBox(height: 10),
+                _buildMacroBar('Carbs', actualCarbs, targetCarbs, AppTheme.neonCyan),
+                const SizedBox(height: 10),
+                _buildMacroBar('Fats', actualFats, targetFats, const Color(0xFFF472B6)),
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.white38, size: 14),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Your coach monitors every logged plate in real time to fine-tune your macro targets.',
+                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, height: 1.3),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMacroBar(String label, double actual, double target, Color color) {
+    final pct = target > 0 ? (actual / target).clamp(0.0, 1.0) : 0.0;
+    final over = actual > target && target > 0;
+    return Row(
+      children: [
+        SizedBox(
+          width: 52,
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.white60,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 7,
+              backgroundColor: Colors.white.withOpacity(0.08),
+              valueColor: AlwaysStoppedAnimation<Color>(over ? const Color(0xFFFBBF24) : color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${actual.toInt()}/${target.toInt()}g',
+          style: GoogleFonts.inter(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            color: over ? const Color(0xFFFBBF24) : Colors.white54,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1195,6 +2114,21 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ],
           ),
           const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.sync_rounded, size: 12, color: Color(0xFF64748B)),
+              const SizedBox(width: 4),
+              Text(
+                'Dispatched for ${plan['target_date'] ?? 'Today'} · Live from SabCoach',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
             title,
             style: GoogleFonts.inter(
@@ -1325,51 +2259,57 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   }
 
   Widget _buildMacroSummaryRow(Map<String, dynamic> plan) {
-    final protein = plan['protein_g'] ?? 165;
-    final carbs = plan['carbs_g'] ?? 240;
-    final fats = plan['fats_g'] ?? 65;
-    final water = plan['water_liters'] ?? 3.5;
+    final protein = (plan['protein_g'] ?? 165) as num;
+    final carbs = (plan['carbs_g'] ?? 240) as num;
+    final fats = (plan['fats_g'] ?? 65) as num;
+    final water = (plan['water_liters'] ?? 3.5) as num;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildMacroPill('Protein', '${protein}g', const Color(0xFF6366F1)),
-          _buildMacroPill('Carbs', '${carbs}g', const Color(0xFF06B6D4)),
-          _buildMacroPill('Fats', '${fats}g', const Color(0xFFEC4899)),
-          _buildMacroPill('Water', '${water}L', const Color(0xFF10B981)),
-        ],
-      ),
-    );
-  }
+    final targets = [
+      _MacroGoal('Protein', '${protein.toInt()}g', const Color(0xFF818CF8), Icons.egg_outlined),
+      _MacroGoal('Carbs', '${carbs.toInt()}g', const Color(0xFF06B6D4), Icons.rice_bowl_outlined),
+      _MacroGoal('Fats', '${fats.toInt()}g', const Color(0xFFF472B6), Icons.opacity_rounded),
+      _MacroGoal('Water', '${water}L', const Color(0xFF10B981), Icons.water_drop_outlined),
+    ];
 
-  Widget _buildMacroPill(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            color: color,
+    return Row(
+      children: targets.asMap().entries.map((e) {
+        final t = e.value;
+        final isLast = e.key == targets.length - 1;
+        return Expanded(
+          child: Container(
+            margin: EdgeInsets.only(right: isLast ? 0 : 8),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: t.color.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: t.color.withOpacity(0.2)),
+            ),
+            child: Column(
+              children: [
+                Icon(t.icon, color: t.color, size: 18),
+                const SizedBox(height: 6),
+                Text(
+                  t.value,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: t.color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  t.label,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 9.5,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontWeight: FontWeight.w500,
-            fontSize: 11,
-            color: const Color(0xFF64748B),
-          ),
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 
@@ -1521,76 +2461,119 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF06B6D4).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.rate_review_rounded, color: Color(0xFF06B6D4), size: 18),
+              ),
+              const SizedBox(width: 12),
               Text(
-                'Coach Daily Feedback',
+                'Coach Feedback',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                   color: AppTheme.primary,
                 ),
               ),
-              const Icon(Icons.rate_review_outlined, color: AppTheme.accent, size: 20),
+              const Spacer(),
+              if (_feedbacks.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF06B6D4).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${_feedbacks.length} notes',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0891B2),
+                    ),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (_feedbacks.isEmpty)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  const Icon(Icons.schedule_rounded, color: Colors.grey, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Coach has not submitted feedback for today yet. Keep logging your plates!',
-                      style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF64748B)),
+                  const Icon(Icons.hourglass_top_rounded, color: Color(0xFFCBD5E1), size: 36),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Awaiting Coach Feedback',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: const Color(0xFF94A3B8),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Keep logging your meals & workouts. Your coach will review your data and leave feedback soon.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), height: 1.4),
                   ),
                 ],
               ),
             )
           else
             ..._feedbacks.map((fb) {
-              final text = fb['feedback_text'] ?? fb['text'] ?? '';
-              final rating = fb['rating'] ?? 'great';
-              final date = fb['date'] ?? 'Today';
+              final text = (fb['feedback_text'] ?? fb['text'] ?? '').toString();
+              final rating = (fb['rating'] ?? 'great').toString().toLowerCase();
+              final date = (fb['date'] ?? 'Today').toString();
+              final ratingColor = rating == 'great'
+                  ? const Color(0xFF059669)
+                  : rating == 'needs_work'
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF0891B2);
+              final ratingBg = rating == 'great'
+                  ? const Color(0xFFECFDF5)
+                  : rating == 'needs_work'
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFE0F7FA);
+              final ratingIcon = rating == 'great'
+                  ? Icons.thumb_up_rounded
+                  : rating == 'needs_work'
+                      ? Icons.trending_up_rounded
+                      : Icons.info_outline_rounded;
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: ratingBg.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: ratingColor.withOpacity(0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: rating == 'great' ? const Color(0xFFECFDF5) : const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            rating.toString().toUpperCase(),
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: rating == 'great' ? const Color(0xFF047857) : const Color(0xFFB45309),
-                            ),
+                        Icon(ratingIcon, color: ratingColor, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          rating.replaceAll('_', ' ').toUpperCase(),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: ratingColor,
+                            letterSpacing: 0.3,
                           ),
                         ),
+                        const Spacer(),
                         Text(
-                          date.toString(),
+                          date,
                           style: GoogleFonts.inter(fontSize: 11, color: Colors.grey),
                         ),
                       ],
@@ -1598,7 +2581,41 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                     const SizedBox(height: 8),
                     Text(
                       text,
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF334155), height: 1.35),
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: const Color(0xFF334155),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _buildReactionChip(fb, '💪 Thanks!'),
+                        const SizedBox(width: 6),
+                        _buildReactionChip(fb, '🔥 On it!'),
+                        const Spacer(),
+                        InkWell(
+                          onTap: _openChatModal,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.reply_rounded, size: 14, color: Color(0xFF6366F1)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Reply',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF6366F1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1609,73 +2626,169 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildReactionChip(dynamic fb, String label) {
+    final key = (fb['id'] ?? fb['feedback_text'] ?? '').toString();
+    final isSelected = _feedbackReactions[key] == label;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _feedbackReactions.remove(key);
+          } else {
+            _feedbackReactions[key] = label;
+          }
+        });
+        if (!isSelected) {
+          HapticFeedback.lightImpact();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Reaction "$label" sent to your coach!'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6366F1).withOpacity(0.15) : Colors.white.withOpacity(0.6),
+          border: Border.all(color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNotConnectedState() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Marketing Banner
+        if (_pendingInvitation != null) ...[
+          _buildPendingInvitationCard(),
+          const SizedBox(height: 20),
+        ],
+        // Hero banner
         Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(26),
+            borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: const Color(0xFF6366F1).withOpacity(0.40),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.verified_rounded, color: Colors.white, size: 14),
-                    const SizedBox(width: 5),
-                    Text(
-                      'SABCOACH ECOSYSTEM',
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 10,
-                        letterSpacing: 0.8,
-                      ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.verified_rounded, color: Colors.white, size: 13),
+                        const SizedBox(width: 5),
+                        Text(
+                          'SABCOACH ECOSYSTEM',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Text(
-                'Personalized Protocols & Real-Time Accountability',
+                'Your Coach. Your Data.\nReal-Time Accountability.',
                 style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 20,
-                  height: 1.25,
+                  fontSize: 22,
+                  height: 1.2,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
-                'Link directly with your coach. Every meal, workout, and metric logged on SabTrack streams live to their telemetry dashboard.',
-                style: GoogleFonts.inter(color: Colors.white.withOpacity(0.9), fontSize: 13, height: 1.4),
+                'Link with your personal trainer. Every plate, workout, and biometric you log on SabTrack streams live to their telemetry dashboard.',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              // Feature pills
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _featurePill(Icons.restaurant_menu_rounded, 'Diet Protocols'),
+                  _featurePill(Icons.fitness_center_rounded, 'Training Plans'),
+                  _featurePill(Icons.bolt_rounded, 'Live Telemetry'),
+                  _featurePill(Icons.feedback_rounded, 'Daily Feedback'),
+                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
+
+        // How it works strip
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'How it works',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildStep(1, 'Get your pairing code', 'Ask your coach for their SAB-... invite code.', const Color(0xFF6366F1)),
+              _buildStep(2, 'Enter it below', 'Paste or type the code and tap Connect.', const Color(0xFF8B5CF6)),
+              _buildStep(3, 'Start streaming', 'Your logs flow live to your coach\'s dashboard.', AppTheme.neonEmerald, isLast: true),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
 
         // Connect with Invite Code Box
         Container(
@@ -1683,76 +2796,109 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.25)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
+                color: const Color(0xFF6366F1).withOpacity(0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Enter Coach Pairing Code',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.primary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Got a code from your personal trainer? Enter it here to link your profiles.',
-                style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inviteCodeController,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. SAB-424124',
-                        hintStyle: GoogleFonts.inter(color: Colors.grey.shade400, fontSize: 14),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.key_rounded, color: Color(0xFF6366F1), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Enter Coach Pairing Code',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primary,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: _isConnecting
-                        ? null
-                        : () => _connectWithCode(_inviteCodeController.text),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accent,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: _isConnecting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text('Connect', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                      Text(
+                        'Shared by your trainer',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                      ),
+                    ],
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _inviteCodeController,
+                textCapitalization: TextCapitalization.characters,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                  color: AppTheme.primary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'SAB-XXXXXX',
+                  hintStyle: GoogleFonts.spaceMono(
+                    color: Colors.grey.shade400,
+                    fontSize: 16,
+                    letterSpacing: 2,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+                  ),
+                  prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF6366F1), size: 20),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isConnecting
+                      ? null
+                      : () => _connectWithCode(_inviteCodeController.text),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF6366F1).withOpacity(0.5),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: _isConnecting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          'Connect to Coach',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+                        ),
+                ),
               ),
             ],
           ),
@@ -1760,63 +2906,172 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         const SizedBox(height: 24),
 
         if (_availableCoaches.isNotEmpty) ...[
-          Text(
-            'Featured Certified SabCoaches',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.primary,
+          Row(
+            children: [
+              Text(
+                'Available SabCoaches',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_availableCoaches.length}',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Search & Filter
+          TextField(
+            onChanged: (val) => setState(() => _coachSearchQuery = val),
+            style: GoogleFonts.inter(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search coaches by name, specialty...',
+              hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade400),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF6366F1)),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['All', 'Strength', 'Fat Loss', 'Nutrition', 'Endurance'].map((tag) {
+                final isSel = _selectedCoachSpecialty == tag;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    label: Text(tag, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: isSel ? Colors.white : const Color(0xFF64748B))),
+                    selected: isSel,
+                    selectedColor: const Color(0xFF6366F1),
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: isSel ? const Color(0xFF6366F1) : Colors.grey.shade300),
+                    onSelected: (_) => setState(() => _selectedCoachSpecialty = tag),
+                  ),
+                );
+              }).toList(),
             ),
           ),
           const SizedBox(height: 12),
-          ..._availableCoaches.map((c) => _buildAvailableCoachCard(Map<String, dynamic>.from(c as Map))),
-        ] else ...[
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
+          ..._availableCoaches.where((c) {
+            final name = (c['name'] ?? '').toString().toLowerCase();
+            final spec = (c['specialty'] ?? c['title'] ?? '').toString().toLowerCase();
+            final q = _coachSearchQuery.toLowerCase();
+            final matchesQuery = q.isEmpty || name.contains(q) || spec.contains(q);
+            final matchesSpec = _selectedCoachSpecialty == 'All' || spec.contains(_selectedCoachSpecialty.toLowerCase());
+            return matchesQuery && matchesSpec;
+          }).map((c) => _buildAvailableCoachCard(Map<String, dynamic>.from(c as Map))),
+        ],
+      ],
+    );
+  }
+
+  Widget _featurePill(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accent.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep(int num, String title, String desc, Color color, {bool isLast = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Center(
+                child: Text(
+                  '$num',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: color,
                   ),
-                  child: const Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accent, size: 24),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Have a Coach Invite Code?',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ask your coach for their code (e.g. SAB-...) and enter it above to link your continuous telemetry.',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          color: const Color(0xFF64748B),
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 1.5,
+                height: 30,
+                margin: const EdgeInsets.symmetric(vertical: 3),
+                color: const Color(0xFFE2E8F0),
+              ),
+          ],
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                    height: 1.3,
                   ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -1929,4 +3184,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       ),
     );
   }
+}
+
+// Helper model for macro goal display
+class _MacroGoal {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+  const _MacroGoal(this.label, this.value, this.color, this.icon);
 }

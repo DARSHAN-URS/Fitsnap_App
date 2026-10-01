@@ -254,67 +254,127 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       ),
                                     ),
                                     if (type == 'coaching_request') ...[
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: OutlinedButton(
-                                              onPressed: () async {
-                                                final extraData = item['extra_data'] as Map?;
-                                                final clientId = (extraData?['client_id'] ?? '').toString();
-                                                if (clientId.isNotEmpty) {
-                                                  await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
-                                                }
-                                                if (notifId.isNotEmpty) {
-                                                  _markRead(notifId, index);
-                                                }
-                                                if (context.mounted) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text('Coaching request declined.')),
-                                                  );
-                                                }
-                                              },
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                                side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                              ),
-                                              child: Text('Decline', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: ElevatedButton(
-                                              onPressed: () async {
-                                                final extraData = item['extra_data'] as Map?;
-                                                final clientId = (extraData?['client_id'] ?? '').toString();
-                                                if (clientId.isNotEmpty) {
-                                                  await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
-                                                }
-                                                if (notifId.isNotEmpty) {
-                                                  _markRead(notifId, index);
-                                                }
-                                                if (context.mounted) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Connected to Coach! Live telemetry linked.'),
-                                                      backgroundColor: AppTheme.neonEmerald,
+                                      Builder(
+                                        builder: (context) {
+                                          final extraData = item['extra_data'] as Map?;
+                                          final bool isResponded = item['is_read'] == true ||
+                                              extraData?['status'] == 'accepted' ||
+                                              extraData?['status'] == 'declined' ||
+                                              extraData?['responded'] == true;
+                                          if (!isResponded) {
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const SizedBox(height: 12),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        onPressed: () async {
+                                                          setState(() {
+                                                            item['is_read'] = true;
+                                                            item['extra_data'] = {
+                                                              if (extraData != null) ...extraData,
+                                                              'status': 'declined',
+                                                              'responded': true,
+                                                            };
+                                                          });
+                                                          final clientId = (extraData?['client_id'] ?? '').toString();
+                                                          if (clientId.isNotEmpty) {
+                                                            await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
+                                                          }
+                                                          if (notifId.isNotEmpty) {
+                                                            _markRead(notifId, index);
+                                                          }
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(content: Text('Coaching request declined.')),
+                                                            );
+                                                          }
+                                                        },
+                                                        style: OutlinedButton.styleFrom(
+                                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        child: Text('Decline', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                                                      ),
                                                     ),
-                                                  );
-                                                  Navigator.pop(context);
-                                                }
-                                              },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFF6366F1),
-                                                foregroundColor: Colors.white,
-                                                elevation: 0,
-                                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        onPressed: () async {
+                                                          setState(() {
+                                                            item['is_read'] = true;
+                                                            item['extra_data'] = {
+                                                              if (extraData != null) ...extraData,
+                                                              'status': 'accepted',
+                                                              'responded': true,
+                                                            };
+                                                          });
+                                                          final clientId = (extraData?['client_id'] ?? '').toString();
+                                                          if (clientId.isNotEmpty) {
+                                                            await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                                                          }
+                                                          if (notifId.isNotEmpty) {
+                                                            _markRead(notifId, index);
+                                                          }
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text('Connected to Coach! Live telemetry linked.'),
+                                                                backgroundColor: AppTheme.neonEmerald,
+                                                              ),
+                                                            );
+                                                            Navigator.pop(context);
+                                                          }
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: const Color(0xFF6366F1),
+                                                          foregroundColor: Colors.white,
+                                                          elevation: 0,
+                                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        child: Text('Accept & Connect', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            );
+                                          } else {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(top: 8),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: (extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald).withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      extraData?['status'] == 'declined' ? Icons.cancel_outlined : Icons.check_circle_rounded,
+                                                      size: 14,
+                                                      color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      extraData?['status'] == 'declined' ? 'Request Declined' : 'Request Accepted & Linked',
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                              child: Text('Accept & Connect', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                                            ),
-                                          ),
-                                        ],
+                                            );
+                                          }
+                                        },
                                       ),
                                     ],
                                     if (type == 'program_assigned' || type == 'program_shared') ...[
