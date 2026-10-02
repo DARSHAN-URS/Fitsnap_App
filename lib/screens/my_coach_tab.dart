@@ -58,7 +58,10 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   }
 
   Future<void> _refreshAll() async {
-    await Future.wait([_loadCoachData(), _loadSabcoachUpdates()]);
+    await _loadCoachData();
+    if (mounted) {
+      await _loadSabcoachUpdates();
+    }
   }
 
   Future<void> _loadSabcoachUpdates() async {
@@ -297,6 +300,12 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
+      if (accept && res['client'] != null && mounted) {
+        setState(() {
+          _hasCoach = true;
+          _client = Map<String, dynamic>.from(res['client']);
+        });
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(accept ? 'Coaching request accepted! Connected.' : 'Coaching request declined.'),
@@ -810,6 +819,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       final coachName = inv['coach_name'] ?? 'Your Coach';
       final program = inv['program_name'] ?? 'Coaching Protocol';
       final clientId = (inv['id'] ?? '').toString();
+      final coachId = (inv['coach_id'] ?? '').toString();
       items.add(_buildInboxItem(
         icon: Icons.mail_outline_rounded,
         color: const Color(0xFF6366F1),
@@ -849,7 +859,17 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                       _isLoading = true;
                       _pendingInvitation = null;
                     });
-                    await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                    final res = await ApiService.respondCoachingRequest(
+                      clientId: clientId,
+                      accept: true,
+                      coachId: coachId.isNotEmpty ? coachId : null,
+                    );
+                    if (res['success'] == true && res['client'] != null && mounted) {
+                      setState(() {
+                        _hasCoach = true;
+                        _client = Map<String, dynamic>.from(res['client']);
+                      });
+                    }
                     await _refreshAll();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -882,8 +902,18 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       final type = n['type'] as String? ?? '';
       final isUnread = n['is_read'] != true;
       final notifId = (n['id'] ?? '').toString();
-      final extraData = n['extra_data'] as Map? ?? {};
-      final clientId = (extraData['client_id'] ?? '').toString();
+      Map<String, dynamic> extraData = {};
+      final rawExtra = n['extra_data'] ?? n['data'];
+      if (rawExtra is Map) {
+        extraData = Map<String, dynamic>.from(rawExtra);
+      } else if (rawExtra is String && rawExtra.isNotEmpty) {
+        try {
+          extraData = Map<String, dynamic>.from(jsonDecode(rawExtra));
+        } catch (_) {}
+      }
+      final clientId = (extraData['client_id'] ?? n['client_id'] ?? '').toString();
+      final coachId = (extraData['coach_id'] ?? n['coach_id'] ?? '').toString();
+      final coachName = (extraData['coach_name'] ?? n['coach_name'] ?? 'Your Coach').toString();
 
       Color itemColor;
       IconData itemIcon;
@@ -925,7 +955,11 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                     _sabcoachUpdates.removeAt(i);
                     _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
                   });
-                  await ApiService.respondCoachingRequest(clientId: clientId, accept: false);
+                  await ApiService.respondCoachingRequest(
+                    clientId: clientId,
+                    accept: false,
+                    coachId: coachId.isNotEmpty ? coachId : null,
+                  );
                   if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
                   await _refreshAll();
                 },
@@ -948,8 +982,30 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                     _sabcoachUpdates.removeAt(i);
                     _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
                   });
-                  await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                  final res = await ApiService.respondCoachingRequest(
+                    clientId: clientId,
+                    accept: true,
+                    coachId: coachId.isNotEmpty ? coachId : null,
+                  );
                   if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
+
+                  if (res['success'] == true && res['client'] != null && mounted) {
+                    final savedClient = Map<String, dynamic>.from(res['client']);
+                    setState(() {
+                      _hasCoach = true;
+                      _client = savedClient;
+                      _coach ??= {
+                        'id': coachId.isNotEmpty ? coachId : (savedClient['coach_id'] ?? 'coach_default'),
+                        'name': coachName.isNotEmpty ? coachName : 'Your Coach',
+                        'title': 'Performance & Nutrition Coach',
+                        'specialty': 'Health & Fitness',
+                        'bio': 'Dedicated performance coach on the SabCoach Ecosystem.',
+                        'rating': 4.95,
+                        'certifications': ['ISSA Certified', 'Precision Nutrition'],
+                      };
+                    });
+                  }
+
                   await _refreshAll();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(

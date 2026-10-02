@@ -313,8 +313,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                             };
                                                           });
                                                           final clientId = (extraData?['client_id'] ?? '').toString();
+                                                          final coachId = (extraData?['coach_id'] ?? '').toString();
                                                           if (clientId.isNotEmpty) {
-                                                            await ApiService.respondCoachingRequest(clientId: clientId, accept: true);
+                                                            await ApiService.respondCoachingRequest(
+                                                              clientId: clientId,
+                                                              accept: true,
+                                                              coachId: coachId.isNotEmpty ? coachId : null,
+                                                            );
                                                           }
                                                           if (notifId.isNotEmpty) {
                                                             _markRead(notifId, index);

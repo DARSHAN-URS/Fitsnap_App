@@ -97,6 +97,18 @@ class ApiService {
     return id?.toString();
   }
 
+  /// Extract the user's email from the current JWT token or stored profile
+  static Future<String?> getCurrentUserEmail() async {
+    final payload = _decodeJwtPayload(_token ?? '');
+    final email = payload['email'];
+    if (email != null && email.toString().isNotEmpty) return email.toString();
+    try {
+      final stored = await PreferencesHelper.readString('user_email');
+      if (stored != null && stored.isNotEmpty) return stored;
+    } catch (_) {}
+    return null;
+  }
+
   // Set the JWT access token after login
   static void setToken(String token) {
     _token = token.isEmpty ? null : token;
@@ -2048,9 +2060,16 @@ class ApiService {
   /// Get connected Coach profile, today's prescribed protocol, adherence, and feedback
   static Future<Map<String, dynamic>> getMyCoach({String? date}) async {
     try {
-      final queryParam = date != null ? '?date=$date' : '';
+      final userId = await getCurrentUserId();
+      final userEmail = await getCurrentUserEmail();
+      final queryParams = <String>[];
+      if (date != null && date.isNotEmpty) queryParams.add('date=$date');
+      if (userId != null && userId.isNotEmpty) queryParams.add('user_id=$userId');
+      if (userEmail != null && userEmail.isNotEmpty) queryParams.add('email=${Uri.encodeComponent(userEmail)}');
+      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+
       final response = await http.get(
-        Uri.parse('$baseUrl/coach/my-coach$queryParam'),
+        Uri.parse('$baseUrl/coach/my-coach$queryString'),
         headers: {
           'Content-Type': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
@@ -2101,8 +2120,12 @@ class ApiService {
     required String clientId,
     required bool accept,
     String? coachId,
+    String? userId,
+    String? email,
   }) async {
     try {
+      final currentUid = userId ?? await getCurrentUserId();
+      final userEmail = email ?? await getCurrentUserEmail();
       final response = await http.post(
         Uri.parse('$baseUrl/coach/clients/$clientId/respond-request'),
         headers: {
@@ -2112,6 +2135,8 @@ class ApiService {
         body: jsonEncode({
           'accept': accept,
           if (coachId != null) 'coach_id': coachId,
+          if (currentUid != null) 'user_id': currentUid,
+          if (userEmail != null) 'email': userEmail,
         }),
       );
       if (response.statusCode == 200) {
