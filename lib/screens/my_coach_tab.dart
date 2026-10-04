@@ -3424,89 +3424,106 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           _buildPendingInvitationCard(),
           const SizedBox(height: 20),
         ],
-        // Hero banner
+        // Hero banner - Compact, sleek & low vertical footprint
         Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.40),
-                blurRadius: 22,
-                offset: const Offset(0, 10),
+                color: const Color(0xFF6366F1).withOpacity(0.25),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withOpacity(0.25)),
+                ),
+                child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        const Icon(Icons.verified_rounded, color: Colors.white, size: 13),
-                        const SizedBox(width: 5),
+                        const Icon(Icons.verified_rounded, color: Colors.white, size: 12),
+                        const SizedBox(width: 4),
                         Text(
                           'SABCOACH ECOSYSTEM',
                           style: GoogleFonts.inter(
-                            color: Colors.white,
+                            color: Colors.white.withOpacity(0.9),
                             fontWeight: FontWeight.w800,
                             fontSize: 10,
-                            letterSpacing: 0.8,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 3,
+                          height: 3,
+                          decoration: const BoxDecoration(
+                            color: Colors.white60,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'LIVE SYNC',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF34D399),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 9.5,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Your Coach. Your Data.\nReal-Time Accountability.',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 22,
-                  height: 1.2,
+                    const SizedBox(height: 3),
+                    Text(
+                      'Real-Time Coach Accountability',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        height: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Meals, workouts & biometrics stream live to your coach.',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 11.5,
+                        height: 1.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Link with your personal trainer. Every plate, workout, and biometric you log on SabTrack streams live to their telemetry dashboard.',
-                style: GoogleFonts.inter(
-                  color: Colors.white.withOpacity(0.85),
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 18),
-              // Feature pills
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _featurePill(Icons.restaurant_menu_rounded, 'Diet Protocols'),
-                  _featurePill(Icons.fitness_center_rounded, 'Training Plans'),
-                  _featurePill(Icons.bolt_rounded, 'Live Telemetry'),
-                  _featurePill(Icons.feedback_rounded, 'Daily Feedback'),
-                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
         // 3 Suggested Coaches of different types
         _buildRecommendedCoachesSection(),
@@ -4777,31 +4794,6 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
-  Widget _featurePill(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 13),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ── Helper: 3 Top Distinct Discipline Coaches ──────────────────────────────
   List<Map<String, dynamic>> _getTop3RecommendedCoaches() {
