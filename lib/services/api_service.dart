@@ -2058,14 +2058,24 @@ class ApiService {
   }
 
   /// Get connected Coach profile, today's prescribed protocol, adherence, and feedback
-  static Future<Map<String, dynamic>> getMyCoach({String? date}) async {
+  /// Supports multiple coaches and specific coach selection
+  static Future<Map<String, dynamic>> getMyCoach({
+    String? date,
+    String? coachId,
+    String? clientId,
+  }) async {
     try {
       final userId = await getCurrentUserId();
       final userEmail = await getCurrentUserEmail();
+      final storedCoachId = coachId ?? await PreferencesHelper.readString('connected_coach_id');
+      final storedClientId = clientId ?? await PreferencesHelper.readString('connected_client_id');
+
       final queryParams = <String>[];
       if (date != null && date.isNotEmpty) queryParams.add('date=$date');
       if (userId != null && userId.isNotEmpty) queryParams.add('user_id=$userId');
       if (userEmail != null && userEmail.isNotEmpty) queryParams.add('email=${Uri.encodeComponent(userEmail)}');
+      if (storedCoachId != null && storedCoachId.isNotEmpty) queryParams.add('coach_id=${Uri.encodeComponent(storedCoachId)}');
+      if (storedClientId != null && storedClientId.isNotEmpty) queryParams.add('client_id=${Uri.encodeComponent(storedClientId)}');
       final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
 
       final response = await http.get(
@@ -2084,9 +2094,9 @@ class ApiService {
     }
   }
 
-  /// Connect to a coach via invite code or coach id
+  /// Connect to a coach via coach id or invite code
   static Future<Map<String, dynamic>> connectCoach({
-    required String inviteCode,
+    String? inviteCode,
     String? coachId,
     String? name,
     String? email,
@@ -2099,17 +2109,53 @@ class ApiService {
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
         body: jsonEncode({
-          'invite_code': inviteCode,
+          if (inviteCode != null && inviteCode.isNotEmpty) 'invite_code': inviteCode,
           if (coachId != null) 'coach_id': coachId,
           if (name != null) 'name': name,
           if (email != null) 'email': email,
         }),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        if (data['client'] != null && data['client']['id'] != null) {
+          try {
+            await PreferencesHelper.saveString('connected_client_id', data['client']['id'].toString());
+            if (coachId != null) await PreferencesHelper.saveString('connected_coach_id', coachId);
+          } catch (_) {}
+        }
+        return data;
       }
       final body = jsonDecode(response.body);
       return {'success': false, 'error': body['detail'] ?? 'Failed to connect coach'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Search & filter available coaches from real directory
+  static Future<Map<String, dynamic>> getAvailableCoaches({
+    String? query,
+    String? location,
+    String? discipline,
+  }) async {
+    try {
+      final params = <String, String>{};
+      if (query != null && query.trim().isNotEmpty) params['q'] = query.trim();
+      if (location != null && location.trim().isNotEmpty) params['location'] = location.trim();
+      if (discipline != null && discipline.trim().isNotEmpty) params['discipline'] = discipline.trim();
+
+      final queryString = params.isNotEmpty ? '?${Uri(queryParameters: params).query}' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/coach/coaches$queryString'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to fetch coaches'};
     } catch (e) {
       return {'success': false, 'error': formatErrorMessage(e)};
     }
@@ -2140,7 +2186,16 @@ class ApiService {
         }),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        if (accept) {
+          try {
+            await PreferencesHelper.saveString('connected_client_id', clientId);
+            if (coachId != null && coachId.isNotEmpty) {
+              await PreferencesHelper.saveString('connected_coach_id', coachId);
+            }
+          } catch (_) {}
+        }
+        return data;
       }
       final body = jsonDecode(response.body);
       return {'success': false, 'error': body['detail'] ?? 'Failed to respond to coaching request'};

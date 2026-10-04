@@ -1333,6 +1333,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       extendBody: true, // Let content scroll behind the floating bottom bar
+      resizeToAvoidBottomInset: false, // Prevent keyboard from causing layout glitch
       body: Stack(
         children: [
           // Global Background Gradient

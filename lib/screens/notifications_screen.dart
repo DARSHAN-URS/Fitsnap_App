@@ -5,7 +5,8 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  final bool coachOnly;
+  const NotificationsScreen({super.key, this.coachOnly = false});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -15,6 +16,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _notifications = [];
   Timer? _pollTimer;
+
+  static const Set<String> _coachingTypes = {
+    'coaching_request',
+    'coaching_accepted',
+    'coaching_declined',
+    'program_assigned',
+    'program_shared',
+    'coach_feedback',
+    'coach_message',
+    'session_scheduled',
+  };
+
+  bool _isCoachingNotification(Map<String, dynamic> item) {
+    final type = (item['type'] ?? item['notif_type'] ?? '').toString();
+    if (_coachingTypes.contains(type)) return true;
+    if (type.startsWith('coach')) return true;
+    final extra = (item['extra_data'] ?? item['data']) as Map? ?? {};
+    if (extra['coach_id'] != null || extra['is_coach'] == true) return true;
+    final title = (item['title'] ?? '').toString().toLowerCase();
+    if (title.contains('coach') || title.contains('sabcoach')) return true;
+    return false;
+  }
+
+  List<Map<String, dynamic>> get _displayNotifications {
+    if (!widget.coachOnly) return _notifications;
+    return _notifications.where(_isCoachingNotification).toList();
+  }
 
   @override
   void initState() {
@@ -47,10 +75,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _markRead(String notifId, int index) async {
+  Future<void> _markRead(String notifId, [int? index]) async {
     await ApiService.markNotificationRead(notifId);
     setState(() {
-      _notifications[index]['is_read'] = true;
+      for (final n in _notifications) {
+        if (n['id']?.toString() == notifId) {
+          n['is_read'] = true;
+          break;
+        }
+      }
     });
   }
 
@@ -108,6 +141,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final list = _displayNotifications;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -117,13 +152,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Notifications',
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w800,
-            fontSize: 20,
-            color: AppTheme.primary,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.coachOnly ? 'SabCoach Notifications' : 'Notifications',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 19,
+                color: AppTheme.primary,
+              ),
+            ),
+            if (widget.coachOnly)
+              Text(
+                'Coaching updates, plans & feedback',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+          ],
         ),
         actions: [
           IconButton(
@@ -134,37 +184,49 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
-          : _notifications.isEmpty
+          : list.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withOpacity(0.1),
-                          shape: BoxShape.circle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: (widget.coachOnly ? const Color(0xFF6366F1) : AppTheme.accent).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            widget.coachOnly ? Icons.sports_rounded : Icons.notifications_none_rounded,
+                            size: 48,
+                            color: widget.coachOnly ? const Color(0xFF6366F1) : AppTheme.accent,
+                          ),
                         ),
-                        child: const Icon(Icons.notifications_none_rounded, size: 48, color: AppTheme.accent),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'All Caught Up!',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                          color: AppTheme.primary,
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.coachOnly ? 'No Coach Notifications' : 'All Caught Up!',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: AppTheme.primary,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'You have no new notifications right now.',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: const Color(0xFF64748B),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.coachOnly
+                              ? 'Your training programs, nutrition protocols, and coach feedback will appear right here.'
+                              : 'You have no new notifications right now.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: const Color(0xFF64748B),
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 )
               : RefreshIndicator(
@@ -172,9 +234,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   color: AppTheme.accent,
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    itemCount: _notifications.length,
+                    itemCount: list.length,
                     itemBuilder: (context, index) {
-                      final item = _notifications[index];
+                      final item = list[index];
                       final notifId = (item['id'] ?? '').toString();
                       final isRead = item['is_read'] == true;
                       final type = item['type'] as String?;
@@ -331,7 +393,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                                 backgroundColor: AppTheme.neonEmerald,
                                                               ),
                                                             );
-                                                            Navigator.pop(context);
+                                                            Navigator.pop(context, true);
                                                           }
                                                         },
                                                         style: ElevatedButton.styleFrom(

@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/preferences_helper.dart';
 import 'notifications_screen.dart';
 
 class MyCoachTab extends StatefulWidget {
@@ -18,12 +20,15 @@ class MyCoachTab extends StatefulWidget {
 class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   bool _hasCoach = false;
+  List<Map<String, dynamic>> _coaches = [];
+  String? _selectedCoachId;
   Map<String, dynamic>? _coach;
   Map<String, dynamic>? _client;
   Map<String, dynamic>? _todayPlan;
   Map<String, dynamic>? _adherence;
   List<dynamic> _feedbacks = [];
   List<dynamic> _availableCoaches = [];
+  List<dynamic> _recommendedCoaches = [];
   Map<String, dynamic>? _pendingInvitation;
 
   // SabCoach Inbox
@@ -34,14 +39,27 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   bool _showDisconnectConfirm = false;
   Timer? _pollTimer;
 
+  final TextEditingController _coachSearchController = TextEditingController();
+  final TextEditingController _coachLocationController = TextEditingController();
   String _coachSearchQuery = '';
+  String _coachLocationQuery = '';
   String _selectedCoachSpecialty = 'All';
+  String _selectedLocationFilter = 'All';
+  bool _showExploreMoreCoaches = false;
   final Map<String, String> _feedbackReactions = {};
 
   final Set<String> _loggedMealNames = {};
   late AnimationController _animController;
-  final TextEditingController _inviteCodeController = TextEditingController();
   bool _isConnecting = false;
+
+  // Location
+  bool _isLoadingLocation = false;
+  bool _isLoadingCoaches = false;
+
+  // Scroll controller to fix keyboard glitch
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _locationFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -61,6 +79,124 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     await _loadCoachData();
     if (mounted) {
       await _loadSabcoachUpdates();
+    }
+    if (mounted) {
+      await _loadAvailableCoaches();
+    }
+  }
+
+  Future<void> _loadAvailableCoaches({
+    String? query,
+    String? location,
+    String? discipline,
+  }) async {
+    setState(() => _isLoadingCoaches = true);
+    try {
+      final res = await ApiService.getAvailableCoaches(
+        query: query,
+        location: location,
+        discipline: discipline != null && discipline != 'All' ? discipline : null,
+      );
+      if (mounted && res['success'] == true) {
+        setState(() {
+          if (res['coaches'] is List) {
+            _availableCoaches = List.from(res['coaches']);
+          }
+          if (res['recommended_coaches'] is List) {
+            _recommendedCoaches = List.from(res['recommended_coaches']);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading available coaches: \$e');
+    } finally {
+      if (mounted) setState(() => _isLoadingCoaches = false);
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled.')),
+          );
+        }
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permission denied.')),
+            );
+          }
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permissions are permanently denied. Please enable in settings.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+
+      // Use reverse geocoding via a simple readable coordinate string
+      // We'll use city name approximation from coordinates
+      final lat = position.latitude;
+      final lon = position.longitude;
+      // Set coordinates as location query so backend can use it
+      // For now we set a user-readable label and search
+      final locationLabel = 'Near Me (${lat.toStringAsFixed(2)}, ${lon.toStringAsFixed(2)})';
+
+      _coachLocationController.text = locationLabel;
+      setState(() => _coachLocationQuery = locationLabel);
+
+      // Reload coaches with approximate location (pass lat/lon as location)
+      await _loadAvailableCoaches(
+        query: _coachSearchQuery.isNotEmpty ? _coachSearchQuery : null,
+        location: '${lat.toStringAsFixed(4)},${lon.toStringAsFixed(4)}',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.my_location_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                const Text('Searching coaches near your location...'),
+              ],
+            ),
+            backgroundColor: AppTheme.neonEmerald,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error getting location: \$e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not get location: \${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingLocation = false);
     }
   }
 
@@ -110,23 +246,60 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   void dispose() {
     _pollTimer?.cancel();
     _animController.dispose();
-    _inviteCodeController.dispose();
+    _coachSearchController.dispose();
+    _coachLocationController.dispose();
+    _scrollController.dispose();
+    _searchFocusNode.dispose();
+    _locationFocusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCoachData() async {
+  Future<void> _loadCoachData({String? coachId, String? clientId}) async {
     setState(() => _isLoading = true);
     try {
-      final res = await ApiService.getMyCoach();
+      final res = await ApiService.getMyCoach(coachId: coachId, clientId: clientId);
       if (res['success'] == true) {
+        final List<dynamic> rawCoaches = res['coaches'] is List ? res['coaches'] : [];
+        final List<Map<String, dynamic>> coachesList = rawCoaches
+            .whereType<Map>()
+            .map((c) => Map<String, dynamic>.from(c))
+            .toList();
+
+        final bool hasCoach = res['has_coach'] == true || coachesList.isNotEmpty;
+        final targetCoachId = coachId ??
+            res['selected_coach_id']?.toString() ??
+            _selectedCoachId ??
+            (coachesList.isNotEmpty ? coachesList.first['coach_id']?.toString() : null);
+
+        Map<String, dynamic>? selectedBundle;
+        if (coachesList.isNotEmpty) {
+          selectedBundle = coachesList.firstWhere(
+            (c) => c['coach_id']?.toString() == targetCoachId,
+            orElse: () => coachesList.first,
+          );
+        }
+
         setState(() {
-          _hasCoach = res['has_coach'] == true;
-          _coach = res['coach'] != null ? Map<String, dynamic>.from(res['coach']) : null;
-          _client = res['client'] != null ? Map<String, dynamic>.from(res['client']) : null;
-          _todayPlan = res['today_plan'] != null ? Map<String, dynamic>.from(res['today_plan']) : null;
-          _adherence = res['adherence'] != null ? Map<String, dynamic>.from(res['adherence']) : null;
-          _feedbacks = res['feedbacks'] is List ? List.from(res['feedbacks']) : [];
+          _hasCoach = hasCoach;
+          _coaches = coachesList;
+          _selectedCoachId = selectedBundle?['coach_id']?.toString() ?? targetCoachId;
+          _coach = selectedBundle?['coach'] != null
+              ? Map<String, dynamic>.from(selectedBundle!['coach'])
+              : (res['coach'] != null ? Map<String, dynamic>.from(res['coach']) : null);
+          _client = selectedBundle?['client'] != null
+              ? Map<String, dynamic>.from(selectedBundle!['client'])
+              : (res['client'] != null ? Map<String, dynamic>.from(res['client']) : null);
+          _todayPlan = selectedBundle?['today_plan'] != null
+              ? Map<String, dynamic>.from(selectedBundle!['today_plan'])
+              : (res['today_plan'] != null ? Map<String, dynamic>.from(res['today_plan']) : null);
+          _adherence = selectedBundle?['adherence'] != null
+              ? Map<String, dynamic>.from(selectedBundle!['adherence'])
+              : (res['adherence'] != null ? Map<String, dynamic>.from(res['adherence']) : null);
+          _feedbacks = selectedBundle?['feedbacks'] is List
+              ? List.from(selectedBundle!['feedbacks'])
+              : (res['feedbacks'] is List ? List.from(res['feedbacks']) : []);
           _availableCoaches = res['available_coaches'] is List ? List.from(res['available_coaches']) : [];
+          _recommendedCoaches = res['recommended_coaches'] is List ? List.from(res['recommended_coaches']) : [];
           if (_hasCoach) {
             _pendingInvitation = null;
           } else {
@@ -134,6 +307,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           }
           _isLoading = false;
         });
+
+        if (_selectedCoachId != null) {
+          PreferencesHelper.saveString('connected_coach_id', _selectedCoachId!);
+        }
+        if (_client?['id'] != null) {
+          PreferencesHelper.saveString('connected_client_id', _client!['id'].toString());
+        }
         _animController.forward(from: 0.0);
       } else {
         setState(() => _isLoading = false);
@@ -142,6 +322,40 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       debugPrint('Error loading coach data: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  void _switchCoach(String targetCoachId) {
+    if (_selectedCoachId == targetCoachId) return;
+    HapticFeedback.selectionClick();
+    final matchedBundle = _coaches.firstWhere(
+      (c) => c['coach_id']?.toString() == targetCoachId,
+      orElse: () => {},
+    );
+    if (matchedBundle.isNotEmpty) {
+      setState(() {
+        _selectedCoachId = targetCoachId;
+        _coach = matchedBundle['coach'] != null ? Map<String, dynamic>.from(matchedBundle['coach']) : null;
+        _client = matchedBundle['client'] != null ? Map<String, dynamic>.from(matchedBundle['client']) : null;
+        _todayPlan = matchedBundle['today_plan'] != null ? Map<String, dynamic>.from(matchedBundle['today_plan']) : null;
+        _adherence = matchedBundle['adherence'] != null ? Map<String, dynamic>.from(matchedBundle['adherence']) : null;
+        _feedbacks = matchedBundle['feedbacks'] is List ? List.from(matchedBundle['feedbacks']) : [];
+      });
+      PreferencesHelper.saveString('connected_coach_id', targetCoachId);
+      if (matchedBundle['client_id'] != null) {
+        PreferencesHelper.saveString('connected_client_id', matchedBundle['client_id'].toString());
+      }
+    } else {
+      _loadCoachData(coachId: targetCoachId);
+    }
+  }
+
+  IconData _getDisciplineIcon(String discipline) {
+    final d = discipline.toLowerCase();
+    if (d.contains('nutrition') || d.contains('diet')) return Icons.restaurant_menu_rounded;
+    if (d.contains('yoga') || d.contains('mobility') || d.contains('stretch')) return Icons.self_improvement_rounded;
+    if (d.contains('cardio') || d.contains('endurance') || d.contains('run')) return Icons.directions_run_rounded;
+    if (d.contains('physio') || d.contains('rehab')) return Icons.healing_rounded;
+    return Icons.fitness_center_rounded;
   }
 
   Future<void> _logPrescribedMeal(Map<String, dynamic> meal) async {
@@ -247,19 +461,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _connectWithCode(String code, {String? coachId}) async {
-    final cleanCode = code.trim();
-    if (cleanCode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an invite code or select a coach')),
-      );
-      return;
-    }
+  Future<void> _connectToCoach(String coachId, {String? coachName}) async {
+    final cleanId = coachId.trim();
+    if (cleanId.isEmpty) return;
 
     setState(() => _isConnecting = true);
     final res = await ApiService.connectCoach(
-      inviteCode: cleanCode,
-      coachId: coachId,
+      coachId: cleanId,
     );
     setState(() => _isConnecting = false);
 
@@ -267,12 +475,24 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     if (res['success'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res['message'] ?? 'Successfully connected to coach!'),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  res['message'] ?? 'Successfully connected to ${coachName ?? "coach"}!',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
           backgroundColor: AppTheme.neonEmerald,
+          duration: const Duration(seconds: 4),
         ),
       );
-      _inviteCodeController.clear();
-      _loadCoachData();
+      await _loadCoachData(coachId: cleanId);
+      await _loadSabcoachUpdates();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -577,44 +797,57 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       return _buildLoadingSkeleton();
     }
 
-    return RefreshIndicator(
-      onRefresh: _refreshAll,
-      color: AppTheme.accent,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 20),
-            // SabCoach Inbox — coaching invitations + updates
-            if (_pendingInvitation != null || _sabcoachUpdates.isNotEmpty) ...[
-              _buildSabcoachInbox(),
+    // Fix keyboard glitch: use GestureDetector to dismiss keyboard on tap outside
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: RefreshIndicator(
+        onRefresh: _refreshAll,
+        color: AppTheme.accent,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          // keyboardDismissBehavior prevents keyboard from staying open and causing glitch
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
               const SizedBox(height: 20),
-            ],
-            if (_hasCoach) ...[
-              _buildCoachProfileCard(),
-              const SizedBox(height: 16),
-              _buildQuickStatsStrip(),
-              const SizedBox(height: 16),
-              if (_hasAssignedProgram) ...[
-                _buildAssignedProgramCard(),
-                const SizedBox(height: 16),
+              // SabCoach Inbox — coaching invitations + updates
+              if (_pendingInvitation != null || _sabcoachUpdates.isNotEmpty) ...[
+                _buildSabcoachInbox(),
+                const SizedBox(height: 20),
               ],
-              _buildAdherenceTelemetryCard(),
-              const SizedBox(height: 16),
-              if (_todayPlan != null) ...[
-                _buildTodayPrescribedPlanCard(),
+              if (_hasCoach) ...[
+                if (_coaches.isNotEmpty) ...[
+                  _buildCoachesSelector(),
+                  const SizedBox(height: 16),
+                ],
+                _buildCoachProfileCard(),
                 const SizedBox(height: 16),
+                _buildQuickStatsStrip(),
+                const SizedBox(height: 16),
+                if (_hasAssignedProgram) ...[
+                  _buildAssignedProgramCard(),
+                  const SizedBox(height: 16),
+                ],
+                _buildAdherenceTelemetryCard(),
+                const SizedBox(height: 16),
+                if (_todayPlan != null) ...[
+                  _buildTodayPrescribedPlanCard(),
+                  const SizedBox(height: 16),
+                ],
+                _buildCoachFeedbackCard(),
+                const SizedBox(height: 16),
+                _buildDisconnectSection(),
+                const SizedBox(height: 24),
+                _buildExploreMoreCoachesSection(),
+              ] else ...[
+                _buildNotConnectedState(),
               ],
-              _buildCoachFeedbackCard(),
-              const SizedBox(height: 16),
-              _buildDisconnectSection(),
-            ] else ...[
-              _buildNotConnectedState(),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -720,13 +953,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         ),
         Row(
           children: [
-            // Notification bell with unread badge
+            // Notification bell with unread badge (filtered to SabCoach)
             GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                ).then((_) => _loadSabcoachUpdates());
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen(coachOnly: true)),
+                ).then((_) => _refreshAll());
               },
               child: Stack(
                 clipBehavior: Clip.none,
@@ -864,13 +1097,21 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                       accept: true,
                       coachId: coachId.isNotEmpty ? coachId : null,
                     );
-                    if (res['success'] == true && res['client'] != null && mounted) {
-                      setState(() {
-                        _hasCoach = true;
-                        _client = Map<String, dynamic>.from(res['client']);
-                      });
+                    if (res['success'] == true) {
+                      if (coachId.isNotEmpty) {
+                        await PreferencesHelper.saveString('connected_coach_id', coachId);
+                      }
+                      await PreferencesHelper.saveString('connected_client_id', clientId);
+                      if (mounted) {
+                        setState(() {
+                          _hasCoach = true;
+                          if (coachId.isNotEmpty) _selectedCoachId = coachId;
+                          if (res['client'] != null) _client = Map<String, dynamic>.from(res['client']);
+                        });
+                      }
                     }
-                    await _refreshAll();
+                    await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId);
+                    if (mounted) await _loadSabcoachUpdates();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -989,28 +1230,26 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                   );
                   if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
 
-                  if (res['success'] == true && res['client'] != null && mounted) {
-                    final savedClient = Map<String, dynamic>.from(res['client']);
-                    setState(() {
-                      _hasCoach = true;
-                      _client = savedClient;
-                      _coach ??= {
-                        'id': coachId.isNotEmpty ? coachId : (savedClient['coach_id'] ?? 'coach_default'),
-                        'name': coachName.isNotEmpty ? coachName : 'Your Coach',
-                        'title': 'Performance & Nutrition Coach',
-                        'specialty': 'Health & Fitness',
-                        'bio': 'Dedicated performance coach on the SabCoach Ecosystem.',
-                        'rating': 4.95,
-                        'certifications': ['ISSA Certified', 'Precision Nutrition'],
-                      };
-                    });
+                  if (res['success'] == true) {
+                    if (coachId.isNotEmpty) {
+                      await PreferencesHelper.saveString('connected_coach_id', coachId);
+                    }
+                    await PreferencesHelper.saveString('connected_client_id', clientId);
+                    if (mounted) {
+                      setState(() {
+                        _hasCoach = true;
+                        if (coachId.isNotEmpty) _selectedCoachId = coachId;
+                        if (res['client'] != null) _client = Map<String, dynamic>.from(res['client']);
+                      });
+                    }
                   }
 
-                  await _refreshAll();
+                  await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId);
+                  if (mounted) await _loadSabcoachUpdates();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('🎉 Connected! SabCoach telemetry link is live.'),
+                      SnackBar(
+                        content: Text('🎉 Connected with $coachName! SabCoach telemetry link is live.'),
                         backgroundColor: AppTheme.neonEmerald,
                       ),
                     );
@@ -1127,8 +1366,8 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                ).then((_) => _loadSabcoachUpdates());
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen(coachOnly: true)),
+                ).then((_) => _refreshAll());
               },
               child: Text(
                 'See All',
@@ -1535,6 +1774,439 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
+  // ── Multiple Coaches Selector ─────────────────────────────────────────────
+  Widget _buildCoachesSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.groups_rounded, color: Color(0xFF6366F1), size: 16),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'YOUR COACHING TEAM',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_coaches.length} Active',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            GestureDetector(
+              onTap: _showAddCoachModal,
+              child: Row(
+                children: [
+                  const Icon(Icons.add_circle_outline_rounded, size: 14, color: AppTheme.accent),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Add Coach',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 82,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _coaches.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              if (index == _coaches.length) {
+                return GestureDetector(
+                  onTap: _showAddCoachModal,
+                  child: Container(
+                    width: 110,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Icon(Icons.person_add_alt_1_rounded, size: 16, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '+ Add Coach',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF475569),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final item = _coaches[index];
+              final coachObj = (item['coach'] as Map?) ?? {};
+              final coachId = (item['coach_id'] ?? coachObj['id'] ?? '').toString();
+              final coachName = coachObj['name'] ?? 'Coach';
+              final discipline = (item['discipline'] ?? coachObj['specialty'] ?? 'Coaching').toString();
+              final avatar = coachObj['avatar']?.toString() ?? '';
+              final isSelected = _selectedCoachId == coachId;
+
+              return GestureDetector(
+                onTap: () => _switchCoach(coachId),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 185,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: isSelected
+                        ? const LinearGradient(
+                            colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    color: isSelected ? null : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.accent : const Color(0xFFE2E8F0),
+                      width: isSelected ? 2.0 : 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isSelected ? AppTheme.accent.withOpacity(0.2) : Colors.black.withOpacity(0.02),
+                        blurRadius: isSelected ? 10 : 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: isSelected ? AppTheme.accent.withOpacity(0.3) : const Color(0xFFF1F5F9),
+                            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                            child: avatar.isEmpty
+                                ? Icon(
+                                    _getDisciplineIcon(discipline),
+                                    size: 18,
+                                    color: isSelected ? Colors.white : AppTheme.accent,
+                                  )
+                                : null,
+                          ),
+                          if (isSelected)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.neonEmerald,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 1.5),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              coachName,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: isSelected ? Colors.white : AppTheme.primary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              discipline,
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? AppTheme.neonCyan : const Color(0xFF64748B),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddCoachModal() {
+    bool modalConnecting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.person_add_alt_1_rounded, color: AppTheme.accent, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Add Another Coach',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                                Text(
+                                  'Connect a Nutritionist, Physio, or Trainer',
+                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Certified Specialists Directory',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Connect in real-time to start streaming biometrics and receive programs',
+                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 16),
+                            if (_availableCoaches.isNotEmpty)
+                              ..._availableCoaches.map((c) {
+                                final cMap = Map<String, dynamic>.from(c as Map);
+                                final cId = (cMap['id'] ?? '').toString();
+                                final cName = (cMap['name'] ?? 'Coach').toString();
+                                final cSpec = (cMap['specialty'] ?? cMap['discipline'] ?? 'Specialist').toString();
+                                final cLoc = (cMap['location'] ?? 'Remote').toString();
+                                final cRating = (cMap['rating'] ?? 4.9).toDouble();
+                                final cAvatar = (cMap['avatar'] ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200').toString();
+                                final alreadyAdded = _coaches.any((x) => x['coach_id'] == cId);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 24,
+                                        backgroundImage: NetworkImage(cAvatar),
+                                        backgroundColor: AppTheme.accent.withOpacity(0.1),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    cName,
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      fontWeight: FontWeight.w700,
+                                                      fontSize: 14,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.verified_rounded, size: 13, color: Color(0xFF3B82F6)),
+                                              ],
+                                            ),
+                                            Text(
+                                              cSpec,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.accent,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.location_on_rounded, size: 11, color: Color(0xFFE11D48)),
+                                                const SizedBox(width: 2),
+                                                Text(cLoc, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
+                                                const SizedBox(width: 8),
+                                                const Icon(Icons.star_rounded, size: 12, color: Color(0xFFF59E0B)),
+                                                const SizedBox(width: 2),
+                                                Text(cRating.toStringAsFixed(1), style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: alreadyAdded || modalConnecting
+                                            ? null
+                                            : () async {
+                                                setModalState(() => modalConnecting = true);
+                                                final res = await ApiService.connectCoach(coachId: cId);
+                                                setModalState(() => modalConnecting = false);
+                                                if (res['success'] == true) {
+                                                  if (ctx.mounted) Navigator.pop(ctx);
+                                                  await _refreshAll();
+                                                }
+                                              },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: alreadyAdded ? Colors.grey.shade400 : AppTheme.accent,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: Text(
+                                          alreadyAdded ? 'Linked' : 'Connect',
+                                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              })
+                            else
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: Text('No coaches currently available.'),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildCoachProfileCard() {
     final name = _coach?['name'] ?? 'Coach';
     final title = _coach?['title'] ?? 'Performance & Nutrition Coach';
@@ -1827,15 +2499,33 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               Expanded(
                 child: ElevatedButton(
                   onPressed: () async {
-                    // Disconnect by clearing — no dedicated API needed; just reload
+                    final currentCoachId = _selectedCoachId;
                     setState(() {
-                      _hasCoach = false;
-                      _coach = null;
-                      _client = null;
-                      _todayPlan = null;
-                      _feedbacks = [];
+                      _coaches.removeWhere((c) => c['coach_id']?.toString() == currentCoachId);
+                      if (_coaches.isNotEmpty) {
+                        final nextCoach = _coaches.first;
+                        _selectedCoachId = nextCoach['coach_id']?.toString();
+                        _coach = nextCoach['coach'] != null ? Map<String, dynamic>.from(nextCoach['coach']) : null;
+                        _client = nextCoach['client'] != null ? Map<String, dynamic>.from(nextCoach['client']) : null;
+                        _todayPlan = nextCoach['today_plan'] != null ? Map<String, dynamic>.from(nextCoach['today_plan']) : null;
+                        _adherence = nextCoach['adherence'] != null ? Map<String, dynamic>.from(nextCoach['adherence']) : null;
+                        _feedbacks = nextCoach['feedbacks'] is List ? List.from(nextCoach['feedbacks']) : [];
+                      } else {
+                        _hasCoach = false;
+                        _coach = null;
+                        _client = null;
+                        _todayPlan = null;
+                        _feedbacks = [];
+                        _selectedCoachId = null;
+                      }
                       _showDisconnectConfirm = false;
                     });
+                    if (_selectedCoachId != null) {
+                      await PreferencesHelper.saveString('connected_coach_id', _selectedCoachId!);
+                    } else {
+                      await PreferencesHelper.delete('connected_coach_id');
+                      await PreferencesHelper.delete('connected_client_id');
+                    }
                     await _loadCoachData();
                   },
                   style: ElevatedButton.styleFrom(
@@ -2816,226 +3506,1273 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
 
-        // How it works strip
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'How it works',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.primary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _buildStep(1, 'Get your pairing code', 'Ask your coach for their SAB-... invite code.', const Color(0xFF6366F1)),
-              _buildStep(2, 'Enter it below', 'Paste or type the code and tap Connect.', const Color(0xFF8B5CF6)),
-              _buildStep(3, 'Start streaming', 'Your logs flow live to your coach\'s dashboard.', AppTheme.neonEmerald, isLast: true),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+        // 3 Suggested Coaches of different types
+        _buildRecommendedCoachesSection(),
+        const SizedBox(height: 24),
 
-        // Connect with Invite Code Box
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.25)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.06),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.key_rounded, color: Color(0xFF6366F1), size: 20),
+        // Search Tab with location, name/specialty, and filters
+        _buildCoachSearchAndFilterSection(),
+      ],
+    );
+  }
+
+  // ── 3 Recommended Coaches of Different Types ──────────────────────────────
+  Widget _buildRecommendedCoachesSection() {
+    final top3 = _getTop3RecommendedCoaches();
+    if (top3.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Enter Coach Pairing Code',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primary,
-                        ),
+                  child: const Icon(Icons.stars_rounded, color: Color(0xFFD97706), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Suggested Coaches',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
                       ),
-                      Text(
-                        'Shared by your trainer',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                    ),
+                    Text(
+                      '3 Top Specialists of Distinct Disciplines',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF64748B),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.25)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'CURATED',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: const Color(0xFF6366F1),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _inviteCodeController,
-                textCapitalization: TextCapitalization.characters,
-                style: GoogleFonts.spaceMono(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                  color: AppTheme.primary,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'SAB-XXXXXX',
-                  hintStyle: GoogleFonts.spaceMono(
-                    color: Colors.grey.shade400,
-                    fontSize: 16,
-                    letterSpacing: 2,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF8FAFC),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFF6366F1)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                  ),
-                  prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF6366F1), size: 20),
-                ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isConnecting
-                      ? null
-                      : () => _connectWithCode(_inviteCodeController.text),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(0xFF6366F1).withOpacity(0.5),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: _isConnecting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(
-                          'Connect to Coach',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        ...top3.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final coach = entry.value;
+          return _buildRecommendedCoachCard(coach, rank: idx + 1);
+        }),
+      ],
+    );
+  }
+
+  Widget _buildRecommendedCoachCard(Map<String, dynamic> coach, {required int rank}) {
+    final name = (coach['name'] ?? 'Coach').toString();
+    final title = (coach['title'] ?? 'Performance Specialist').toString();
+    final specialty = (coach['specialty'] ?? coach['discipline'] ?? 'Coaching').toString();
+    final location = (coach['location'] ?? 'Remote / Online').toString();
+    final locationType = (coach['location_type'] ?? '').toString();
+    final bio = (coach['bio'] ?? '').toString();
+    final avatar = (coach['avatar'] ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400').toString();
+    final rating = (coach['rating'] ?? 4.9).toDouble();
+    final reviewCount = coach['review_count'] ?? 45;
+    final activeClients = coach['active_clients'] ?? 15;
+    final hourlyRate = (coach['hourly_rate'] ?? '').toString();
+    final certs = coach['certifications'] is List ? List<String>.from(coach['certifications']) : <String>[];
+    final coachId = (coach['id'] ?? '').toString();
+    final alreadyConnected = _coaches.any((c) => c['coach_id'] == coachId);
+
+    final Color badgeColor;
+    final IconData badgeIcon;
+    final String disciplineTag;
+
+    final norm = _normalizeDiscipline(specialty);
+    if (norm == 'Nutrition & Dietetics') {
+      badgeColor = const Color(0xFF10B981);
+      badgeIcon = Icons.restaurant_menu_rounded;
+      disciplineTag = 'NUTRITION & METABOLISM';
+    } else if (norm == 'Yoga & Mobility') {
+      badgeColor = const Color(0xFF8B5CF6);
+      badgeIcon = Icons.self_improvement_rounded;
+      disciplineTag = 'YOGA & MOBILITY';
+    } else if (norm == 'Cardio & Endurance') {
+      badgeColor = const Color(0xFFF97316);
+      badgeIcon = Icons.directions_run_rounded;
+      disciplineTag = 'CARDIO & ENDURANCE';
+    } else if (norm == 'Physio & Rehab') {
+      badgeColor = const Color(0xFF06B6D4);
+      badgeIcon = Icons.healing_rounded;
+      disciplineTag = 'PHYSIO & REHAB';
+    } else {
+      badgeColor = const Color(0xFF4F46E5);
+      badgeIcon = Icons.fitness_center_rounded;
+      disciplineTag = 'STRENGTH & CONDITIONING';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: badgeColor.withOpacity(0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: badgeColor.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => _openCoachDetailsModal(coach),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Tag Banner
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(badgeIcon, color: badgeColor, size: 13),
+                          const SizedBox(width: 5),
+                          Text(
+                            disciplineTag,
+                            style: GoogleFonts.inter(
+                              color: badgeColor,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hourlyRate.isNotEmpty)
+                      Text(
+                        hourlyRate,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: AppTheme.primary,
                         ),
+                      ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 14),
+
+                // Main Coach Info Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 32,
+                          backgroundImage: NetworkImage(avatar),
+                          backgroundColor: Colors.grey.shade200,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check, size: 10, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.primary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.verified_rounded, size: 15, color: Color(0xFF3B82F6)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF475569),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 3),
+                              Text(
+                                rating.toStringAsFixed(2),
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '($reviewCount)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                width: 3,
+                                height: 3,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFCBD5E1),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.people_alt_rounded, size: 13, color: Color(0xFF64748B)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$activeClients athletes',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Location badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.location_on_rounded, size: 13, color: Color(0xFFE11D48)),
+                      const SizedBox(width: 5),
+                      Text(
+                        locationType.isNotEmpty ? '$location • $locationType' : location,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF334155),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (bio.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    bio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF475569),
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (certs.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: certs.take(2).map((cert) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          cert,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF475569),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: OutlinedButton(
+                        onPressed: () => _openCoachDetailsModal(coach),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primary,
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                        ),
+                        child: Text(
+                          'View Profile',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 6,
+                      child: ElevatedButton.icon(
+                        onPressed: alreadyConnected || _isConnecting
+                            ? null
+                            : () => _connectToCoach(coachId, coachName: name),
+                        icon: Icon(alreadyConnected ? Icons.check_circle_rounded : Icons.bolt_rounded, size: 16),
+                        label: Text(
+                          alreadyConnected ? 'Connected' : 'Connect Coach',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: alreadyConnected ? Colors.grey.shade400 : badgeColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 24),
+      ),
+    );
+  }
 
-        if (_availableCoaches.isNotEmpty) ...[
+  // ── Search & Filter Coaches Directory ──────────────────────────────────────
+  Widget _buildCoachSearchAndFilterSection() {
+    final filtered = _filteredCoaches;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Available SabCoaches',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.primary,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Search & Filter Coaches',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  Text(
+                    'Filter by location, discipline, or keyword',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6366F1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${_availableCoaches.length}',
+                  '${filtered.length}',
                   style: GoogleFonts.inter(
                     color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 1. Keyword / Name Search
+          TextField(
+            controller: _coachSearchController,
+            focusNode: _searchFocusNode,
+            onChanged: (val) {
+              setState(() => _coachSearchQuery = val);
+            },
+            onSubmitted: (val) {
+              _locationFocusNode.requestFocus();
+            },
+            textInputAction: TextInputAction.next,
+            style: GoogleFonts.inter(fontSize: 13.5),
+            decoration: InputDecoration(
+              hintText: 'Search coach name, specialty (e.g. Strength, Diet)...',
+              hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade400),
+              prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF6366F1)),
+              suffixIcon: _coachSearchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      onPressed: () {
+                        _coachSearchController.clear();
+                        setState(() => _coachSearchQuery = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5)),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 2. Location Search Bar with Use Current Location button
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _coachLocationController,
+                  focusNode: _locationFocusNode,
+                  onChanged: (val) => setState(() => _coachLocationQuery = val),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                  style: GoogleFonts.inter(fontSize: 13.5),
+                  decoration: InputDecoration(
+                    hintText: 'City, State or "Remote"...',
+                    hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade400),
+                    prefixIcon: const Icon(Icons.location_on_outlined, size: 20, color: Color(0xFFE11D48)),
+                    suffixIcon: _coachLocationQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              _coachLocationController.clear();
+                              setState(() => _coachLocationQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE11D48), width: 1.5)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Use Current Location Button
+              Tooltip(
+                message: 'Use current location',
+                child: Material(
+                  color: const Color(0xFFE11D48),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _isLoadingLocation ? null : _getCurrentLocation,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      child: _isLoadingLocation
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.my_location_rounded, color: Colors.white, size: 20),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // Search & Filter
-          TextField(
-            onChanged: (val) => setState(() => _coachSearchQuery = val),
-            style: GoogleFonts.inter(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Search coaches by name, specialty...',
-              hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade400),
-              prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF6366F1)),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-            ),
+
+          // 3. Location Type Quick Chips (All / Remote / In-Person & Hybrid)
+          Row(
+            children: [
+              Text('Format:', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['All', 'Remote', 'In-Person / Hybrid'].map((locType) {
+                      final isSel = _selectedLocationFilter == locType;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(
+                            locType,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                              color: isSel ? Colors.white : const Color(0xFF475569),
+                            ),
+                          ),
+                          selected: isSel,
+                          selectedColor: const Color(0xFFE11D48),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          side: BorderSide.none,
+                          onSelected: (_) => setState(() => _selectedLocationFilter = locType),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+
+          // 4. Discipline / Type Horizontal Filter Chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ['All', 'Strength', 'Fat Loss', 'Nutrition', 'Endurance'].map((tag) {
+              children: [
+                'All',
+                'Strength & Conditioning',
+                'Nutrition & Dietetics',
+                'Yoga & Mobility',
+                'Cardio & Endurance',
+                'Physio & Rehab'
+              ].map((tag) {
                 final isSel = _selectedCoachSpecialty == tag;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: FilterChip(
-                    label: Text(tag, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: isSel ? Colors.white : const Color(0xFF64748B))),
+                    label: Text(
+                      tag,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                        color: isSel ? Colors.white : const Color(0xFF475569),
+                      ),
+                    ),
                     selected: isSel,
                     selectedColor: const Color(0xFF6366F1),
-                    backgroundColor: Colors.white,
-                    side: BorderSide(color: isSel ? const Color(0xFF6366F1) : Colors.grey.shade300),
+                    backgroundColor: const Color(0xFFF8FAFC),
+                    side: BorderSide(
+                      color: isSel ? const Color(0xFF6366F1) : const Color(0xFFCBD5E1),
+                    ),
                     onSelected: (_) => setState(() => _selectedCoachSpecialty = tag),
                   ),
                 );
               }).toList(),
             ),
           ),
-          const SizedBox(height: 12),
-          ..._availableCoaches.where((c) {
-            final name = (c['name'] ?? '').toString().toLowerCase();
-            final spec = (c['specialty'] ?? c['title'] ?? '').toString().toLowerCase();
-            final q = _coachSearchQuery.toLowerCase();
-            final matchesQuery = q.isEmpty || name.contains(q) || spec.contains(q);
-            final matchesSpec = _selectedCoachSpecialty == 'All' || spec.contains(_selectedCoachSpecialty.toLowerCase());
-            return matchesQuery && matchesSpec;
-          }).map((c) => _buildAvailableCoachCard(Map<String, dynamic>.from(c as Map))),
+          const SizedBox(height: 18),
+
+          // Active filter indicator / reset
+          if (_coachSearchQuery.isNotEmpty || _coachLocationQuery.isNotEmpty || _selectedCoachSpecialty != 'All' || _selectedLocationFilter != 'All')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Filters applied: ${filtered.length} matches',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      _coachSearchController.clear();
+                      _coachLocationController.clear();
+                      setState(() {
+                        _coachSearchQuery = '';
+                        _coachLocationQuery = '';
+                        _selectedCoachSpecialty = 'All';
+                        _selectedLocationFilter = 'All';
+                      });
+                    },
+                    child: Text(
+                      'Reset All',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFFE11D48)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // List of filtered coaches
+          if (_isLoadingCoaches)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF6366F1), strokeWidth: 2),
+              ),
+            )
+          else if (filtered.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.person_search_rounded, size: 36, color: Color(0xFF94A3B8)),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No Coaches Found',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Try adjusting your search query, location, or discipline filter.',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () => _loadAvailableCoaches(),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text('Reload Directory', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF6366F1),
+                      side: const BorderSide(color: Color(0xFF6366F1)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...filtered.map((c) => _buildAvailableCoachCard(c)),
         ],
+      ),
+    );
+  }
+
+  // ── Explore More Coaches Section (Shown when already connected) ─────────────
+  Widget _buildExploreMoreCoachesSection() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => setState(() => _showExploreMoreCoaches = !_showExploreMoreCoaches),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.explore_rounded, color: Color(0xFF6366F1), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Explore More Specialists',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                          Text(
+                            'Link a Nutritionist, Mobility, or Rehab Coach',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      _showExploreMoreCoaches ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_showExploreMoreCoaches) ...[
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  _buildRecommendedCoachesSection(),
+                  const SizedBox(height: 18),
+                  _buildCoachSearchAndFilterSection(),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvailableCoachCard(Map<String, dynamic> coach) {
+    final name = (coach['name'] ?? 'Coach').toString();
+    final title = (coach['title'] ?? 'Performance Coach').toString();
+    final specialty = (coach['specialty'] ?? coach['discipline'] ?? 'General Fitness').toString();
+    final location = (coach['location'] ?? 'Remote').toString();
+    final locationType = (coach['location_type'] ?? '').toString();
+    final bio = (coach['bio'] ?? '').toString();
+    final avatar = (coach['avatar'] ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400').toString();
+    final rating = (coach['rating'] ?? 4.9).toDouble();
+    final reviewCount = coach['review_count'] ?? 30;
+    final coachId = (coach['id'] ?? '').toString();
+    final alreadyConnected = _coaches.any((c) => c['coach_id'] == coachId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _openCoachDetailsModal(coach),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundImage: NetworkImage(avatar),
+                      backgroundColor: Colors.grey.shade300,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.primary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF3B82F6)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.accent,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            specialty,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_rounded, size: 13, color: Color(0xFFE11D48)),
+                    const SizedBox(width: 4),
+                    Text(
+                      locationType.isNotEmpty ? '$location ($locationType)' : location,
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                    ),
+                    const Spacer(),
+                    const Icon(Icons.star_rounded, size: 14, color: Color(0xFFF59E0B)),
+                    const SizedBox(width: 2),
+                    Text(
+                      rating.toStringAsFixed(2),
+                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppTheme.primary),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '($reviewCount)',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+                if (bio.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    bio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B), height: 1.3),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _openCoachDetailsModal(coach),
+                      icon: const Icon(Icons.info_outline_rounded, size: 14),
+                      label: Text('Full Profile', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: alreadyConnected || _isConnecting
+                          ? null
+                          : () => _connectToCoach(coachId, coachName: name),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: alreadyConnected ? Colors.grey.shade400 : AppTheme.accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      child: Text(
+                        alreadyConnected ? 'Connected' : 'Connect Coach',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openCoachDetailsModal(Map<String, dynamic> coach) {
+    final name = (coach['name'] ?? 'Coach').toString();
+    final title = (coach['title'] ?? 'Performance Coach').toString();
+    final specialty = (coach['specialty'] ?? coach['discipline'] ?? '').toString();
+    final location = (coach['location'] ?? 'Remote').toString();
+    final locationType = (coach['location_type'] ?? '').toString();
+    final bio = (coach['bio'] ?? '').toString();
+    final avatar = (coach['avatar'] ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400').toString();
+    final rating = (coach['rating'] ?? 4.9).toDouble();
+    final reviewCount = coach['review_count'] ?? 40;
+    final activeClients = coach['active_clients'] ?? 15;
+    final expYears = coach['experience_years'] ?? 8;
+    final hourlyRate = (coach['hourly_rate'] ?? '').toString();
+    final certs = coach['certifications'] is List ? List<String>.from(coach['certifications']) : <String>[];
+    final coachId = (coach['id'] ?? '').toString();
+    final alreadyConnected = _coaches.any((c) => c['coach_id'] == coachId);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 36,
+                            backgroundImage: NetworkImage(avatar),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        name,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppTheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF3B82F6)),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  title,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.accent,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      rating.toStringAsFixed(2),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '($reviewCount reviews)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Quick info stats
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _modalQuickStat('Discipline', specialty),
+                            Container(width: 1, height: 30, color: const Color(0xFFCBD5E1)),
+                            _modalQuickStat('Experience', '$expYears+ Years'),
+                            Container(width: 1, height: 30, color: const Color(0xFFCBD5E1)),
+                            _modalQuickStat('Active Athletes', '$activeClients'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Location & Pricing info
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.location_on_rounded, size: 16, color: Color(0xFFE11D48)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      locationType.isNotEmpty ? '$location ($locationType)' : location,
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (hourlyRate.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                hourlyRate,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  color: const Color(0xFF047857),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // About / Bio
+                      Text(
+                        'About Coach',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        bio.isNotEmpty ? bio : 'Certified fitness and health professional on SabCoach ecosystem.',
+                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.45),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Certifications
+                      if (certs.isNotEmpty) ...[
+                        Text(
+                          'Certifications & Credentials',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: certs.map((c) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.2)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.verified_outlined, size: 13, color: Color(0xFF6366F1)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    c,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF4338CA),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // Connect button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: alreadyConnected || _isConnecting
+                              ? null
+                              : () async {
+                                  Navigator.pop(ctx);
+                                  await _connectToCoach(coachId, coachName: name);
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: alreadyConnected ? Colors.grey.shade400 : AppTheme.accent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            alreadyConnected ? 'Already Connected' : 'Connect with Coach',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _modalQuickStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, color: AppTheme.primary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+        ),
       ],
     );
   }
@@ -3066,179 +4803,74 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildStep(int num, String title, String desc, Color color, {bool isLast = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                shape: BoxShape.circle,
-                border: Border.all(color: color.withOpacity(0.3)),
-              ),
-              child: Center(
-                child: Text(
-                  '$num',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ),
-            ),
-            if (!isLast)
-              Container(
-                width: 1.5,
-                height: 30,
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                color: const Color(0xFFE2E8F0),
-              ),
-          ],
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                    color: AppTheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  desc,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: const Color(0xFF64748B),
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+  // ── Helper: 3 Top Distinct Discipline Coaches ──────────────────────────────
+  List<Map<String, dynamic>> _getTop3RecommendedCoaches() {
+    if (_recommendedCoaches.isNotEmpty) {
+      return _recommendedCoaches
+          .whereType<Map>()
+          .map((c) => Map<String, dynamic>.from(c))
+          .take(3)
+          .toList();
+    }
+    // Fallback: pick distinct disciplines from available coaches
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final raw in _availableCoaches) {
+      if (raw is! Map) continue;
+      final c = Map<String, dynamic>.from(raw);
+      final disc = _normalizeDiscipline((c['discipline'] ?? c['specialty'] ?? c['title'] ?? '').toString());
+      if (!seen.contains(disc)) {
+        seen.add(disc);
+        result.add(c);
+        if (result.length >= 3) break;
+      }
+    }
+    if (result.length < 3) {
+      for (final raw in _availableCoaches) {
+        if (raw is! Map) continue;
+        final c = Map<String, dynamic>.from(raw);
+        if (!result.any((x) => x['id'] == c['id'])) {
+          result.add(c);
+          if (result.length >= 3) break;
+        }
+      }
+    }
+    return result;
   }
 
-  Widget _buildAvailableCoachCard(Map<String, dynamic> coach) {
-    final name = coach['name'] ?? 'Coach';
-    final title = coach['title'] ?? 'Performance Coach';
-    final specialty = coach['specialty'] ?? 'Nutrition & Strength';
-    final bio = coach['bio'] ?? '';
-    final avatar = coach['avatar'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
-    final code = coach['invite_code'] ?? 'SAB-DEFAULT';
+  String _normalizeDiscipline(String val) {
+    final v = val.toLowerCase();
+    if (v.contains('nutrition') || v.contains('diet') || v.contains('metabol')) return 'Nutrition & Dietetics';
+    if (v.contains('yoga') || v.contains('mobility') || v.contains('stretch')) return 'Yoga & Mobility';
+    if (v.contains('cardio') || v.contains('endurance') || v.contains('run')) return 'Cardio & Endurance';
+    if (v.contains('physio') || v.contains('rehab') || v.contains('therapy')) return 'Physio & Rehab';
+    return 'Strength & Conditioning';
+  }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundImage: NetworkImage(avatar),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.accent,
-                      ),
-                    ),
-                    Text(
-                      specialty,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (bio.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              bio,
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569), height: 1.35),
-            ),
-          ],
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Code: $code',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                    color: const Color(0xFF475569),
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => _connectWithCode(code, coachId: coach['id']),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                child: Text('Connect Coach', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  List<Map<String, dynamic>> get _filteredCoaches {
+    return _availableCoaches.whereType<Map>().map((c) => Map<String, dynamic>.from(c)).where((c) {
+      final name = (c['name'] ?? '').toString().toLowerCase();
+      final spec = (c['specialty'] ?? c['title'] ?? c['discipline'] ?? '').toString().toLowerCase();
+      final bio = (c['bio'] ?? '').toString().toLowerCase();
+      final loc = (c['location'] ?? '').toString().toLowerCase();
+      final locType = (c['location_type'] ?? '').toString().toLowerCase();
+
+      final q = _coachSearchQuery.trim().toLowerCase();
+      final matchesQuery = q.isEmpty || name.contains(q) || spec.contains(q) || bio.contains(q);
+
+      final locQ = _coachLocationQuery.trim().toLowerCase();
+      final matchesLocQuery = locQ.isEmpty || loc.contains(locQ) || locType.contains(locQ);
+
+      final matchesLocTypeChip = _selectedLocationFilter == 'All' ||
+          (_selectedLocationFilter == 'Remote' && (locType.contains('online') || locType.contains('remote') || loc.contains('remote'))) ||
+          (_selectedLocationFilter == 'In-Person / Hybrid' && (locType.contains('hybrid') || locType.contains('in-person') || locType.contains('telehealth')));
+
+      final matchesSpec = _selectedCoachSpecialty == 'All' ||
+          spec.contains(_selectedCoachSpecialty.toLowerCase()) ||
+          (c['discipline'] ?? '').toString().toLowerCase().contains(_selectedCoachSpecialty.toLowerCase());
+
+      return matchesQuery && matchesLocQuery && matchesLocTypeChip && matchesSpec;
+    }).toList();
   }
 }
 
