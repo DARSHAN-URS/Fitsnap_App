@@ -76,7 +76,9 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   }
 
   Future<void> _refreshAll() async {
-    await _loadCoachData();
+    final prefCoachId = await PreferencesHelper.readString('connected_coach_id');
+    final prefClientId = await PreferencesHelper.readString('connected_client_id');
+    await _loadCoachData(coachId: prefCoachId, clientId: prefClientId);
     if (mounted) {
       await _loadSabcoachUpdates();
     }
@@ -236,6 +238,35 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             _unreadCoachingCount = filtered.where((n) => n['is_read'] != true).length;
           });
         }
+
+        // Auto-link coach if an accepted coaching notification is present in inbox
+        if (!_hasCoach && mounted) {
+          final acceptedNotif = filtered.firstWhere(
+            (n) {
+              final t = (n['type'] ?? n['notif_type'] ?? '').toString();
+              final ed = (n['extra_data'] ?? n['data']) as Map? ?? {};
+              final st = (ed['status'] ?? '').toString().toLowerCase();
+              final title = (n['title'] ?? '').toString().toLowerCase();
+              return t == 'coaching_accepted' || st == 'accepted' || title.contains('accepted');
+            },
+            orElse: () => {},
+          );
+          if (acceptedNotif.isNotEmpty) {
+            final ed = (acceptedNotif['extra_data'] ?? acceptedNotif['data']) as Map? ?? {};
+            final cId = (ed['client_id'] ?? acceptedNotif['client_id'] ?? '').toString();
+            final coachId = (ed['coach_id'] ?? acceptedNotif['coach_id'] ?? '').toString();
+            if (cId.isNotEmpty) {
+              await PreferencesHelper.saveString('connected_client_id', cId);
+            }
+            if (coachId.isNotEmpty) {
+              await PreferencesHelper.saveString('connected_coach_id', coachId);
+            }
+            await _loadCoachData(
+              coachId: coachId.isNotEmpty ? coachId : null,
+              clientId: cId.isNotEmpty ? cId : null,
+            );
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error loading SabCoach updates: $e');
@@ -257,7 +288,9 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   Future<void> _loadCoachData({String? coachId, String? clientId}) async {
     setState(() => _isLoading = true);
     try {
-      final res = await ApiService.getMyCoach(coachId: coachId, clientId: clientId);
+      final effectiveCoachId = coachId ?? await PreferencesHelper.readString('connected_coach_id');
+      final effectiveClientId = clientId ?? await PreferencesHelper.readString('connected_client_id');
+      final res = await ApiService.getMyCoach(coachId: effectiveCoachId, clientId: effectiveClientId);
       if (res['success'] == true) {
         final List<dynamic> rawCoaches = res['coaches'] is List ? res['coaches'] : [];
         final List<Map<String, dynamic>> coachesList = rawCoaches
@@ -265,8 +298,8 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             .map((c) => Map<String, dynamic>.from(c))
             .toList();
 
-        final bool hasCoach = res['has_coach'] == true || coachesList.isNotEmpty;
-        final targetCoachId = coachId ??
+        final bool hasCoach = res['has_coach'] == true || coachesList.isNotEmpty || res['coach'] != null;
+        final targetCoachId = effectiveCoachId ??
             res['selected_coach_id']?.toString() ??
             _selectedCoachId ??
             (coachesList.isNotEmpty ? coachesList.first['coach_id']?.toString() : null);
@@ -520,23 +553,37 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
-      if (accept && res['client'] != null && mounted) {
-        setState(() {
-          _hasCoach = true;
-          _client = Map<String, dynamic>.from(res['client']);
-        });
+      final coachId = (res['coach']?['id'] ?? res['client']?['coach_id'] ?? '').toString();
+      if (accept) {
+        if (coachId.isNotEmpty) {
+          await PreferencesHelper.saveString('connected_coach_id', coachId);
+        }
+        await PreferencesHelper.saveString('connected_client_id', clientId);
+        if (mounted) {
+          setState(() {
+            _hasCoach = true;
+            if (coachId.isNotEmpty) _selectedCoachId = coachId;
+            if (res['coach'] != null) _coach = Map<String, dynamic>.from(res['coach']);
+            if (res['client'] != null) _client = Map<String, dynamic>.from(res['client']);
+          });
+        }
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(accept ? 'Coaching request accepted! Connected.' : 'Coaching request declined.'),
-          backgroundColor: accept ? AppTheme.neonEmerald : Colors.grey.shade800,
-        ),
-      );
-      await _refreshAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(accept ? 'Coaching request accepted! Connected.' : 'Coaching request declined.'),
+            backgroundColor: accept ? AppTheme.neonEmerald : Colors.grey.shade800,
+          ),
+        );
+      }
+      await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId);
+      if (mounted) await _loadSabcoachUpdates();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res['error'] ?? 'Action failed')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['error'] ?? 'Action failed')),
+        );
+      }
     }
   }
 
@@ -1230,21 +1277,23 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                   );
                   if (notifId.isNotEmpty) await ApiService.markNotificationRead(notifId);
 
-                  if (res['success'] == true) {
-                    if (coachId.isNotEmpty) {
-                      await PreferencesHelper.saveString('connected_coach_id', coachId);
-                    }
-                    await PreferencesHelper.saveString('connected_client_id', clientId);
-                    if (mounted) {
-                      setState(() {
-                        _hasCoach = true;
-                        if (coachId.isNotEmpty) _selectedCoachId = coachId;
-                        if (res['client'] != null) _client = Map<String, dynamic>.from(res['client']);
-                      });
-                    }
+                  final resolvedCoachId = coachId.isNotEmpty
+                      ? coachId
+                      : (res['coach']?['id'] ?? res['client']?['coach_id'] ?? '').toString();
+                  if (resolvedCoachId.isNotEmpty) {
+                    await PreferencesHelper.saveString('connected_coach_id', resolvedCoachId);
+                  }
+                  await PreferencesHelper.saveString('connected_client_id', clientId);
+                  if (mounted) {
+                    setState(() {
+                      _hasCoach = true;
+                      if (resolvedCoachId.isNotEmpty) _selectedCoachId = resolvedCoachId;
+                      if (res['coach'] != null) _coach = Map<String, dynamic>.from(res['coach']);
+                      if (res['client'] != null) _client = Map<String, dynamic>.from(res['client']);
+                    });
                   }
 
-                  await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId);
+                  await _loadCoachData(coachId: resolvedCoachId.isNotEmpty ? resolvedCoachId : null, clientId: clientId);
                   if (mounted) await _loadSabcoachUpdates();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1266,6 +1315,40 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               ),
             ),
           ],
+        );
+      } else if (type == 'coaching_accepted' || extraData['status'] == 'accepted' || (n['title'] ?? '').toString().contains('Accepted')) {
+        actionWidget = SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              if (clientId.isNotEmpty) {
+                await PreferencesHelper.saveString('connected_client_id', clientId);
+              }
+              if (coachId.isNotEmpty) {
+                await PreferencesHelper.saveString('connected_coach_id', coachId);
+              }
+              if (notifId.isNotEmpty) {
+                await ApiService.markNotificationRead(notifId);
+              }
+              setState(() {
+                _hasCoach = true;
+                if (coachId.isNotEmpty) _selectedCoachId = coachId;
+              });
+              await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId.isNotEmpty ? clientId : null);
+              if (mounted) {
+                _openChatModal();
+              }
+            },
+            icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+            label: Text('Open Coach & Start Chat', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12.5)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
         );
       } else if (type == 'program_assigned' || type == 'program_shared') {
         actionWidget = SizedBox(
@@ -1309,6 +1392,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               _sabcoachUpdates[i]['is_read'] = true;
               _unreadCoachingCount = _sabcoachUpdates.where((x) => x['is_read'] != true).length;
             });
+          }
+          if (type == 'coaching_accepted' || extraData['status'] == 'accepted' || (n['title'] ?? '').toString().contains('Accepted')) {
+            if (clientId.isNotEmpty) await PreferencesHelper.saveString('connected_client_id', clientId);
+            if (coachId.isNotEmpty) await PreferencesHelper.saveString('connected_coach_id', coachId);
+            setState(() => _hasCoach = true);
+            await _loadCoachData(coachId: coachId.isNotEmpty ? coachId : null, clientId: clientId.isNotEmpty ? clientId : null);
+            if (mounted) _openChatModal();
           }
         },
       ));

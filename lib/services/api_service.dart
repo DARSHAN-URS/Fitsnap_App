@@ -272,6 +272,9 @@ class ApiService {
         final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
         if (refreshToken != null) setRefreshToken(refreshToken);
+        try {
+          await PreferencesHelper.saveString('user_email', email);
+        } catch (_) {}
         return {'success': true, 'data': data};
       }
       try {
@@ -300,6 +303,9 @@ class ApiService {
         final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
         if (refreshToken != null) setRefreshToken(refreshToken);
+        try {
+          await PreferencesHelper.saveString('user_email', email);
+        } catch (_) {}
         return {'success': true, 'data': data};
       }
       try {

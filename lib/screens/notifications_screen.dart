@@ -1,3 +1,4 @@
+import '../utils/preferences_helper.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -377,11 +378,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                           final clientId = (extraData?['client_id'] ?? '').toString();
                                                           final coachId = (extraData?['coach_id'] ?? '').toString();
                                                           if (clientId.isNotEmpty) {
-                                                            await ApiService.respondCoachingRequest(
+                                                            final res = await ApiService.respondCoachingRequest(
                                                               clientId: clientId,
                                                               accept: true,
                                                               coachId: coachId.isNotEmpty ? coachId : null,
                                                             );
+                                                            final resolvedCoachId = coachId.isNotEmpty
+                                                                ? coachId
+                                                                : (res['coach']?['id'] ?? res['client']?['coach_id'] ?? '').toString();
+                                                            if (resolvedCoachId.isNotEmpty) {
+                                                              await PreferencesHelper.saveString('connected_coach_id', resolvedCoachId);
+                                                            }
+                                                            await PreferencesHelper.saveString('connected_client_id', clientId);
                                                           }
                                                           if (notifId.isNotEmpty) {
                                                             _markRead(notifId, index);
@@ -411,33 +419,69 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                               ],
                                             );
                                           } else {
+                                            final bool isAccepted = extraData?['status'] == 'accepted' || (item['notif_type'] ?? item['type']) == 'coaching_accepted' || (item['title'] ?? '').toString().contains('Accepted');
                                             return Padding(
                                               padding: const EdgeInsets.only(top: 8),
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: (extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald).withOpacity(0.12),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      extraData?['status'] == 'declined' ? Icons.cancel_outlined : Icons.check_circle_rounded,
-                                                      size: 14,
-                                                      color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: (extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald).withOpacity(0.12),
+                                                      borderRadius: BorderRadius.circular(8),
                                                     ),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      extraData?['status'] == 'declined' ? 'Request Declined' : 'Request Accepted & Linked',
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 11,
-                                                        fontWeight: FontWeight.w600,
-                                                        color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          extraData?['status'] == 'declined' ? Icons.cancel_outlined : Icons.check_circle_rounded,
+                                                          size: 14,
+                                                          color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                                        ),
+                                                        const SizedBox(width: 6),
+                                                        Text(
+                                                          extraData?['status'] == 'declined' ? 'Request Declined' : 'Request Accepted & Linked',
+                                                          style: GoogleFonts.inter(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: extraData?['status'] == 'declined' ? Colors.grey : AppTheme.neonEmerald,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  if (isAccepted) ...[
+                                                    const SizedBox(height: 8),
+                                                    SizedBox(
+                                                      width: double.infinity,
+                                                      child: ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final clientId = (extraData?['client_id'] ?? '').toString();
+                                                          final coachId = (extraData?['coach_id'] ?? '').toString();
+                                                          if (clientId.isNotEmpty) {
+                                                            await PreferencesHelper.saveString('connected_client_id', clientId);
+                                                          }
+                                                          if (coachId.isNotEmpty) {
+                                                            await PreferencesHelper.saveString('connected_coach_id', coachId);
+                                                          }
+                                                          if (context.mounted) {
+                                                            Navigator.pop(context, true);
+                                                          }
+                                                        },
+                                                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 14),
+                                                        label: Text('Open Coach & Start Chat', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: AppTheme.neonEmerald,
+                                                          foregroundColor: Colors.white,
+                                                          elevation: 0,
+                                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
-                                                ),
+                                                ],
                                               ),
                                             );
                                           }
