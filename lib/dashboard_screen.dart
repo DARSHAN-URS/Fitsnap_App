@@ -1333,7 +1333,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       extendBody: true, // Let content scroll behind the floating bottom bar
-      resizeToAvoidBottomInset: false, // Prevent keyboard from causing layout glitch
+      resizeToAvoidBottomInset: false, // Prevent keyboard from resizing Scaffold and causing layout glitch
       body: Stack(
         children: [
           // Global Background Gradient
@@ -1366,7 +1366,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ],
           ),
           
-          // Floating Bottom Navigation Bar (Footer)
+          // Floating Bottom Navigation Bar (Footer) sits naturally at bottom
           Positioned(
             left: 0,
             right: 0,

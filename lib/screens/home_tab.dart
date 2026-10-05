@@ -623,7 +623,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
       backgroundColor: Colors.white,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + MediaQuery.of(context).viewInsets.bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
         children: [

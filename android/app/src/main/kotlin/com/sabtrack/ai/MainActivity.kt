@@ -11,13 +11,11 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.os.Bundle
-import androidx.activity.enableEdgeToEdge
 
 class MainActivity: FlutterFragmentActivity() {
     private val CHANNEL = "com.sabtrack.ai/steps"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
     }
 

@@ -844,19 +844,16 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       return _buildLoadingSkeleton();
     }
 
-    // Fix keyboard glitch: use GestureDetector to dismiss keyboard on tap outside
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: RefreshIndicator(
-        onRefresh: _refreshAll,
-        color: AppTheme.accent,
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          // keyboardDismissBehavior prevents keyboard from staying open and causing glitch
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
-          child: Column(
+    final double bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      color: AppTheme.accent,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + bottomInset),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(),
@@ -896,8 +893,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   // ── Loading Skeleton ────────────────────────────────────────────────────────

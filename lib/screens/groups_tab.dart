@@ -1748,7 +1748,7 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
       children: [
         _buildMeshBackground(),
         SingleChildScrollView(
-          padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + MediaQuery.of(context).viewInsets.bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
