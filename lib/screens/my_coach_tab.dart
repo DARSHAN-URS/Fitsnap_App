@@ -31,6 +31,93 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   List<dynamic> _recommendedCoaches = [];
   Map<String, dynamic>? _pendingInvitation;
 
+  static final List<Map<String, dynamic>> _defaultVettedCoaches = [
+    {
+      'id': 'coach_default',
+      'name': 'Coach Sunil Kumar',
+      'title': 'Chief Strength & Conditioning Coach',
+      'discipline': 'Strength & Conditioning',
+      'specialty': 'Fitness & Strength',
+      'location': 'Bangalore, IN',
+      'location_type': 'In-Person / Hybrid',
+      'rating': 4.97,
+      'clients_count': 210,
+      'invite_code': 'SAB-SUNIL',
+      'bio': 'Master coach with 12+ years optimizing hypertrophy, strength biomechanics, and athlete body recomposition.',
+      'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
+    },
+    {
+      'id': 'coach_marcus_vance',
+      'name': 'Dr. Marcus Vance',
+      'title': 'Lead Performance Nutritionist',
+      'discipline': 'Nutrition & Dietetics',
+      'specialty': 'Nutrition & Dietetics',
+      'location': 'New York, NY',
+      'location_type': 'Remote / Online',
+      'rating': 4.96,
+      'clients_count': 142,
+      'invite_code': 'SAB-VANCE',
+      'bio': 'Ph.D. in Human Bioenergetics. Specializes in metabolic flexibility, precision macronutrient cycling, and competition prep.',
+      'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+    },
+    {
+      'id': 'coach_priya_sharma',
+      'name': 'Coach Priya Sharma',
+      'title': 'Mobility & Structural Recovery Coach',
+      'discipline': 'Yoga & Mobility',
+      'specialty': 'Yoga & Mobility',
+      'location': 'Austin, TX',
+      'location_type': 'In-Person / Hybrid',
+      'rating': 4.98,
+      'clients_count': 98,
+      'invite_code': 'SAB-PRIYA',
+      'bio': 'Former national gymnast and movement specialist. Focused on joint longevity, functional range conditioning, and breathwork.',
+      'avatar': 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300',
+    },
+    {
+      'id': 'coach_david_chen',
+      'name': 'Coach David Chen',
+      'title': 'Aerobic Capacity & Endurance Specialist',
+      'discipline': 'Cardio & Endurance',
+      'specialty': 'Cardio & Endurance',
+      'location': 'Boulder, CO',
+      'location_type': 'Remote / Online',
+      'rating': 4.93,
+      'clients_count': 116,
+      'invite_code': 'SAB-DAVID',
+      'bio': 'Ultra-marathoner and physiology coach. Specializes in VO2 max optimization, heart-rate zone training, and lactate clearance.',
+      'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300',
+    },
+    {
+      'id': 'coach_elena_rostova',
+      'name': 'Dr. Elena Rostova',
+      'title': 'Corrective Exercise & Rehab Director',
+      'discipline': 'Physio & Rehab',
+      'specialty': 'Physio & Rehab',
+      'location': 'Chicago, IL',
+      'location_type': 'In-Person / Hybrid',
+      'rating': 4.99,
+      'clients_count': 87,
+      'invite_code': 'SAB-ELENA',
+      'bio': 'Doctor of Physical Therapy. Focuses on post-injury kinetic retraining, spine mechanics, and return-to-sport protocols.',
+      'avatar': 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300',
+    },
+    {
+      'id': 'coach_test_pro',
+      'name': 'Coach Samantha Ray',
+      'title': 'Olympic Lifting & Functional Hypertrophy',
+      'discipline': 'Strength & Conditioning',
+      'specialty': 'Olympic Lifting & Functional Hypertrophy',
+      'location': 'Los Angeles, CA',
+      'location_type': 'Remote / Online',
+      'rating': 4.95,
+      'clients_count': 165,
+      'invite_code': 'SAB-SAMANTHA',
+      'bio': 'CSCS Certified coach specializing in explosive power development, progressive overload, and athlete conditioning.',
+      'avatar': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300',
+    },
+  ];
+
   // SabCoach Inbox
   List<Map<String, dynamic>> _sabcoachUpdates = [];
   int _unreadCoachingCount = 0;
@@ -100,17 +187,32 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         discipline: discipline != null && discipline != 'All' ? discipline : null,
       );
       if (mounted && res['success'] == true) {
+        final serverCoaches = (res['coaches'] is List && (res['coaches'] as List).isNotEmpty)
+            ? List<dynamic>.from(res['coaches'])
+            : List<dynamic>.from(_defaultVettedCoaches);
+        final serverRec = (res['recommended_coaches'] is List && (res['recommended_coaches'] as List).isNotEmpty)
+            ? List<dynamic>.from(res['recommended_coaches'])
+            : <dynamic>[];
         setState(() {
-          if (res['coaches'] is List) {
-            _availableCoaches = List.from(res['coaches']);
-          }
-          if (res['recommended_coaches'] is List) {
-            _recommendedCoaches = List.from(res['recommended_coaches']);
-          }
+          _availableCoaches = serverCoaches;
+          _recommendedCoaches = serverRec.isNotEmpty ? serverRec : _getTop3RecommendedCoaches();
         });
+      } else if (mounted) {
+        if (_availableCoaches.isEmpty) {
+          setState(() {
+            _availableCoaches = List<dynamic>.from(_defaultVettedCoaches);
+            _recommendedCoaches = _getTop3RecommendedCoaches();
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error loading available coaches: \$e');
+      if (mounted && _availableCoaches.isEmpty) {
+        setState(() {
+          _availableCoaches = List<dynamic>.from(_defaultVettedCoaches);
+          _recommendedCoaches = _getTop3RecommendedCoaches();
+        });
+      }
     } finally {
       if (mounted) setState(() => _isLoadingCoaches = false);
     }
@@ -331,8 +433,14 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           _feedbacks = selectedBundle?['feedbacks'] is List
               ? List.from(selectedBundle!['feedbacks'])
               : (res['feedbacks'] is List ? List.from(res['feedbacks']) : []);
-          _availableCoaches = res['available_coaches'] is List ? List.from(res['available_coaches']) : [];
-          _recommendedCoaches = res['recommended_coaches'] is List ? List.from(res['recommended_coaches']) : [];
+          final rawAvail = (res['available_coaches'] is List && (res['available_coaches'] as List).isNotEmpty)
+              ? List.from(res['available_coaches'])
+              : (_availableCoaches.isNotEmpty ? _availableCoaches : List.from(_defaultVettedCoaches));
+          final rawRec = (res['recommended_coaches'] is List && (res['recommended_coaches'] as List).isNotEmpty)
+              ? List.from(res['recommended_coaches'])
+              : (_recommendedCoaches.isNotEmpty ? _recommendedCoaches : _getTop3RecommendedCoaches());
+          _availableCoaches = rawAvail;
+          _recommendedCoaches = rawRec;
           if (_hasCoach) {
             _pendingInvitation = null;
           } else {

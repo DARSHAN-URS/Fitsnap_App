@@ -2108,6 +2108,8 @@ class ApiService {
     String? email,
   }) async {
     try {
+      final currentUid = await getCurrentUserId();
+      final userEmail = (email != null && email.isNotEmpty) ? email : await getCurrentUserEmail();
       final response = await http.post(
         Uri.parse('$baseUrl/coach/connect-coach'),
         headers: {
@@ -2118,7 +2120,8 @@ class ApiService {
           if (inviteCode != null && inviteCode.isNotEmpty) 'invite_code': inviteCode,
           if (coachId != null) 'coach_id': coachId,
           if (name != null) 'name': name,
-          if (email != null) 'email': email,
+          if (userEmail != null && userEmail.isNotEmpty) 'email': userEmail,
+          if (currentUid != null && currentUid.isNotEmpty) 'user_id': currentUid,
         }),
       );
       if (response.statusCode == 200) {
