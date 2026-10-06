@@ -612,7 +612,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                   child: TextField(
                     controller: _promoController,
                     focusNode: _promoFocusNode,
-                    onTapOutside: (_) => _promoFocusNode.unfocus(),
                     textCapitalization: TextCapitalization.characters,
                     scrollPadding: const EdgeInsets.only(bottom: 80),
                     style: GoogleFonts.inter(

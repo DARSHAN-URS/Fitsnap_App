@@ -17,106 +17,27 @@ class MyCoachTab extends StatefulWidget {
   State<MyCoachTab> createState() => _MyCoachTabState();
 }
 
-class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateMixin {
+class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isLoading = true;
   bool _hasCoach = false;
+  int _selectedCoachTabSection = 0; // 0: Search & Connect, 1: My Coaches
+  bool _userInteractedWithTab = false;
   List<Map<String, dynamic>> _coaches = [];
   String? _selectedCoachId;
   Map<String, dynamic>? _coach;
   Map<String, dynamic>? _client;
   Map<String, dynamic>? _todayPlan;
+  Map<String, dynamic>? _assignedProgram;
+  final Set<String> _finishedMealKeys = {};
+  final Set<String> _finishedWorkoutKeys = {};
   Map<String, dynamic>? _adherence;
   List<dynamic> _feedbacks = [];
   List<dynamic> _availableCoaches = [];
   List<dynamic> _recommendedCoaches = [];
   Map<String, dynamic>? _pendingInvitation;
-
-  static final List<Map<String, dynamic>> _defaultVettedCoaches = [
-    {
-      'id': 'coach_default',
-      'name': 'Coach Sunil Kumar',
-      'title': 'Chief Strength & Conditioning Coach',
-      'discipline': 'Strength & Conditioning',
-      'specialty': 'Fitness & Strength',
-      'location': 'Bangalore, IN',
-      'location_type': 'In-Person / Hybrid',
-      'rating': 4.97,
-      'clients_count': 210,
-      'invite_code': 'SAB-SUNIL',
-      'bio': 'Master coach with 12+ years optimizing hypertrophy, strength biomechanics, and athlete body recomposition.',
-      'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
-    },
-    {
-      'id': 'coach_marcus_vance',
-      'name': 'Dr. Marcus Vance',
-      'title': 'Lead Performance Nutritionist',
-      'discipline': 'Nutrition & Dietetics',
-      'specialty': 'Nutrition & Dietetics',
-      'location': 'New York, NY',
-      'location_type': 'Remote / Online',
-      'rating': 4.96,
-      'clients_count': 142,
-      'invite_code': 'SAB-VANCE',
-      'bio': 'Ph.D. in Human Bioenergetics. Specializes in metabolic flexibility, precision macronutrient cycling, and competition prep.',
-      'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-    },
-    {
-      'id': 'coach_priya_sharma',
-      'name': 'Coach Priya Sharma',
-      'title': 'Mobility & Structural Recovery Coach',
-      'discipline': 'Yoga & Mobility',
-      'specialty': 'Yoga & Mobility',
-      'location': 'Austin, TX',
-      'location_type': 'In-Person / Hybrid',
-      'rating': 4.98,
-      'clients_count': 98,
-      'invite_code': 'SAB-PRIYA',
-      'bio': 'Former national gymnast and movement specialist. Focused on joint longevity, functional range conditioning, and breathwork.',
-      'avatar': 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300',
-    },
-    {
-      'id': 'coach_david_chen',
-      'name': 'Coach David Chen',
-      'title': 'Aerobic Capacity & Endurance Specialist',
-      'discipline': 'Cardio & Endurance',
-      'specialty': 'Cardio & Endurance',
-      'location': 'Boulder, CO',
-      'location_type': 'Remote / Online',
-      'rating': 4.93,
-      'clients_count': 116,
-      'invite_code': 'SAB-DAVID',
-      'bio': 'Ultra-marathoner and physiology coach. Specializes in VO2 max optimization, heart-rate zone training, and lactate clearance.',
-      'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300',
-    },
-    {
-      'id': 'coach_elena_rostova',
-      'name': 'Dr. Elena Rostova',
-      'title': 'Corrective Exercise & Rehab Director',
-      'discipline': 'Physio & Rehab',
-      'specialty': 'Physio & Rehab',
-      'location': 'Chicago, IL',
-      'location_type': 'In-Person / Hybrid',
-      'rating': 4.99,
-      'clients_count': 87,
-      'invite_code': 'SAB-ELENA',
-      'bio': 'Doctor of Physical Therapy. Focuses on post-injury kinetic retraining, spine mechanics, and return-to-sport protocols.',
-      'avatar': 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300',
-    },
-    {
-      'id': 'coach_test_pro',
-      'name': 'Coach Samantha Ray',
-      'title': 'Olympic Lifting & Functional Hypertrophy',
-      'discipline': 'Strength & Conditioning',
-      'specialty': 'Olympic Lifting & Functional Hypertrophy',
-      'location': 'Los Angeles, CA',
-      'location_type': 'Remote / Online',
-      'rating': 4.95,
-      'clients_count': 165,
-      'invite_code': 'SAB-SAMANTHA',
-      'bio': 'CSCS Certified coach specializing in explosive power development, progressive overload, and athlete conditioning.',
-      'avatar': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300',
-    },
-  ];
 
   // SabCoach Inbox
   List<Map<String, dynamic>> _sabcoachUpdates = [];
@@ -187,30 +108,28 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         discipline: discipline != null && discipline != 'All' ? discipline : null,
       );
       if (mounted && res['success'] == true) {
-        final serverCoaches = (res['coaches'] is List && (res['coaches'] as List).isNotEmpty)
+        final serverCoaches = (res['coaches'] is List)
             ? List<dynamic>.from(res['coaches'])
-            : List<dynamic>.from(_defaultVettedCoaches);
-        final serverRec = (res['recommended_coaches'] is List && (res['recommended_coaches'] as List).isNotEmpty)
+            : <dynamic>[];
+        final serverRec = (res['recommended_coaches'] is List)
             ? List<dynamic>.from(res['recommended_coaches'])
             : <dynamic>[];
         setState(() {
           _availableCoaches = serverCoaches;
-          _recommendedCoaches = serverRec.isNotEmpty ? serverRec : _getTop3RecommendedCoaches();
+          _recommendedCoaches = serverRec;
         });
       } else if (mounted) {
-        if (_availableCoaches.isEmpty) {
-          setState(() {
-            _availableCoaches = List<dynamic>.from(_defaultVettedCoaches);
-            _recommendedCoaches = _getTop3RecommendedCoaches();
-          });
-        }
+        setState(() {
+          _availableCoaches = [];
+          _recommendedCoaches = [];
+        });
       }
     } catch (e) {
-      debugPrint('Error loading available coaches: \$e');
-      if (mounted && _availableCoaches.isEmpty) {
+      debugPrint('Error loading available coaches: $e');
+      if (mounted) {
         setState(() {
-          _availableCoaches = List<dynamic>.from(_defaultVettedCoaches);
-          _recommendedCoaches = _getTop3RecommendedCoaches();
+          _availableCoaches = [];
+          _recommendedCoaches = [];
         });
       }
     } finally {
@@ -427,24 +346,30 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           _todayPlan = selectedBundle?['today_plan'] != null
               ? Map<String, dynamic>.from(selectedBundle!['today_plan'])
               : (res['today_plan'] != null ? Map<String, dynamic>.from(res['today_plan']) : null);
+          _assignedProgram = selectedBundle?['assigned_program'] != null
+              ? Map<String, dynamic>.from(selectedBundle!['assigned_program'])
+              : (res['assigned_program'] != null ? Map<String, dynamic>.from(res['assigned_program']) : null);
           _adherence = selectedBundle?['adherence'] != null
               ? Map<String, dynamic>.from(selectedBundle!['adherence'])
               : (res['adherence'] != null ? Map<String, dynamic>.from(res['adherence']) : null);
           _feedbacks = selectedBundle?['feedbacks'] is List
               ? List.from(selectedBundle!['feedbacks'])
               : (res['feedbacks'] is List ? List.from(res['feedbacks']) : []);
-          final rawAvail = (res['available_coaches'] is List && (res['available_coaches'] as List).isNotEmpty)
+          final rawAvail = (res['available_coaches'] is List)
               ? List.from(res['available_coaches'])
-              : (_availableCoaches.isNotEmpty ? _availableCoaches : List.from(_defaultVettedCoaches));
-          final rawRec = (res['recommended_coaches'] is List && (res['recommended_coaches'] as List).isNotEmpty)
+              : (_availableCoaches.isNotEmpty ? _availableCoaches : <dynamic>[]);
+          final rawRec = (res['recommended_coaches'] is List)
               ? List.from(res['recommended_coaches'])
-              : (_recommendedCoaches.isNotEmpty ? _recommendedCoaches : _getTop3RecommendedCoaches());
+              : (_recommendedCoaches.isNotEmpty ? _recommendedCoaches : <dynamic>[]);
           _availableCoaches = rawAvail;
           _recommendedCoaches = rawRec;
           if (_hasCoach) {
             _pendingInvitation = null;
           } else {
             _pendingInvitation = res['pending_invitation'] != null ? Map<String, dynamic>.from(res['pending_invitation']) : null;
+          }
+          if (!_userInteractedWithTab) {
+            _selectedCoachTabSection = (_hasCoach && _coaches.isNotEmpty) ? 1 : 0;
           }
           _isLoading = false;
         });
@@ -455,6 +380,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         if (_client?['id'] != null) {
           PreferencesHelper.saveString('connected_client_id', _client!['id'].toString());
         }
+        _loadPresenceState();
         _animController.forward(from: 0.0);
       } else {
         setState(() => _isLoading = false);
@@ -478,6 +404,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         _coach = matchedBundle['coach'] != null ? Map<String, dynamic>.from(matchedBundle['coach']) : null;
         _client = matchedBundle['client'] != null ? Map<String, dynamic>.from(matchedBundle['client']) : null;
         _todayPlan = matchedBundle['today_plan'] != null ? Map<String, dynamic>.from(matchedBundle['today_plan']) : null;
+        _assignedProgram = matchedBundle['assigned_program'] != null ? Map<String, dynamic>.from(matchedBundle['assigned_program']) : null;
         _adherence = matchedBundle['adherence'] != null ? Map<String, dynamic>.from(matchedBundle['adherence']) : null;
         _feedbacks = matchedBundle['feedbacks'] is List ? List.from(matchedBundle['feedbacks']) : [];
       });
@@ -485,6 +412,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       if (matchedBundle['client_id'] != null) {
         PreferencesHelper.saveString('connected_client_id', matchedBundle['client_id'].toString());
       }
+      _loadPresenceState();
     } else {
       _loadCoachData(coachId: targetCoachId);
     }
@@ -499,14 +427,157 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     return Icons.fitness_center_rounded;
   }
 
-  Future<void> _logPrescribedMeal(Map<String, dynamic> meal) async {
-    final String mealName = (meal['name'] ?? 'Prescribed Meal').toString();
-    final int calories = ((meal['calories'] ?? 0) as num).toInt();
-    final int protein = ((meal['protein'] ?? 0) as num).toInt();
-    final int carbs = ((meal['carbs'] ?? 0) as num).toInt();
-    final int fats = ((meal['fats'] ?? 0) as num).toInt();
+  Future<void> _loadPresenceState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final todayStr = DateTime.now().toIso8601String().split('T')[0];
+      final cid = _client?['id']?.toString() ?? 'client';
 
+      final savedMeals = prefs.getStringList('presence_meals_${cid}_$todayStr') ?? [];
+      final savedWorkouts = prefs.getStringList('presence_workouts_${cid}_$todayStr') ?? [];
+
+      if (mounted) {
+        setState(() {
+          _finishedMealKeys.clear();
+          _finishedMealKeys.addAll(savedMeals);
+          _finishedWorkoutKeys.clear();
+          _finishedWorkoutKeys.addAll(savedWorkouts);
+        });
+      }
+
+      // Sync with backend telemetry
+      final remote = await ApiService.getPresence(clientId: cid, date: todayStr);
+      if (remote['success'] == true) {
+        final rMeals = (remote['completed_meals'] as List? ?? []).map((e) => e.toString()).toList();
+        final rWorkouts = (remote['completed_workouts'] as List? ?? []).map((e) => e.toString()).toList();
+        if (mounted) {
+          setState(() {
+            _finishedMealKeys.addAll(rMeals);
+            _finishedWorkoutKeys.addAll(rWorkouts);
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleMealPresence(String mealKey, Map<String, dynamic> meal) async {
     HapticFeedback.mediumImpact();
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    final cid = _client?['id']?.toString() ?? 'client';
+
+    final willFinish = !_finishedMealKeys.contains(mealKey);
+    final String mealName = (meal['name'] ?? (meal['foods'] is List && (meal['foods'] as List).isNotEmpty ? meal['foods'][0]['name'] : meal['slot_name'] ?? 'Prescribed Meal')).toString();
+
+    setState(() {
+      if (willFinish) {
+        _finishedMealKeys.add(mealKey);
+        _loggedMealNames.add(mealName);
+      } else {
+        _finishedMealKeys.remove(mealKey);
+      }
+    });
+
+    await prefs.setStringList('presence_meals_${cid}_$todayStr', _finishedMealKeys.toList());
+
+    // Record presence to backend
+    ApiService.recordPresence(
+      clientId: cid,
+      type: 'meal',
+      itemKey: mealKey,
+      name: mealName,
+      completed: willFinish,
+      date: todayStr,
+    );
+
+    if (willFinish) {
+      _logPrescribedMeal(meal, silent: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Marked "$mealName" as completed! Presence recorded.',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.neonEmerald,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleWorkoutPresence(String workoutKey, Map<String, dynamic> workout) async {
+    HapticFeedback.mediumImpact();
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    final cid = _client?['id']?.toString() ?? 'client';
+
+    final willFinish = !_finishedWorkoutKeys.contains(workoutKey);
+    final String workoutTitle = (workout['name'] ?? workout['title'] ?? 'Workout Session').toString();
+
+    setState(() {
+      if (willFinish) {
+        _finishedWorkoutKeys.add(workoutKey);
+      } else {
+        _finishedWorkoutKeys.remove(workoutKey);
+      }
+    });
+
+    await prefs.setStringList('presence_workouts_${cid}_$todayStr', _finishedWorkoutKeys.toList());
+
+    // Record presence to backend
+    ApiService.recordPresence(
+      clientId: cid,
+      type: 'workout',
+      itemKey: workoutKey,
+      name: workoutTitle,
+      completed: willFinish,
+      date: todayStr,
+    );
+
+    if (willFinish && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Marked "$workoutTitle" as finished! Presence recorded.',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF6366F1),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _logPrescribedMeal(Map<String, dynamic> meal, {bool silent = false}) async {
+    final String mealName = (meal['name'] ?? (meal['foods'] is List && (meal['foods'] as List).isNotEmpty ? meal['foods'][0]['name'] : meal['slot_name'] ?? 'Prescribed Meal')).toString();
+    final int calories = ((meal['target_calories'] ?? meal['calories'] ?? 0) as num).toInt();
+    final int protein = ((meal['target_protein'] ?? meal['protein'] ?? 0) as num).toInt();
+    final int carbs = ((meal['target_carbs'] ?? meal['carbs'] ?? 0) as num).toInt();
+    final int fats = ((meal['target_fats'] ?? meal['fats'] ?? 0) as num).toInt();
+
+    if (!silent) HapticFeedback.mediumImpact();
 
     // 1. Log to backend API
     await ApiService.logMeal(
@@ -515,7 +586,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       protein: protein,
       carbs: carbs,
       fats: fats,
-      description: 'Prescribed by Coach: ${meal['slot'] ?? 'Protocol'}',
+      description: 'Prescribed by Coach: ${meal['slot_name'] ?? meal['slot'] ?? 'Protocol'}',
     );
 
     // 2. Also save to user-scoped local SharedPreferences so HomeTab immediately reflects it
@@ -555,7 +626,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       'carbs': carbs,
       'fats': fats,
       'time': meal['time'] ?? 'Today',
-      'slot': meal['slot'] ?? 'Meal',
+      'slot': meal['slot_name'] ?? meal['slot'] ?? 'Meal',
       'tagColor': AppTheme.accent.value,
       'is_coach_prescribed': true,
       'food_items': [
@@ -573,11 +644,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     await prefs.setString('${up}dashboard_meals', jsonEncode(mealsList));
     await prefs.setString('${up}dashboard_meals_$todayStr', jsonEncode(mealsList));
 
-    setState(() {
-      _loggedMealNames.add(mealName);
-    });
-
     if (mounted) {
+      setState(() {
+        _loggedMealNames.add(mealName);
+      });
+    }
+
+    if (!silent && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -644,6 +717,109 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     }
   }
 
+  Future<void> _showInviteCodeDialog() async {
+    final TextEditingController inviteController = TextEditingController();
+    bool isSubmitting = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Text(
+                'Enter Coach Invite Code',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: AppTheme.primary,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Connect directly to your coach using their unique SAB invite code.',
+                    style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: inviteController,
+                    textCapitalization: TextCapitalization.characters,
+                    autofocus: true,
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: AppTheme.primary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. SAB-SUNIL',
+                      hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.grey.shade400, letterSpacing: 0),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5)),
+                    ),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final code = inviteController.text.trim();
+                          if (code.isEmpty) return;
+                          setDialogState(() => isSubmitting = true);
+                          final res = await ApiService.connectCoach(inviteCode: code);
+                          setDialogState(() => isSubmitting = false);
+                          if (!mounted) return;
+                          Navigator.pop(dialogCtx);
+                          if (res['success'] == true) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(res['message'] ?? 'Successfully connected to coach!'),
+                                backgroundColor: AppTheme.neonEmerald,
+                              ),
+                            );
+                            await _refreshAll();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(res['error'] ?? 'Invalid invite code or coach not found'),
+                                backgroundColor: Colors.red.shade600,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text('Connect', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _respondToPendingInvite(bool accept) async {
     if (_pendingInvitation == null) return;
     final clientId = _pendingInvitation!['id'] ?? '';
@@ -706,12 +882,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+            final screenH = MediaQuery.of(context).size.height;
+            final double modalHeight = (screenH * 0.75).clamp(300.0, (screenH - bottomInset - 40).clamp(260.0, screenH));
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
+              padding: EdgeInsets.only(bottom: bottomInset),
               child: Container(
-                height: MediaQuery.of(context).size.height * 0.75,
+                height: modalHeight,
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -948,11 +1125,10 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading) {
       return _buildLoadingSkeleton();
     }
-
-    final double bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return RefreshIndicator(
       onRefresh: _refreshAll,
@@ -960,48 +1136,596 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       child: SingleChildScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + bottomInset),
+        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
         child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 16),
+            _buildSectionSwitcher(),
+            const SizedBox(height: 18),
+            if (_selectedCoachTabSection == 0) ...[
+              _buildSearchAndConnectSection(),
+            ] else ...[
+              _buildConnectedCoachesSection(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionSwitcher() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          // Section 1: Search & Connect
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _userInteractedWithTab = true;
+                  _selectedCoachTabSection = 0;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _selectedCoachTabSection == 0 ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _selectedCoachTabSection == 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      size: 16,
+                      color: _selectedCoachTabSection == 0 ? const Color(0xFF6366F1) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Search & Connect',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: _selectedCoachTabSection == 0 ? FontWeight.w800 : FontWeight.w600,
+                        color: _selectedCoachTabSection == 0 ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Section 2: Connected Coaches
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _userInteractedWithTab = true;
+                  _selectedCoachTabSection = 1;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _selectedCoachTabSection == 1 ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _selectedCoachTabSection == 1
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.verified_rounded,
+                      size: 16,
+                      color: _selectedCoachTabSection == 1 ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'My Coaches',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: _selectedCoachTabSection == 1 ? FontWeight.w800 : FontWeight.w600,
+                        color: _selectedCoachTabSection == 1 ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    if (_coaches.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _selectedCoachTabSection == 1 ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${_coaches.length}',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndConnectSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Quick Action: Enter Coach Code
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Row(
             children: [
-              _buildHeader(),
-              const SizedBox(height: 20),
-              // SabCoach Inbox — coaching invitations + updates
-              if (_pendingInvitation != null || _sabcoachUpdates.isNotEmpty) ...[
-                _buildSabcoachInbox(),
-                const SizedBox(height: 20),
-              ],
-              if (_hasCoach) ...[
-                if (_coaches.isNotEmpty) ...[
-                  _buildCoachesSelector(),
-                  const SizedBox(height: 16),
-                ],
-                _buildCoachProfileCard(),
-                const SizedBox(height: 16),
-                _buildQuickStatsStrip(),
-                const SizedBox(height: 16),
-                if (_hasAssignedProgram) ...[
-                  _buildAssignedProgramCard(),
-                  const SizedBox(height: 16),
-                ],
-                _buildAdherenceTelemetryCard(),
-                const SizedBox(height: 16),
-                if (_todayPlan != null) ...[
-                  _buildTodayPrescribedPlanCard(),
-                  const SizedBox(height: 16),
-                ],
-                _buildCoachFeedbackCard(),
-                const SizedBox(height: 16),
-                _buildDisconnectSection(),
-                const SizedBox(height: 24),
-                _buildExploreMoreCoachesSection(),
-              ] else ...[
-                _buildNotConnectedState(),
-              ],
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.vpn_key_rounded, color: Color(0xFF6366F1), size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Have a Coach Invite Code?',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppTheme.primary),
+                    ),
+                    Text(
+                      'Connect directly to your coach using their SAB code',
+                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _showInviteCodeDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('Enter Code', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
             ],
           ),
         ),
-      );
+
+        // Live Directory & Search
+        _buildCoachSearchAndFilterSection(),
+      ],
+    );
+  }
+
+  Widget _buildConnectedCoachesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // SabCoach Inbox — coaching invitations + updates
+        if (_pendingInvitation != null || _sabcoachUpdates.isNotEmpty) ...[
+          _buildSabcoachInbox(),
+          const SizedBox(height: 20),
+        ],
+        if (_hasCoach && _coaches.isNotEmpty) ...[
+          _buildCoachesSelector(),
+          const SizedBox(height: 16),
+          _buildCoachProfileCard(),
+          const SizedBox(height: 16),
+          _buildQuickStatsStrip(),
+          const SizedBox(height: 16),
+
+          // Overview banner if no plans sent at all
+          if (!_hasNutritionPlan && !_hasWorkoutPlan) ...[
+            _buildNoPlansSentBanner(),
+            const SizedBox(height: 16),
+          ],
+
+          // ── SECTION 1: NUTRITION PLAN (MEALS) ──────────────────────────
+          if (_hasNutritionPlan) ...[
+            _buildTodayPrescribedPlanCard(),
+          ] else ...[
+            _buildNoNutritionPlanCard(),
+          ],
+          const SizedBox(height: 16),
+
+          // ── SECTION 2: WORKOUT PLAN (WORKOUTS & EXERCISES) ──────────────
+          if (_hasWorkoutPlan) ...[
+            _buildAssignedProgramCard(),
+          ] else ...[
+            _buildNoWorkoutPlanCard(),
+          ],
+          const SizedBox(height: 16),
+
+          _buildAdherenceTelemetryCard(),
+          const SizedBox(height: 16),
+          _buildCoachFeedbackCard(),
+          const SizedBox(height: 16),
+          _buildDisconnectSection(),
+        ] else ...[
+          _buildNoConnectedCoachesCard(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNoPlansSentBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: const Color(0xFF64748B).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.info_outline_rounded, color: Color(0xFF475569), size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No plans sent yet',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Your coach has not dispatched today\'s nutrition or workout protocols yet.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoNutritionPlanCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.restaurant_menu_rounded, color: Color(0xFFD97706), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Daily Nutrition Plan',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  Text(
+                    'Prescribed Meals & Timing',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.no_meals_rounded, color: Color(0xFFD97706), size: 30),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No plans sent yet',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'No nutrition plan sent yet by your coach. When your coach prescribes your daily meals and macros, they will appear right here for you to tick.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFFB45309),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoWorkoutPlanCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.fitness_center_rounded, color: Color(0xFF6366F1), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Assigned Workout Plan',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  Text(
+                    'Training Routine & Exercises',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFC7D2FE)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.sports_gymnastics_rounded, color: Color(0xFF6366F1), size: 30),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No plans sent yet',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF3730A3),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'No workout plan sent yet by your coach. Once your coach creates and assigns a training program, your workouts will appear right here for you to tick.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFF4338CA),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoConnectedCoachesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6366F1).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.sports_rounded, color: Color(0xFF6366F1), size: 36),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Coaches Connected Yet',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.primary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You haven\'t linked a coach yet. Explore certified specialists in the Search & Connect tab or enter your coach\'s invite code to start streaming telemetry and receiving custom programs.',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: const Color(0xFF64748B),
+              height: 1.45,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showInviteCodeDialog,
+                  icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                  label: Text('Invite Code', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF6366F1),
+                    side: const BorderSide(color: Color(0xFF6366F1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _userInteractedWithTab = true;
+                      _selectedCoachTabSection = 0;
+                    });
+                  },
+                  icon: const Icon(Icons.search_rounded, size: 16),
+                  label: Text('Find Coaches', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Loading Skeleton ────────────────────────────────────────────────────────
@@ -1778,13 +2502,24 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   }
 
   bool get _hasAssignedProgram {
-    final progName = _client?['program_name']?.toString();
+    final progName = _client?['program_name']?.toString() ?? _assignedProgram?['name']?.toString();
     return progName != null &&
         progName.isNotEmpty &&
         progName != 'Not Assigned' &&
         progName != 'Standard Protocol' &&
+        progName != 'None' &&
         progName != 'null';
   }
+
+  bool get _hasNutritionPlan {
+    if (_todayPlan == null) return false;
+    final meals = _todayPlan!['meals'];
+    if (meals is List && meals.isNotEmpty) return true;
+    final cals = _todayPlan!['total_calories'] ?? _todayPlan!['calories'];
+    return cals != null && (cals as num) > 0;
+  }
+
+  bool get _hasWorkoutPlan => _hasAssignedProgram;
 
   // ── Quick Stats Strip ──────────────────────────────────────────────────────
   Widget _buildQuickStatsStrip() {
@@ -1856,112 +2591,442 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
   }
 
   Widget _buildAssignedProgramCard() {
-    final progName = _client?['program_name'] ?? 'Training Protocol';
-    final progDetail = (_client?['program_detail'] as Map?) ?? {};
+    final progName = _client?['program_name'] ?? _assignedProgram?['name'] ?? 'Training Protocol';
+    final progDetail = (_client?['program_detail'] as Map?) ?? (_assignedProgram?['detail'] as Map?) ?? {};
     final weekCurrent = progDetail['weekCurrent'] ?? 1;
     final weekTotal = progDetail['weekTotal'] ?? 12;
     final workoutsThisWeek = progDetail['workoutsThisWeek'] ?? '4 sessions/week';
     final targetSummary = progDetail['targetSummary'] ?? 'Periodized progressive overload program.';
 
+    List<dynamic> progWorkouts = (_assignedProgram?['workouts'] as List?) ?? (progDetail['workouts'] as List?) ?? [];
+
+    if (progWorkouts.isEmpty) {
+      // Standard prescribed sessions for the active program
+      progWorkouts = [
+        {
+          'id': 'wo_1',
+          'name': 'Day 1: Upper Body Push & Core',
+          'category': 'Chest & Shoulders',
+          'duration': '50 min',
+          'exercises': [
+            {'name': 'Incline Dumbbell Press', 'sets': 4, 'reps': '8-10', 'weight': '32 kg'},
+            {'name': 'Overhead Shoulder Press', 'sets': 3, 'reps': '10-12', 'weight': '24 kg'},
+            {'name': 'Tricep Cable Pushdowns', 'sets': 3, 'reps': '12-15', 'weight': '25 kg'},
+            {'name': 'Hanging Knee Raises', 'sets': 3, 'reps': '15 reps', 'weight': 'Bodyweight'},
+          ]
+        },
+        {
+          'id': 'wo_2',
+          'name': 'Day 2: Lower Body Power & Hips',
+          'category': 'Quads & Glutes',
+          'duration': '55 min',
+          'exercises': [
+            {'name': 'Barbell Back Squat', 'sets': 4, 'reps': '6-8', 'weight': '85 kg'},
+            {'name': 'Romanian Deadlift', 'sets': 3, 'reps': '8-10', 'weight': '70 kg'},
+            {'name': 'Walking Lunges', 'sets': 3, 'reps': '12 / leg', 'weight': '16 kg dumbbells'},
+            {'name': 'Standing Calf Raises', 'sets': 4, 'reps': '15 reps', 'weight': '50 kg'},
+          ]
+        },
+        {
+          'id': 'wo_3',
+          'name': 'Day 3: Upper Body Pull & Posterior Chain',
+          'category': 'Back & Biceps',
+          'duration': '45 min',
+          'exercises': [
+            {'name': 'Neutral Grip Pull-ups', 'sets': 4, 'reps': '8-10', 'weight': 'Bodyweight'},
+            {'name': 'Chest-Supported Row', 'sets': 3, 'reps': '10-12', 'weight': '30 kg'},
+            {'name': 'Face Pulls', 'sets': 3, 'reps': '15 reps', 'weight': '17.5 kg'},
+            {'name': 'Incline Dumbbell Curls', 'sets': 3, 'reps': '10-12', 'weight': '14 kg'},
+          ]
+        },
+        {
+          'id': 'wo_4',
+          'name': 'Day 4: Functional Conditioning & Engine',
+          'category': 'Full Body & Core',
+          'duration': '40 min',
+          'exercises': [
+            {'name': 'Kettlebell Swings', 'sets': 4, 'reps': '20 reps', 'weight': '24 kg'},
+            {'name': 'Rowing Intervals', 'sets': 5, 'reps': '500m sprint', 'weight': 'Level 6'},
+            {'name': 'Plank to Push-up', 'sets': 3, 'reps': '12 reps', 'weight': 'Bodyweight'},
+          ]
+        },
+      ];
+    }
+
+    int completedCount = 0;
+    for (int i = 0; i < progWorkouts.length; i++) {
+      final w = progWorkouts[i] is Map ? progWorkouts[i] : {};
+      final wKey = 'wo_${w['id'] ?? i}_${w['name'] ?? ''}';
+      if (_finishedWorkoutKeys.contains(wKey)) {
+        completedCount++;
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(14),
+          // Header Card with Gradient
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.1),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.fitness_center_rounded, color: AppTheme.neonEmerald, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Assigned Workout Plan',
+                              style: GoogleFonts.inter(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            Text(
+                              progName,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.fitness_center_rounded, color: AppTheme.neonEmerald, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Assigned Training Program',
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonEmerald.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.neonEmerald.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        'Week $weekCurrent of $weekTotal',
                         style: GoogleFonts.inter(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
+                          color: AppTheme.neonEmerald,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Text(
-                        progName,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_rounded, color: AppTheme.neonCyan, size: 15),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$workoutsThisWeek • $targetSummary',
+                          style: GoogleFonts.inter(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            height: 1.3,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Workout routines header with finished counter
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Prescribed Routines & Exercises',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonEmerald.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.neonEmerald.withOpacity(0.3)),
+                  color: completedCount > 0 ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: completedCount > 0 ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                  ),
                 ),
                 child: Text(
-                  'Week $weekCurrent of $weekTotal',
+                  '$completedCount of ${progWorkouts.length} Finished',
                   style: GoogleFonts.inter(
-                    color: AppTheme.neonEmerald,
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
+                    color: completedCount > 0 ? const Color(0xFF059669) : const Color(0xFF64748B),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today_rounded, color: AppTheme.neonCyan, size: 16),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '$workoutsThisWeek • $targetSummary',
-                    style: GoogleFonts.inter(
-                      color: Colors.white70,
-                      fontSize: 12.5,
-                      height: 1.3,
+          const SizedBox(height: 12),
+
+          // List of workout cards with presence check
+          ...progWorkouts.asMap().entries.map((entry) {
+            final int idx = entry.key;
+            final Map<String, dynamic> w = Map<String, dynamic>.from(entry.value is Map ? entry.value : {});
+            final String wName = (w['name'] ?? w['title'] ?? 'Workout ${idx + 1}').toString();
+            final String wCategory = (w['category'] ?? w['day'] ?? 'Training').toString();
+            final String wDuration = (w['duration'] ?? '45 min').toString();
+            final List<dynamic> wExercises = (w['exercises'] as List?) ?? [];
+            final String wKey = 'wo_${w['id'] ?? idx}_$wName';
+            final bool isFinished = _finishedWorkoutKeys.contains(wKey);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isFinished ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isFinished ? AppTheme.neonEmerald.withOpacity(0.5) : const Color(0xFFE2E8F0),
+                  width: isFinished ? 1.5 : 1.0,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                wCategory.toUpperCase(),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF6366F1),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              wDuration,
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Presence Tick Button
+                      InkWell(
+                        onTap: () => _toggleWorkoutPresence(wKey, w),
+                        borderRadius: BorderRadius.circular(10),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isFinished ? const Color(0xFFD1FAE5) : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isFinished ? AppTheme.neonEmerald : const Color(0xFFCBD5E1),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isFinished ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                color: isFinished ? AppTheme.neonEmerald : const Color(0xFF94A3B8),
+                                size: 16,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                isFinished ? 'Finished ✓' : 'Mark Finished',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isFinished ? const Color(0xFF065F46) : const Color(0xFF475569),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    wName,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14.5,
+                      color: AppTheme.primary,
+                      decoration: isFinished ? TextDecoration.lineThrough : null,
                     ),
                   ),
+
+                  // Exercises breakdown
+                  if (wExercises.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    ...wExercises.map((ex) {
+                      final exMap = ex is Map ? ex : {};
+                      final exName = exMap['name'] ?? 'Exercise';
+                      final sets = exMap['sets'] != null ? '${exMap['sets']} sets' : '';
+                      final reps = exMap['reps'] != null ? '${exMap['reps']}' : '';
+                      final weight = exMap['weight'] != null ? '• ${exMap['weight']}' : '';
+                      final spec = [sets, reps, weight].where((s) => s.isNotEmpty).join(' ');
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: isFinished ? AppTheme.neonEmerald : const Color(0xFF94A3B8),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                exName,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF334155),
+                                ),
+                              ),
+                            ),
+                            if (spec.isNotEmpty)
+                              Text(
+                                spec,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              ),
+            );
+          }),
+          // Coach Workout Notes / Instructions banner if provided
+          Builder(
+            builder: (context) {
+              final progNotes = (progDetail['notes'] ??
+                      progDetail['instructions'] ??
+                      progDetail['coach_notes'] ??
+                      _assignedProgram?['notes'] ??
+                      _assignedProgram?['instructions'] ??
+                      '')
+                  .toString()
+                  .trim();
+              if (progNotes.isEmpty) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFC7D2FE)),
                 ),
-              ],
-            ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.tips_and_updates_rounded, color: Color(0xFF6366F1), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Coach Workout Notes',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12.5,
+                              color: const Color(0xFF3730A3),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            progNotes,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: const Color(0xFF4338CA),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -3006,7 +4071,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     final desc = plan['description'] ?? 'Target nutrition designed for optimal recomposition.';
     final meals = (plan['meals'] as List?) ?? [];
     final supps = (plan['supplements'] as List?) ?? [];
-    final instructions = plan['instructions'] ?? '';
+    final instructions = (plan['instructions'] ?? plan['notes'] ?? plan['coach_notes'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -3088,14 +4153,51 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           // Macro goals row
           _buildMacroSummaryRow(plan),
           const SizedBox(height: 20),
-          // Prescribed Meals
-          Text(
-            'Prescribed Meals & Timing',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.primary,
-            ),
+          // Prescribed Meals with Finished Counter
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Prescribed Meals & Timing',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
+              ),
+              Builder(
+                builder: (context) {
+                  int completedMealCount = 0;
+                  for (int i = 0; i < meals.length; i++) {
+                    final m = meals[i] is Map ? meals[i] : {};
+                    final mFoods = (m['foods'] as List?) ?? [];
+                    final mName = (m['name'] ?? (mFoods.isNotEmpty && mFoods[0] is Map ? mFoods[0]['name'] : m['slot_name'] ?? '')).toString();
+                    final mKey = 'meal_${m['id'] ?? i}_${m['slot_name'] ?? m['slot'] ?? ''}_$mName';
+                    if (_finishedMealKeys.contains(mKey) || _loggedMealNames.contains(mName)) {
+                      completedMealCount++;
+                    }
+                  }
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: completedMealCount > 0 ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: completedMealCount > 0 ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Text(
+                      '$completedMealCount of ${meals.length} Finished',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: completedMealCount > 0 ? const Color(0xFF059669) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           if (meals.isEmpty)
@@ -3104,7 +4206,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               style: GoogleFonts.inter(fontSize: 13, color: Colors.grey),
             )
           else
-            ...meals.map((m) => _buildMealSlotItem(Map<String, dynamic>.from(m as Map))),
+            ...meals.asMap().entries.map((entry) => _buildMealSlotItem(Map<String, dynamic>.from(entry.value as Map), index: entry.key)),
           
           if (supps.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -3253,25 +4355,28 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildMealSlotItem(Map<String, dynamic> meal) {
-    final name = meal['name'] ?? 'Prescribed Meal';
-    final slot = meal['slot'] ?? 'Meal';
-    final time = meal['time'] ?? '';
-    final cals = meal['calories'] ?? 0;
-    final prot = meal['protein'] ?? 0;
-    final ingredients = meal['ingredients'] ?? '';
-    final notes = meal['notes'] ?? '';
-    final isLogged = _loggedMealNames.contains(name);
+  Widget _buildMealSlotItem(Map<String, dynamic> meal, {int index = 0}) {
+    final foods = (meal['foods'] as List?) ?? [];
+    final name = (meal['name'] ?? (foods.isNotEmpty && foods[0] is Map ? foods[0]['name'] : meal['slot_name'] ?? 'Prescribed Meal')).toString();
+    final slot = (meal['slot_name'] ?? meal['slot'] ?? 'Meal').toString();
+    final time = (meal['time'] ?? '').toString();
+    final cals = ((meal['target_calories'] ?? meal['calories'] ?? 0) as num).toInt();
+    final prot = ((meal['target_protein'] ?? meal['protein'] ?? 0) as num).toDouble();
+    final ingredients = (meal['ingredients'] ?? '').toString();
+    final notes = (meal['instructions'] ?? meal['notes'] ?? '').toString();
+
+    final mealKey = 'meal_${meal['id'] ?? index}_${slot}_$name';
+    final isTicked = _finishedMealKeys.contains(mealKey) || _loggedMealNames.contains(name);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isLogged ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+        color: isTicked ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isLogged ? AppTheme.neonEmerald.withOpacity(0.5) : const Color(0xFFE2E8F0),
-          width: isLogged ? 1.5 : 1.0,
+          color: isTicked ? AppTheme.neonEmerald.withOpacity(0.5) : const Color(0xFFE2E8F0),
+          width: isTicked ? 1.5 : 1.0,
         ),
       ),
       child: Column(
@@ -3289,7 +4394,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      slot.toString().toUpperCase(),
+                      slot.toUpperCase(),
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -3306,8 +4411,61 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                   ],
                 ],
               ),
+              // Presence Tick Button
+              InkWell(
+                onTap: () => _toggleMealPresence(mealKey, meal),
+                borderRadius: BorderRadius.circular(10),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isTicked ? const Color(0xFFD1FAE5) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isTicked ? AppTheme.neonEmerald : const Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isTicked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        color: isTicked ? AppTheme.neonEmerald : const Color(0xFF94A3B8),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isTicked ? 'Finished ✓' : 'Mark Finished',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: isTicked ? const Color(0xFF065F46) : const Color(0xFF475569),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                    color: AppTheme.primary,
+                    decoration: isTicked ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
               Text(
-                '$cals kcal • ${prot}g P',
+                '$cals kcal${prot > 0 ? ' • ${prot.toInt()}g P' : ''}',
                 style: GoogleFonts.inter(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
@@ -3316,16 +4474,43 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            name,
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.w800,
-              fontSize: 14.5,
-              color: AppTheme.primary,
-            ),
-          ),
-          if (ingredients.isNotEmpty) ...[
+          if (foods.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...foods.map((f) {
+              final fMap = f is Map ? f : {};
+              final fName = fMap['name'] ?? '';
+              final fPortion = fMap['portion'] ?? '';
+              final fCals = fMap['calories'];
+              if (fName.toString().isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF94A3B8),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '$fName${fPortion.toString().isNotEmpty ? ' (${fPortion.toString()})' : ''}',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      ),
+                    ),
+                    if (fCals != null)
+                      Text(
+                        '$fCals kcal',
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          ] else if (ingredients.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               ingredients,
@@ -3343,40 +4528,6 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: isLogged
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_circle_rounded, color: AppTheme.neonEmerald, size: 16),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Logged to Diary',
-                        style: GoogleFonts.inter(
-                          color: AppTheme.neonEmerald,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  )
-                : OutlinedButton.icon(
-                    onPressed: () => _logPrescribedMeal(meal),
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: Text(
-                      'Log to Diary',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.accent,
-                      side: const BorderSide(color: AppTheme.accent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    ),
-                  ),
-          ),
         ],
       ),
     );
@@ -3717,7 +4868,59 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+
+        // Quick Action: Enter Coach Code
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.vpn_key_rounded, color: Color(0xFF6366F1), size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Have a Coach Invite Code?',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                    ),
+                    Text(
+                      'Link your personal coach profile instantly',
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _showInviteCodeDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text('Enter Code', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
 
         // 3 Suggested Coaches of different types
         _buildRecommendedCoachesSection(),
@@ -4446,16 +5649,36 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                     style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () => _loadAvailableCoaches(),
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: Text('Reload Directory', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6366F1),
-                      side: const BorderSide(color: Color(0xFF6366F1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _loadAvailableCoaches(),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: Text('Reload Directory', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF6366F1),
+                          side: const BorderSide(color: Color(0xFF6366F1)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _showInviteCodeDialog,
+                        icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                        label: Text('Enter Invite Code', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

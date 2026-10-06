@@ -54,7 +54,10 @@ class HomeTab extends ConsumerStatefulWidget {
   ConsumerState<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin {
+class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final int _stepGoal = 10000;
   String? _aiInsight;
   double _height = 175.0;
@@ -613,6 +616,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final profileState = ref.watch(profileProvider);
     
     // Nutrition metrics calculations
@@ -623,7 +627,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
       backgroundColor: Colors.white,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + MediaQuery.of(context).viewInsets.bottom),
+        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
         children: [

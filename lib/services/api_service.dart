@@ -94,7 +94,12 @@ class ApiService {
   static Future<String?> getCurrentUserId() async {
     final payload = _decodeJwtPayload(_token ?? '');
     final id = payload['sub'] ?? payload['user_id'] ?? payload['id'];
-    return id?.toString();
+    if (id != null && id.toString().isNotEmpty) return id.toString();
+    try {
+      final stored = await PreferencesHelper.readString('user_id');
+      if (stored != null && stored.isNotEmpty) return stored;
+    } catch (_) {}
+    return null;
   }
 
   /// Extract the user's email from the current JWT token or stored profile
@@ -121,6 +126,17 @@ class ApiService {
       PreferencesHelper.saveString('auth_token', token).catchError((e) {
         debugPrint('Error saving token: $e');
       });
+      try {
+        final payload = _decodeJwtPayload(token);
+        final email = payload['email']?.toString();
+        final sub = (payload['sub'] ?? payload['user_id'] ?? payload['id'])?.toString();
+        if (email != null && email.isNotEmpty) {
+          PreferencesHelper.saveString('user_email', email);
+        }
+        if (sub != null && sub.isNotEmpty) {
+          PreferencesHelper.saveString('user_id', sub);
+        }
+      } catch (_) {}
     }
   }
 
@@ -344,6 +360,11 @@ class ApiService {
         final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
         if (token != null) setToken(token);
         if (refreshToken != null) setRefreshToken(refreshToken);
+        if (email != null && email.isNotEmpty) {
+          try {
+            await PreferencesHelper.saveString('user_email', email);
+          } catch (_) {}
+        }
         return {'success': true, 'data': data};
       }
       try {
@@ -2268,6 +2289,66 @@ class ApiService {
       return {'success': false, 'error': 'Failed to retrieve messages'};
     } catch (e) {
       return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Record presence for completing a coach prescribed meal or workout
+  static Future<Map<String, dynamic>> recordPresence({
+    required String clientId,
+    required String type, // 'meal' or 'workout'
+    required String itemKey,
+    String? name,
+    bool completed = true,
+    String? date,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/coach/presence/record'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'client_id': clientId,
+          'type': type,
+          'item_key': itemKey,
+          'name': name ?? itemKey,
+          'completed': completed,
+          'date': date ?? DateTime.now().toIso8601String().split('T')[0],
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false};
+    } catch (_) {
+      return {'success': false};
+    }
+  }
+
+  /// Fetch completed presence records for today
+  static Future<Map<String, dynamic>> getPresence({
+    String? clientId,
+    String? date,
+  }) async {
+    try {
+      final params = <String>[];
+      if (clientId != null) params.add('client_id=$clientId');
+      if (date != null) params.add('date=$date');
+      final q = params.isNotEmpty ? '?${params.join('&')}' : '';
+      final response = await http.get(
+        Uri.parse('$baseUrl/coach/presence$q'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'completed_meals': [], 'completed_workouts': []};
+    } catch (_) {
+      return {'success': false, 'completed_meals': [], 'completed_workouts': []};
     }
   }
 }

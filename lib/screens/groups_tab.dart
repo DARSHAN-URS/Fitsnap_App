@@ -204,7 +204,10 @@ class GroupsTab extends ConsumerStatefulWidget {
   ConsumerState<GroupsTab> createState() => _GroupsTabState();
 }
 
-class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateMixin {
+class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   Widget _buildMeshBackground() {
     return Stack(
       children: [
@@ -1744,11 +1747,12 @@ class _GroupsTabState extends ConsumerState<GroupsTab> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Stack(
       children: [
         _buildMeshBackground(),
         SingleChildScrollView(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120 + MediaQuery.of(context).viewInsets.bottom),
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

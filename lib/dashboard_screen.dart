@@ -45,6 +45,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   final List<Map<String, dynamic>> _meals = [];
 
+  final Widget _activityTab = const ActivityTab();
+  final Widget _myCoachTab = const MyCoachTab();
+  final Widget _groupsTab = const GroupsTab();
+  final Widget _profileTab = const ProfileTab();
+
   List<Widget> get _screens => [
     HomeTab(
       consumed: _consumed,
@@ -74,10 +79,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         await _loadLogs();
       },
     ),
-    const ActivityTab(),
-    const MyCoachTab(),
-    const GroupsTab(),
-    const ProfileTab(),
+    _activityTab,
+    _myCoachTab,
+    _groupsTab,
+    _profileTab,
   ];
 
   bool _isAnalyzing = false;
@@ -1330,10 +1335,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       extendBody: true, // Let content scroll behind the floating bottom bar
-      resizeToAvoidBottomInset: false, // Prevent keyboard from resizing Scaffold and causing layout glitch
+      resizeToAvoidBottomInset: true, // Allow viewport to adapt when keyboard opens so inputs scroll into view
       body: Stack(
         children: [
           // Global Background Gradient
@@ -1349,30 +1355,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               Expanded(
                 child: SafeArea(
                   bottom: false,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    child: KeyedSubtree(
-                      key: ValueKey<int>(_currentIndex),
-                      child: _screens[_currentIndex],
-                    ),
+                  child: IndexedStack(
+                    index: _currentIndex,
+                    children: _screens,
                   ),
                 ),
               ),
             ],
           ),
           
-          // Floating Bottom Navigation Bar (Footer) sits naturally at bottom
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _buildPremiumFooter(),
-          ),
+          // Floating Bottom Navigation Bar (Footer) sits naturally at bottom, hidden when keyboard is open
+          if (!isKeyboardOpen)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildPremiumFooter(),
+            ),
         ],
       ),
     );
