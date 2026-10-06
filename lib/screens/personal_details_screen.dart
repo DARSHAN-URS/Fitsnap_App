@@ -17,6 +17,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   
   late TextEditingController _nameController;
   late TextEditingController _usernameController;
+  late TextEditingController _phoneController;
   late TextEditingController _ageController;
   final TextEditingController _customAllergyController = TextEditingController();
   
@@ -39,6 +40,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     super.initState();
     _nameController = TextEditingController(text: 'Guest User');
     _usernameController = TextEditingController(text: 'guest_user');
+    _phoneController = TextEditingController(text: '');
     _ageController = TextEditingController(text: '');
     _loadPersonalDetails();
   }
@@ -47,6 +49,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   void dispose() {
     _nameController.dispose();
     _usernameController.dispose();
+    _phoneController.dispose();
     _ageController.dispose();
     _customAllergyController.dispose();
     super.dispose();
@@ -55,6 +58,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   Future<void> _loadPersonalDetails() async {
     final name = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
     final username = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
+    final phone = await PreferencesHelper.readString('profile_phone') ?? '';
     final age = await PreferencesHelper.readString('profile_age') ?? '';
     final weight = await PreferencesHelper.readDouble('profile_weight') ?? 76.4;
     final targetWeight = await PreferencesHelper.readDouble('profile_target_weight') ?? 70.0;
@@ -68,6 +72,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
       setState(() {
         _nameController.text = name;
         _usernameController.text = username;
+        _phoneController.text = phone;
         _ageController.text = age;
         _weight = weight;
         _targetWeight = targetWeight;
@@ -87,6 +92,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
           setState(() {
             _nameController.text = d['name'] ?? name;
             _usernameController.text = d['username'] ?? username;
+            _phoneController.text = d['phone'] ?? phone;
             _ageController.text = d['age'] != null ? d['age'].toString() : age;
             _weight = (d['weight'] as num?)?.toDouble() ?? weight;
             _targetWeight = (d['target_weight'] as num?)?.toDouble() ?? targetWeight;
@@ -104,6 +110,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
   Future<String?> _savePersonalDetails() async {
     final name = _nameController.text.trim();
     final username = _usernameController.text.trim();
+    final phone = _phoneController.text.trim();
     final ageStr = _ageController.text.trim();
     if (ageStr.isEmpty) {
       return 'Please enter your age.';
@@ -112,11 +119,18 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
     if (age == null || age <= 0 || age > 120) {
       return 'Please enter a valid age.';
     }
+    if (phone.isNotEmpty) {
+      final digitsOnly = phone.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digitsOnly.length < 10) {
+        return 'Please enter a valid 10-digit mobile number.';
+      }
+    }
     
     if (ApiService.isAuthenticated) {
       final res = await ApiService.updateProfile(
         name: name,
         username: username,
+        phone: phone,
         age: age,
         weight: _weight,
         height: _height,
@@ -148,6 +162,7 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
 
     await PreferencesHelper.saveString('profile_name', name);
     await PreferencesHelper.saveString('profile_username', username);
+    await PreferencesHelper.saveString('profile_phone', phone);
     await PreferencesHelper.saveString('profile_age', ageStr);
     await PreferencesHelper.saveDouble('profile_weight', _weight);
     await PreferencesHelper.saveDouble('profile_target_weight', _targetWeight);
@@ -336,6 +351,57 @@ class _PersonalDetailsScreenState extends State<PersonalDetailsScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) return 'Name cannot be empty';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Mobile / Phone input
+                    Row(
+                      children: [
+                        Text(
+                          'Mobile Number',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0E7FF),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'SabCoach Contact',
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF4338CA)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: TextFormField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: GoogleFonts.inter(fontSize: 14, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.phone_iphone_rounded, color: Colors.black38, size: 20),
+                          hintText: '+91 98765 43210',
+                          hintStyle: TextStyle(color: Colors.black26, fontSize: 13),
+                        ),
+                        validator: (value) {
+                          if (value != null && value.trim().isNotEmpty) {
+                            final digitsOnly = value.replaceAll(RegExp(r'[^0-9]'), '');
+                            if (digitsOnly.length < 10) {
+                              return 'Enter a valid 10-digit mobile number';
+                            }
+                          }
                           return null;
                         },
                       ),

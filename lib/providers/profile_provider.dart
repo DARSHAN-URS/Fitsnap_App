@@ -6,6 +6,7 @@ import '../utils/preferences_helper.dart';
 class ProfileState {
   final String name;
   final String username;
+  final String? phone;
   final int age;
   final String? profilePictureUrl;
   final int activeDays;
@@ -18,6 +19,7 @@ class ProfileState {
   const ProfileState({
     this.name = 'Guest User',
     this.username = 'guest_user',
+    this.phone,
     this.age = 25,
     this.profilePictureUrl,
     this.activeDays = 0,
@@ -31,6 +33,7 @@ class ProfileState {
   ProfileState copyWith({
     String? name,
     String? username,
+    String? phone,
     int? age,
     String? profilePictureUrl,
     int? activeDays,
@@ -43,6 +46,7 @@ class ProfileState {
     return ProfileState(
       name: name ?? this.name,
       username: username ?? this.username,
+      phone: phone ?? this.phone,
       age: age ?? this.age,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
       activeDays: activeDays ?? this.activeDays,
@@ -65,6 +69,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
     String nameTemp = await PreferencesHelper.readString('profile_name') ?? 'Guest User';
     String usernameTemp = await PreferencesHelper.readString('profile_username') ?? 'guest_user';
+    String? phoneTemp = await PreferencesHelper.readString('profile_phone');
     final String? ageStr = await PreferencesHelper.readString('profile_age');
     int ageTemp = ageStr != null ? (int.tryParse(ageStr) ?? 0) : (await PreferencesHelper.readInt('profile_age') ?? 0);
     String? picTemp = await PreferencesHelper.readString('profile_pic_url');
@@ -79,6 +84,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           final data = res['data'];
           final String? serverName = data['name'];
           final String? serverUsername = data['username'];
+          final String? serverPhone = data['phone'];
           final String? serverPic = data['profile_picture_url'];
 
           if (serverName != null && serverName.isNotEmpty && serverName != 'Guest User') {
@@ -86,6 +92,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           }
           if (serverUsername != null && serverUsername.isNotEmpty) {
             usernameTemp = serverUsername;
+          }
+          if (serverPhone != null && serverPhone.isNotEmpty) {
+            phoneTemp = serverPhone;
+            await PreferencesHelper.saveString('profile_phone', phoneTemp);
           }
           if (serverPic != null && serverPic.isNotEmpty) {
             picTemp = serverPic;
@@ -166,6 +176,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       state = ProfileState(
         name: nameTemp,
         username: usernameTemp,
+        phone: phoneTemp,
         age: ageTemp,
         profilePictureUrl: picTemp,
         activeDays: activeDays,

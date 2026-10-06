@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
+import '../utils/contact_helper.dart';
 import 'notifications_screen.dart';
 
 class MyCoachTab extends StatefulWidget {
@@ -952,6 +953,21 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                               ],
                             ),
                           ),
+                          if ((_coach?['phone'] ?? '').toString().isNotEmpty) ...[
+                            IconButton(
+                              icon: const Icon(Icons.phone_rounded, color: AppTheme.accent, size: 20),
+                              tooltip: 'Call Coach',
+                              onPressed: () => ContactHelper.makePhoneCall(_coach!['phone'].toString()),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.chat_bubble_rounded, color: Color(0xFF25D366), size: 20),
+                              tooltip: 'WhatsApp Coach',
+                              onPressed: () => ContactHelper.openWhatsApp(
+                                _coach!['phone'].toString(),
+                                message: 'Hi ${_coach?['name'] ?? 'Coach'}! Reaching out via SabTrack.',
+                              ),
+                            ),
+                          ],
                           IconButton(
                             icon: const Icon(Icons.close_rounded, color: Colors.grey),
                             onPressed: () => Navigator.pop(ctx),

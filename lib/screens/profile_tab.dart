@@ -366,6 +366,23 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                             fontSize: 13,
                           ),
                         ),
+                        if (profileState.phone != null && profileState.phone!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.phone_iphone_rounded, size: 13, color: Colors.black45),
+                              const SizedBox(width: 4),
+                              Text(
+                                profileState.phone!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
