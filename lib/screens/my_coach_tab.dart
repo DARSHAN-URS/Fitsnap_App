@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../utils/preferences_helper.dart';
 import '../utils/contact_helper.dart';
 import 'notifications_screen.dart';
+import 'consultation_plans_screen.dart';
 
 class MyCoachTab extends StatefulWidget {
   const MyCoachTab({super.key});
@@ -59,7 +60,6 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
 
   final Set<String> _loggedMealNames = {};
   late AnimationController _animController;
-  bool _isConnecting = false;
 
   // Location
   bool _isLoadingLocation = false;
@@ -676,150 +676,181 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _connectToCoach(String coachId, {String? coachName}) async {
-    final cleanId = coachId.trim();
-    if (cleanId.isEmpty) return;
+  void _handleCoachChatOrSession(Map<String, dynamic> coach) {
+    final name = (coach['name'] ?? 'Coach').toString();
+    final specialty = (coach['specialty'] ?? coach['discipline'] ?? 'General Fitness').toString();
+    final avatar = (coach['avatar'] ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400').toString();
 
-    setState(() => _isConnecting = true);
-    final res = await ApiService.connectCoach(
-      coachId: cleanId,
-    );
-    setState(() => _isConnecting = false);
-
-    if (!mounted) return;
-    if (res['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  res['message'] ?? 'Successfully connected to ${coachName ?? "coach"}!',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.neonEmerald,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      await _loadCoachData(coachId: cleanId);
-      await _loadSabcoachUpdates();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['error'] ?? 'Connection failed'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-    }
-  }
-
-  Future<void> _showInviteCodeDialog() async {
-    final TextEditingController inviteController = TextEditingController();
-    bool isSubmitting = false;
-
-    await showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: Text(
-                'Enter Coach Invite Code',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: AppTheme.primary,
-                ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Container(
+          padding: EdgeInsets.only(
+            top: 24,
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Text(
-                    'Connect directly to your coach using their unique SAB invite code.',
-                    style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage: NetworkImage(avatar),
+                    backgroundColor: Colors.grey.shade300,
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: inviteController,
-                    textCapitalization: TextCapitalization.characters,
-                    autofocus: true,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: AppTheme.primary,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        Text(
+                          specialty,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'e.g. SAB-SUNIL',
-                      hintStyle: GoogleFonts.inter(fontSize: 14, color: Colors.grey.shade400, letterSpacing: 0),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFC7D2FE)),
+                    ),
+                    child: Text(
+                      'SABTRACK ACCESS',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF4F46E5),
+                      ),
                     ),
                   ),
                 ],
               ),
-              actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
-                          final code = inviteController.text.trim();
-                          if (code.isEmpty) return;
-                          setDialogState(() => isSubmitting = true);
-                          final res = await ApiService.connectCoach(inviteCode: code);
-                          setDialogState(() => isSubmitting = false);
-                          if (!mounted) return;
-                          Navigator.pop(dialogCtx);
-                          if (res['success'] == true) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(res['message'] ?? 'Successfully connected to coach!'),
-                                backgroundColor: AppTheme.neonEmerald,
-                              ),
-                            );
-                            await _refreshAll();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(res['error'] ?? 'Invalid invite code or coach not found'),
-                                backgroundColor: Colors.red.shade600,
-                              ),
-                            );
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Text(
+                  'With your existing SabTrack plan, you can initiate a direct 1-on-1 intro chat or schedule 1 introductory session with Coach $name to review your health milestones.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFF475569),
+                    height: 1.45,
                   ),
-                  child: isSubmitting
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text('Connect', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                 ),
-              ],
-            );
-          },
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openChatModal();
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                      label: Text('Start Intro Chat', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF4F46E5),
+                        side: const BorderSide(color: Color(0xFF4F46E5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Intro session scheduled with $name! Calendar link sent.'),
+                            backgroundColor: const Color(0xFF10B981),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                      label: Text('Book 1 Session', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4F46E5),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_user_rounded, color: Color(0xFFD97706), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Want full dedicated coaching? Get placed via a Consultation Plan.',
+                        style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF92400E), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                        );
+                      },
+                      child: Text('Plans', style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 12, color: const Color(0xFFB45309))),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
+
 
   Future<void> _respondToPendingInvite(bool accept) async {
     if (_pendingInvitation == null) return;
@@ -1305,54 +1336,88 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Quick Action: Enter Coach Code
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
-                  shape: BoxShape.circle,
+        // Clean Announcement Banner for Consultation Plans
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: AppTheme.cardShadow,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.medical_services_outlined, color: Color(0xFF6366F1), size: 20),
                 ),
-                child: const Icon(Icons.vpn_key_rounded, color: Color(0xFF6366F1), size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Have a Coach Invite Code?',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppTheme.primary),
-                    ),
-                    Text(
-                      'Connect directly to your coach using their SAB code',
-                      style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
-                    ),
-                  ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'CONSULTATION',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF6366F1),
+                                letterSpacing: 0.05,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '1-on-1 Coach Consultation',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppTheme.primary),
+                      ),
+                      Text(
+                        'Essential, Elite & Longevity health matching',
+                        style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              ElevatedButton(
-                onPressed: _showInviteCodeDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('View Plans', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
-                child: Text('Enter Code', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
@@ -1692,7 +1757,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 8),
           Text(
-            'You haven\'t linked a coach yet. Explore certified specialists in the Search & Connect tab or enter your coach\'s invite code to start streaming telemetry and receiving custom programs.',
+            'To connect with dedicated coaches, request a 1-on-1 Consultation Plan (Essential, Elite, or Longevity). Our clinical admin team assigns the ideal specialist to your profile, who will then appear here.',
             style: GoogleFonts.inter(
               fontSize: 13,
               color: const Color(0xFF64748B),
@@ -1705,9 +1770,15 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _showInviteCodeDialog,
-                  icon: const Icon(Icons.vpn_key_rounded, size: 16),
-                  label: Text('Invite Code', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _userInteractedWithTab = true;
+                      _selectedCoachTabSection = 0;
+                    });
+                  },
+                  icon: const Icon(Icons.search_rounded, size: 16),
+                  label: Text('Chat / 1 Session', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF6366F1),
                     side: const BorderSide(color: Color(0xFF6366F1)),
@@ -1720,14 +1791,14 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _userInteractedWithTab = true;
-                      _selectedCoachTabSection = 0;
-                    });
+                    HapticFeedback.mediumImpact();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                    );
                   },
-                  icon: const Icon(Icons.search_rounded, size: 16),
-                  label: Text('Find Coaches', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                  icon: const Icon(Icons.medical_services_outlined, size: 16),
+                  label: Text('Consultation Plans', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6366F1),
                     foregroundColor: Colors.white,
@@ -4886,54 +4957,67 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
         ),
         const SizedBox(height: 14),
 
-        // Quick Action: Enter Coach Code
-        Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
-                  shape: BoxShape.circle,
+        // Clean Announcement Banner for Consultation Plans
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: AppTheme.cardShadow,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.medical_services_outlined, color: Color(0xFF6366F1), size: 18),
                 ),
-                child: const Icon(Icons.vpn_key_rounded, color: Color(0xFF6366F1), size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Have a Coach Invite Code?',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
-                    ),
-                    Text(
-                      'Link your personal coach profile instantly',
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '1-on-1 Coach Consultation',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.primary),
+                      ),
+                      Text(
+                        'Essential, Elite & Longevity matching',
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              ElevatedButton(
-                onPressed: _showInviteCodeDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text('View Plans', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
-                child: Text('Enter Code', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -5331,16 +5415,16 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                     Expanded(
                       flex: 6,
                       child: ElevatedButton.icon(
-                        onPressed: alreadyConnected || _isConnecting
+                        onPressed: alreadyConnected
                             ? null
-                            : () => _connectToCoach(coachId, coachName: name),
-                        icon: Icon(alreadyConnected ? Icons.check_circle_rounded : Icons.bolt_rounded, size: 16),
+                            : () => _handleCoachChatOrSession(coach),
+                        icon: Icon(alreadyConnected ? Icons.check_circle_rounded : Icons.chat_bubble_outline_rounded, size: 15),
                         label: Text(
-                          alreadyConnected ? 'Connected' : 'Connect Coach',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 13),
+                          alreadyConnected ? 'Connected' : 'Chat / 1 Session',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 12.5),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: alreadyConnected ? Colors.grey.shade400 : badgeColor,
+                          backgroundColor: alreadyConnected ? Colors.grey.shade400 : const Color(0xFF6366F1),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -5683,9 +5767,15 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                         ),
                       ),
                       ElevatedButton.icon(
-                        onPressed: _showInviteCodeDialog,
-                        icon: const Icon(Icons.vpn_key_rounded, size: 16),
-                        label: Text('Enter Invite Code', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                        onPressed: () {
+                          HapticFeedback.mediumImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.medical_services_outlined, size: 16),
+                        label: Text('Consultation Plans', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6366F1),
                           foregroundColor: Colors.white,
@@ -5910,18 +6000,18 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: alreadyConnected || _isConnecting
+                      onPressed: alreadyConnected
                           ? null
-                          : () => _connectToCoach(coachId, coachName: name),
+                          : () => _handleCoachChatOrSession(coach),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: alreadyConnected ? Colors.grey.shade400 : AppTheme.accent,
+                        backgroundColor: alreadyConnected ? Colors.grey.shade400 : const Color(0xFF6366F1),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       ),
                       child: Text(
-                        alreadyConnected ? 'Connected' : 'Connect Coach',
+                        alreadyConnected ? 'Connected' : 'Chat / 1 Session',
                         style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12),
                       ),
                     ),
@@ -6007,6 +6097,14 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                                     ),
                                     const SizedBox(width: 4),
                                     const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF3B82F6)),
+                                    if (alreadyConnected) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(6)),
+                                        child: Text('Connected', style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.bold, color: const Color(0xFF059669))),
+                                      ),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 2),
@@ -6176,27 +6274,46 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                       ],
 
                       // Connect button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: alreadyConnected || _isConnecting
-                              ? null
-                              : () async {
-                                  Navigator.pop(ctx);
-                                  await _connectToCoach(coachId, coachName: name);
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: alreadyConnected ? Colors.grey.shade400 : AppTheme.accent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 0,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _openChatModal();
+                              },
+                              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                              label: Text('Intro Chat', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF6366F1),
+                                side: const BorderSide(color: Color(0xFF6366F1)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
                           ),
-                          child: Text(
-                            alreadyConnected ? 'Already Connected' : 'Connect with Coach',
-                            style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ConsultationPlansScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.medical_services_outlined, size: 16),
+                              label: Text('Consultation Placement', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
