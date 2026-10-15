@@ -52,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   List<Widget> get _screens => [
     HomeTab(
+      key: const PageStorageKey('dashboard_home_tab_key'),
       consumed: _consumed,
       protein: _protein,
       carbs: _carbs,
@@ -1339,7 +1340,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       extendBody: true, // Let content scroll behind the floating bottom bar
-      resizeToAvoidBottomInset: true, // Allow viewport to adapt when keyboard opens so inputs scroll into view
+      resizeToAvoidBottomInset: false, // Prevents body/tabs from re-measuring and jittering on keyboard open/close
       body: Stack(
         children: [
           // Global Background Gradient
@@ -1364,14 +1365,25 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             ],
           ),
           
-          // Floating Bottom Navigation Bar (Footer) sits naturally at bottom, hidden when keyboard is open
-          if (!isKeyboardOpen)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _buildPremiumFooter(),
+          // Floating Bottom Navigation Bar (Footer) with smooth animated transition
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedSlide(
+              offset: isKeyboardOpen ? const Offset(0, 1.25) : Offset.zero,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOutCubic,
+              child: AnimatedOpacity(
+                opacity: isKeyboardOpen ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 140),
+                child: IgnorePointer(
+                  ignoring: isKeyboardOpen,
+                  child: _buildPremiumFooter(),
+                ),
+              ),
             ),
+          ),
         ],
       ),
     );

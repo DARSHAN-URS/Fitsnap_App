@@ -304,16 +304,21 @@ class _ExerciseLoggerSheetState extends State<_ExerciseLoggerSheet> {
     final bool isTime = widget.exercise.measurementType == MeasurementType.time;
     final bool isBodyweight = widget.exercise.measurementType == MeasurementType.bodyweightReps;
 
-    return Container(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom, // Avoid keyboard
-        left: 20, right: 20, top: 20,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SingleChildScrollView(
+    final double keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+    return AnimatedPadding(
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOutCubic,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,8 +388,9 @@ class _ExerciseLoggerSheetState extends State<_ExerciseLoggerSheet> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildInputRow(String label, TextEditingController controller, {required bool isNumber}) {
     return Row(

@@ -686,21 +686,27 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Container(
+        return AnimatedPadding(
           padding: EdgeInsets.only(
-            top: 24,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(
                 children: [
                   CircleAvatar(
@@ -846,9 +852,11 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 
 
@@ -914,13 +922,14 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-            final screenH = MediaQuery.of(context).size.height;
-            final double modalHeight = (screenH * 0.75).clamp(300.0, (screenH - bottomInset - 40).clamp(260.0, screenH));
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
+            return AnimatedPadding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
               child: Container(
-                height: modalHeight,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75,
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -3351,10 +3360,12 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
+            return AnimatedPadding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
               child: Container(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.85,

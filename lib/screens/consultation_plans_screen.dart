@@ -76,195 +76,403 @@ class _ConsultationPlansScreenState extends State<ConsultationPlansScreen> {
 
   void _showBookingSheet(Map<String, dynamic> plan) {
     final noteController = TextEditingController();
+    final List<String> quickGoalChips = [
+      'Fat Loss',
+      'PCOS / Hormones',
+      'Strength & Hypertrophy',
+      'Longevity & Sleep',
+      'Thyroid Support',
+      'Metabolic Health',
+    ];
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.55),
+      enableDrag: true,
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Container(
+          builder: (modalContext, setSheetState) {
+            return AnimatedPadding(
               padding: EdgeInsets.only(
-                top: 24,
-                left: 20,
-                right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(modalContext).size.height * 0.88,
+                ),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 30,
+                      offset: Offset(0, -6),
                     ),
-                    const SizedBox(height: 18),
-
-                    // Plan Title & Price Badge
-                    Row(
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: SingleChildScrollView(
+                    physics: const ClampingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: (plan['badgeColor'] as Color).withOpacity(0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            plan['icon'] as IconData,
-                            color: plan['badgeColor'] as Color,
-                            size: 22,
+                        // Drag Handle
+                        Center(
+                          child: Container(
+                            width: 44,
+                            height: 4.5,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFCBD5E1),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                plan['name'] as String,
+                        const SizedBox(height: 16),
+
+                        // Top Header: Icon + Titles + Close Button
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: (plan['badgeColor'] as Color).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(
+                                plan['icon'] as IconData,
+                                color: plan['badgeColor'] as Color,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    plan['name'] as String,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.primary,
+                                      letterSpacing: -0.02,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    plan['subtitle'] as String,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(99),
+                                onTap: () => Navigator.pop(ctx),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFF1F5F9),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // Meta Badges Pill Row
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: (plan['badgeBg'] as Color),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: (plan['badgeColor'] as Color).withOpacity(0.25),
+                                ),
+                              ),
+                              child: Text(
+                                plan['badge'] as String,
                                 style: GoogleFonts.inter(
-                                  fontSize: 16,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: plan['badgeColor'] as Color,
+                                  letterSpacing: 0.04,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Text(
+                                plan['price'] as String,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.primary,
                                 ),
                               ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+                        const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                        const SizedBox(height: 16),
+
+                        // How Specialist Matching Works (Clinical Notice)
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFEEF2FF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.verified_user_rounded, size: 14, color: Color(0xFF4F46E5)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Specialist Coach Placement',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'Clinical Admin',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
                               Text(
-                                plan['subtitle'] as String,
+                                'Our clinical director evaluates your health profile and pairs you with a verified specialist coach. Once approved, your dedicated coach will appear in your "My Coaches" tab.',
                                 style: GoogleFonts.inter(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF64748B),
+                                  fontSize: 12,
+                                  color: const Color(0xFF475569),
+                                  height: 1.45,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: plan['badgeBg'] as Color,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: (plan['badgeColor'] as Color).withOpacity(0.3),
+
+                        const SizedBox(height: 18),
+
+                        // Health Goals Label + Optional Chip
+                        Row(
+                          children: [
+                            Text(
+                              'Primary Health Goals or Conditions',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Optional',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Quick-Tap Suggestion Chips
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            children: quickGoalChips.map((chipText) {
+                              final isAlreadyAdded = noteController.text.contains(chipText);
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6, bottom: 4),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: () {
+                                    setSheetState(() {
+                                      if (isAlreadyAdded) {
+                                        // Remove chip
+                                        String updated = noteController.text
+                                            .replaceAll('$chipText, ', '')
+                                            .replaceAll(', $chipText', '')
+                                            .replaceAll(chipText, '')
+                                            .trim();
+                                        noteController.text = updated;
+                                      } else {
+                                        // Append chip
+                                        if (noteController.text.trim().isEmpty) {
+                                          noteController.text = chipText;
+                                        } else {
+                                          noteController.text = '${noteController.text.trim()}, $chipText';
+                                        }
+                                      }
+                                      noteController.selection = TextSelection.fromPosition(
+                                        TextPosition(offset: noteController.text.length),
+                                      );
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: isAlreadyAdded ? const Color(0xFFEEF2FF) : const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: isAlreadyAdded ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (isAlreadyAdded) ...[
+                                          const Icon(Icons.check_rounded, size: 12, color: Color(0xFF4F46E5)),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Text(
+                                          chipText,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            fontWeight: isAlreadyAdded ? FontWeight.w700 : FontWeight.w500,
+                                            color: isAlreadyAdded ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Elevated Text Field
+                        TextField(
+                          controller: noteController,
+                          maxLines: 3,
+                          minLines: 2,
+                          onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primary, height: 1.4),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Weight loss, PCOS management, muscle hypertrophy, thyroid support...',
+                            hintStyle: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            contentPadding: const EdgeInsets.all(14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
                             ),
                           ),
-                          child: Text(
-                            plan['price'] as String,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: plan['badgeColor'] as Color,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Submit CTA Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isSubmitting
+                                ? null
+                                : () async {
+                                    setSheetState(() => _isSubmitting = true);
+                                    Navigator.pop(ctx);
+                                    await _executeBooking(plan, noteController.text.trim());
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Confirm & Request Consultation',
+                                        style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w700),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.arrow_forward_rounded, size: 16),
+                                    ],
+                                  ),
                           ),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 18),
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                    const SizedBox(height: 18),
-
-                    // How it works note
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF6366F1)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'After submitting your request, our clinical admin team evaluates your profile and pairs you with a verified specialist coach. Your assigned coach will appear directly in your "My Coaches" tab.',
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                color: const Color(0xFF475569),
-                                height: 1.45,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
-                    Text(
-                      'Primary Health Goals or Conditions (Optional)',
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: noteController,
-                      maxLines: 2,
-                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primary),
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Weight loss, PCOS management, muscle hypertrophy, thyroid support...',
-                        hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        contentPadding: const EdgeInsets.all(12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    // Submit CTA
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting
-                            ? null
-                            : () async {
-                                setSheetState(() => _isSubmitting = true);
-                                Navigator.pop(ctx);
-                                await _executeBooking(plan, noteController.text.trim());
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        child: Text(
-                          'Confirm & Request Consultation',
-                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );

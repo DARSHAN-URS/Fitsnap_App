@@ -1443,11 +1443,16 @@ class _WorkoutLogModalState extends State<WorkoutLogModal> {
   Widget build(BuildContext context) {
     final themeColor = widget.categoryColors[_selectedCategory] ?? AppTheme.accent;
 
-    return Padding(
+    return AnimatedPadding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOutCubic,
       child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
         decoration: const BoxDecoration(
           color: Color(0xFF0F172A),
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
