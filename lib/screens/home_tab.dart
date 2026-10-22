@@ -821,12 +821,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
             builder: (context, snapshot) {
               if (snapshot.hasData && snapshot.data?['has_coach'] == true) {
                 final coach = snapshot.data?['coach'] as Map?;
-                final plan = snapshot.data?['today_plan'] as Map?;
-                final adherence = snapshot.data?['adherence'] as Map?;
-                final double score = ((adherence?['adherence_percentage'] ?? 92) as num).toDouble();
-                final coachName = coach?['name'] ?? 'Your Coach';
-                final planTitle = plan?['title'] ?? 'Prescribed Protocol';
-                final int targetCal = (plan?['total_calories'] ?? 2250) as int;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 20),
@@ -878,13 +872,13 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                                       width: 6,
                                       height: 6,
                                       decoration: const BoxDecoration(
-                                        color: AppTheme.neonEmerald,
+                                        color: Color(0xFFF59E0B),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     const SizedBox(width: 5),
                                     Text(
-                                      'COACH PROTOCOL ACTIVE',
+                                      'SABCOACH • IN DEVELOPMENT',
                                       style: GoogleFonts.inter(
                                         color: Colors.white70,
                                         fontSize: 9.5,
@@ -896,7 +890,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '$coachName: $planTitle',
+                                  'My Coach & SabCoach Sync',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.plusJakartaSans(
@@ -906,7 +900,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with TickerProviderStateMixin
                                   ),
                                 ),
                                 Text(
-                                  'Target: $targetCal kcal • Compliance: ${score.toInt()}%',
+                                  'We are working on this feature... Tap for details',
                                   style: GoogleFonts.inter(
                                     color: Colors.white.withOpacity(0.85),
                                     fontSize: 11.5,

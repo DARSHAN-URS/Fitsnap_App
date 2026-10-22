@@ -60,6 +60,7 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
 
   final Set<String> _loggedMealNames = {};
   late AnimationController _animController;
+  bool _isNotifiedWhenLive = false;
 
   // Location
   bool _isLoadingLocation = false;
@@ -77,6 +78,13 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) {
+        setState(() {
+          _isNotifiedWhenLive = prefs.getBool('sabcoach_notify_when_live') ?? false;
+        });
+      }
+    });
     _refreshAll();
     // Light background poll every 5 min so inbox badge stays fresh
     _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) {
@@ -1179,6 +1187,44 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
     );
   }
 
+  Future<void> _toggleNotifyMe() async {
+    HapticFeedback.mediumImpact();
+    final prefs = await SharedPreferences.getInstance();
+    final next = !_isNotifiedWhenLive;
+    await prefs.setBool('sabcoach_notify_when_live', next);
+    if (mounted) {
+      setState(() {
+        _isNotifiedWhenLive = next;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                next ? Icons.check_circle_rounded : Icons.notifications_off_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  next
+                      ? "You'll be notified as soon as My Coach goes live!"
+                      : "Notification reminder removed.",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: next ? const Color(0xFF10B981) : const Color(0xFF475569),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1197,16 +1243,411 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
-            const SizedBox(height: 16),
-            _buildSectionSwitcher(),
             const SizedBox(height: 18),
-            if (_selectedCoachTabSection == 0) ...[
-              _buildSearchAndConnectSection(),
-            ] else ...[
-              _buildConnectedCoachesSection(),
-            ],
+            _buildInDevelopmentNotice(),
+            const SizedBox(height: 24),
+            _buildUpcomingRoadmapSection(),
+            const SizedBox(height: 20),
+            _buildCoachPlatformInfo(),
+            const SizedBox(height: 24),
+            // Collapsible early directory preview
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                backgroundColor: Colors.white,
+                collapsedBackgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                collapsedShape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.explore_outlined, color: Color(0xFF6366F1), size: 18),
+                ),
+                title: Text(
+                  'Browse Coach Directory (Early Preview)',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                subtitle: Text(
+                  'Explore coaches and consultation plans',
+                  style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionSwitcher(),
+                        const SizedBox(height: 18),
+                        if (_selectedCoachTabSection == 0) ...[
+                          _buildSearchAndConnectSection(),
+                        ] else ...[
+                          _buildConnectedCoachesSection(),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInDevelopmentNotice() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF334155), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Background ambient light
+          Positioned(
+            top: -20,
+            right: -20,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF6366F1).withOpacity(0.18),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Status Pill
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(0xFFFCD34D).withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF59E0B),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'SABCOACH SYNC • IN ACTIVE DEVELOPMENT',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFFFDE68A),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.engineering_rounded,
+                        color: Color(0xFF818CF8),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Main Headline
+                Text(
+                  'We are working on this feature...',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'we will notify as soon it becomes live',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF818CF8),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Subtitle explanation
+                Text(
+                  'Our engineering teams are currently building the direct biometric sync between SabTrack and SabCoach. Soon, your coach will be able to prescribe daily diet plans, custom workouts with video guides, and monitor your live health telemetry.',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF94A3B8),
+                    fontSize: 12.5,
+                    height: 1.55,
+                  ),
+                ),
+                const SizedBox(height: 22),
+
+                // Interactive Action Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _toggleNotifyMe,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isNotifiedWhenLive
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      shadowColor: (_isNotifiedWhenLive ? const Color(0xFF059669) : const Color(0xFF4F46E5)).withOpacity(0.4),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _isNotifiedWhenLive ? Icons.check_circle_rounded : Icons.notifications_active_rounded,
+                          size: 17,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isNotifiedWhenLive
+                              ? "✓ You'll Be Notified When Live"
+                              : "Notify Me As Soon As It Goes Live",
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpcomingRoadmapSection() {
+    final roadmap = [
+      {
+        'title': 'Direct Coach Pairing',
+        'desc': 'Pair with your certified coach using a simple 1-click invite code or invite link.',
+        'icon': Icons.qr_code_rounded,
+        'color': const Color(0xFF6366F1),
+        'bg': const Color(0xFFEEF2FF),
+      },
+      {
+        'title': 'Prescribed Daily Protocols',
+        'desc': 'Personalized daily macros (kcal, protein, carbs, fats) with meal supplements inside each meal.',
+        'icon': Icons.restaurant_menu_rounded,
+        'color': const Color(0xFF10B981),
+        'bg': const Color(0xFFECFDF5),
+      },
+      {
+        'title': 'Workout Programs & Video Demos',
+        'desc': 'Receive structured sets, reps, weight, and exercise video demonstration links from your coach.',
+        'icon': Icons.fitness_center_rounded,
+        'color': const Color(0xFF0284C7),
+        'bg': const Color(0xFFF0F9FF),
+      },
+      {
+        'title': 'Live Biometric Telemetry Sync',
+        'desc': 'Stream steps, workout velocity, recovery curves, and sleep metrics straight to your coach workspace.',
+        'icon': Icons.favorite_rounded,
+        'color': const Color(0xFFEC4899),
+        'bg': const Color(0xFFFDF2F8),
+      },
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF6366F1), size: 14),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'UPCOMING SABCOACH FEATURES',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF6366F1),
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...roadmap.map((item) {
+          final icon = item['icon'] as IconData;
+          final color = item['color'] as Color;
+          final bg = item['bg'] as Color;
+          final title = item['title'] as String;
+          final desc = item['desc'] as String;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        desc,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: const Color(0xFF64748B),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildCoachPlatformInfo() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.laptop_chromebook_rounded, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you a coach or trainer?',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'SabCoach is open for all coaches. Manage clients, build workouts & diets today at sabcoach.io',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: const Color(0xFF64748B),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1904,18 +2345,18 @@ class _MyCoachTabState extends State<MyCoachTab> with SingleTickerProviderStateM
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: BoxDecoration(
-                    color: _hasCoach ? AppTheme.neonEmerald : const Color(0xFFF59E0B),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF59E0B),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _hasCoach ? 'SabCoach Live Telemetry Synced' : 'Ready to Connect',
+                  'In Active Development • Coming Soon',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: _hasCoach ? AppTheme.neonEmerald : const Color(0xFFD97706),
+                    color: const Color(0xFFD97706),
                   ),
                 ),
               ],

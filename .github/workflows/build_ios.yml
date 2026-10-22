@@ -1,0 +1,45 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-ipa:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS Application (Release, No Codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package .ipa from Runner.app
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -r -y SabTrack-Release.ipa Payload
+          mkdir -p build/ios/ipa
+          mv SabTrack-Release.ipa build/ios/ipa/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SabTrack-Release-IPA
+          path: build/ios/ipa/SabTrack-Release.ipa
+          retention-days: 14
