@@ -7,6 +7,8 @@ on:
         description: 'Reason for deployment'
         required: false
         default: 'Production release'
+  push:
+    branches: [ main ]
 
 jobs:
   deploy-app-store:
