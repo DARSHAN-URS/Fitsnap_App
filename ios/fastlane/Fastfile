@@ -51,7 +51,21 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    actual_keychain_path = lane_context[SharedValues::KEYCHAIN_PATH] || File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+    db_path = File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+    raw_path = File.expand_path("~/Library/Keychains/#{keychain_name}")
+    ctx_path = lane_context[SharedValues::KEYCHAIN_PATH]
+
+    actual_keychain_path = if File.exist?(db_path)
+      db_path
+    elsif File.exist?(raw_path)
+      raw_path
+    elsif ctx_path && File.exist?(File.expand_path(ctx_path))
+      File.expand_path(ctx_path)
+    else
+      db_path
+    end
+
+    UI.message("Using verified keychain path: #{actual_keychain_path}")
 
     get_certificates(
       api_key: api_key,
