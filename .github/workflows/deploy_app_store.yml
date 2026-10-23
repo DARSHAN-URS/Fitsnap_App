@@ -35,10 +35,48 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: false
 
-      - name: Install Fastlane plugins
+      - name: Install Fastlane
         run: |
           gem install bundler
           gem install fastlane
+
+      - name: Prepare App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          
+          python3 -c "
+          import os, base64
+
+          raw = os.environ.get('APP_STORE_CONNECT_API_KEY', '').strip()
+          key_id = os.environ.get('APP_STORE_CONNECT_KEY_ID', '').strip()
+          out_path = os.path.expanduser(f'~/.appstoreconnect/private_keys/AuthKey_{key_id}.p8')
+
+          # 1. Try Base64 decode
+          try:
+              decoded = base64.b64decode(raw).decode('utf-8')
+              if 'BEGIN' in decoded:
+                  raw = decoded
+          except Exception:
+              pass
+
+          # 2. Replace literal '\n' if newline characters were escaped
+          raw = raw.replace('\\n', '\n').strip() + '\n'
+
+          # 3. Ensure valid PEM header
+          if not raw.startswith('-----BEGIN'):
+              raw = '-----BEGIN PRIVATE KEY-----\n' + raw
+          if not raw.strip().endswith('-----END PRIVATE KEY-----') and not raw.strip().endswith('-----END EC PRIVATE KEY-----'):
+              raw = raw.strip() + '\n-----END PRIVATE KEY-----\n'
+
+          with open(out_path, 'w') as f:
+              f.write(raw)
+          print(f'Successfully formatted API key at {out_path} ({len(raw)} bytes)')
+          "
+          chmod 600 "$KEY_FILE"
 
       - name: Run Fastlane to Sign and Deploy
         working-directory: ios
