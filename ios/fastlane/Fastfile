@@ -51,9 +51,11 @@ platform :ios do
       lock_when_sleeps: false
     )
 
+    actual_keychain_path = lane_context[SharedValues::KEYCHAIN_PATH] || File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+
     get_certificates(
       api_key: api_key,
-      keychain_path: keychain_name,
+      keychain_path: actual_keychain_path,
       keychain_password: keychain_password
     )
 
