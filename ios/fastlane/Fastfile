@@ -78,12 +78,39 @@ platform :ios do
       app_identifier: "com.sabtrack.ai"
     )
 
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    team_id = nil
+    if profile_path && File.exist?(profile_path)
+      plist_xml = `security cms -D -i "#{profile_path}" 2>/dev/null`
+      match = plist_xml.match(/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([A-Z0-9]+)<\/string>/m)
+      team_id = match[1] if match
+      if !team_id
+        content = File.read(profile_path, :encoding => 'BINARY')
+        match = content.match(/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([A-Z0-9]+)<\/string>/m)
+        team_id = match[1] if match
+      end
+    end
+
+    UI.message("Detected Apple Team ID: #{team_id}")
+
+    if team_id
+      update_code_signing_settings(
+        use_automatic_signing: false,
+        path: "Runner.xcodeproj",
+        team_id: team_id,
+        bundle_identifier: "com.sabtrack.ai",
+        profile_name: lane_context[SharedValues::SIGH_NAME],
+        code_sign_identity: "Apple Distribution"
+      )
+    end
+
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
       export_method: "app-store",
       output_directory: "../build/ios/ipa",
-      output_name: "SabTrack-Production.ipa"
+      output_name: "SabTrack-Production.ipa",
+      xcargs: team_id ? "DEVELOPMENT_TEAM=#{team_id}" : nil
     )
 
     upload_to_testflight(
