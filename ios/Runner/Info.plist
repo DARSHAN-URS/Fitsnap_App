@@ -80,5 +80,9 @@
 	<string>We need location access to track your outdoor workouts, distance, and routes in real-time.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>We need location access to accurately track your runs and walks.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We need permission to save workout and nutrition summary images to your photo gallery.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -1,0 +1,52 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload production release to App Store Connect / TestFlight"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    keychain_name = "fastlane_tmp_keychain"
+    keychain_password = "temp_keychain_pass_123"
+
+    create_keychain(
+      name: keychain_name,
+      password: keychain_password,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false
+    )
+
+    get_certificates(
+      api_key: api_key,
+      keychain_path: keychain_name,
+      keychain_password: keychain_password
+    )
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.sabtrack.ai",
+      type: "app-store"
+    )
+
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "../build/ios/ipa",
+      output_name: "SabTrack-Production.ipa"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      ipa: "../build/ios/ipa/SabTrack-Production.ipa"
+    )
+  end
+end

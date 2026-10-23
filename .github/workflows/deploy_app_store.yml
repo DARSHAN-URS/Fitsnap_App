@@ -1,0 +1,57 @@
+name: Deploy to App Store Connect
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for deployment'
+        required: false
+        default: 'Production release'
+
+jobs:
+  deploy-app-store:
+    name: Build & Upload to App Store
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Prebuild iOS dependencies and engine
+        run: flutter build ios --release --no-codesign
+
+      - name: Set up Ruby & Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+
+      - name: Install Fastlane plugins
+        run: |
+          gem install bundler
+          gem install fastlane
+
+      - name: Run Fastlane to Sign and Deploy
+        working-directory: ios
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: fastlane release
+
+      - name: Upload Production IPA as Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SabTrack-Production-Signed-IPA
+          path: build/ios/ipa/*.ipa
+          retention-days: 14
