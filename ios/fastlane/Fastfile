@@ -67,6 +67,21 @@ platform :ios do
 
     UI.message("Using verified keychain path: #{actual_keychain_path}")
 
+    # If the 2-certificate limit is reached on Apple's portal, revoke the oldest orphaned cert to free up a slot
+    begin
+      certs = Spaceship::ConnectAPI::Certificate.all
+      dist_certs = certs.select { |c| c.certificate_type.to_s.upcase.include?("DISTRIBUTION") }
+      UI.message("Found #{dist_certs.count} distribution certificates on Apple Developer account.")
+      if dist_certs.count >= 2
+        orphaned = dist_certs.first
+        UI.important("Freeing up distribution certificate slot: revoking orphaned certificate #{orphaned.id} (#{orphaned.name})...")
+        orphaned.delete!
+        UI.success("Successfully revoked #{orphaned.id}. A slot is now open for code signing!")
+      end
+    rescue => e
+      UI.important("Certificate cleanup notice: #{e.message}")
+    end
+
     get_certificates(
       api_key: api_key,
       keychain_path: actual_keychain_path,
