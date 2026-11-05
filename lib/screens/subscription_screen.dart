@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../providers/subscription_provider.dart';
 import '../services/api_service.dart';
@@ -25,15 +29,33 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
   final ScrollController _scrollController = ScrollController();
   final FocusNode _promoFocusNode = FocusNode();
 
+  // Apple In-App Purchase variables
+  final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  StreamSubscription<List<PurchaseDetails>>? _subscriptionStream;
+  final Map<String, ProductDetails> _appleProducts = {};
+
+  static const String _appleMonthlyId = 'sabtrack_pro_monthly';
+  static const String _appleHalfYearlyId = 'sabtrack_pro_half_yearly';
+  static const String _appleYearlyId = 'sabtrack_pro_yearly';
+  static const Set<String> _appleProductIds = {
+    _appleMonthlyId,
+    _appleHalfYearlyId,
+    _appleYearlyId,
+  };
+
   @override
   void initState() {
     super.initState();
 
-    // Initialize Razorpay SDK instance
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    if (Platform.isIOS) {
+      _initStoreKit();
+    } else {
+      // Initialize Razorpay SDK instance on Android
+      _razorpay = Razorpay();
+      _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+      _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+      _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    }
 
     _promoFocusNode.addListener(() {
       if (_promoFocusNode.hasFocus) {
@@ -52,6 +74,35 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
     _loadUserInfo();
   }
 
+  Future<void> _initStoreKit() async {
+    final Stream<List<PurchaseDetails>> purchaseUpdated = _inAppPurchase.purchaseStream;
+    _subscriptionStream = purchaseUpdated.listen(
+      _handlePurchaseUpdates,
+      onDone: () => _subscriptionStream?.cancel(),
+      onError: (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('StoreKit error: $error'), backgroundColor: Colors.redAccent),
+          );
+        }
+      },
+    );
+
+    try {
+      final bool available = await _inAppPurchase.isAvailable();
+      if (!available) return;
+
+      final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(_appleProductIds);
+      if (mounted) {
+        setState(() {
+          for (final ProductDetails product in response.productDetails) {
+            _appleProducts[product.id] = product;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadUserInfo() async {
     final email = await PreferencesHelper.readString('user_email');
     if (mounted) {
@@ -63,7 +114,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
 
   @override
   void dispose() {
-    _razorpay.clear();
+    _subscriptionStream?.cancel();
+    if (!Platform.isIOS) {
+      _razorpay.clear();
+    }
     _promoController.dispose();
     _scrollController.dispose();
     _promoFocusNode.dispose();
@@ -184,8 +238,166 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
     );
   }
 
+  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchaseDetailsList) async {
+    for (final purchaseDetails in purchaseDetailsList) {
+      if (purchaseDetails.status == PurchaseStatus.pending) {
+        if (mounted) setState(() => _isProcessing = true);
+      } else if (purchaseDetails.status == PurchaseStatus.error) {
+        if (mounted) {
+          setState(() => _isProcessing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(purchaseDetails.error?.message ?? 'Purchase failed'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        if (purchaseDetails.pendingCompletePurchase) {
+          await _inAppPurchase.completePurchase(purchaseDetails);
+        }
+      } else if (purchaseDetails.status == PurchaseStatus.canceled) {
+        if (mounted) setState(() => _isProcessing = false);
+        if (purchaseDetails.pendingCompletePurchase) {
+          await _inAppPurchase.completePurchase(purchaseDetails);
+        }
+      } else if (purchaseDetails.status == PurchaseStatus.purchased ||
+          purchaseDetails.status == PurchaseStatus.restored) {
+        try {
+          final planId = purchaseDetails.productID == _appleMonthlyId
+              ? 'monthly'
+              : (purchaseDetails.productID == _appleHalfYearlyId ? 'half_yearly' : 'yearly');
+          final planName = purchaseDetails.productID == _appleMonthlyId
+              ? 'Monthly Pro'
+              : (purchaseDetails.productID == _appleHalfYearlyId ? '6 Months Pro' : 'Annual Pro Plan');
+
+          final durationDays = planId == 'monthly' ? 30 : (planId == 'half_yearly' ? 180 : 365);
+          final expiresAt = DateTime.now().add(Duration(days: durationDays)).toIso8601String();
+
+          // 1. Activate in local Riverpod state
+          await ref.read(subscriptionProvider.notifier).setProActivated(
+            planId: planId,
+            planName: planName,
+            expiresAtIso: expiresAt,
+          );
+
+          // 2. Call backend verification
+          if (ApiService.isAuthenticated) {
+            await ApiService.verifyApplePayment(
+              productId: purchaseDetails.productID,
+              transactionId: purchaseDetails.purchaseID ?? 'apple_${DateTime.now().millisecondsSinceEpoch}',
+            );
+          }
+
+          if (mounted) {
+            setState(() => _isProcessing = false);
+            _showCelebrationDialog(planName, purchaseDetails.purchaseID ?? 'StoreKit');
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error validating purchase: $e'), backgroundColor: Colors.redAccent),
+            );
+          }
+        }
+
+        if (purchaseDetails.pendingCompletePurchase) {
+          await _inAppPurchase.completePurchase(purchaseDetails);
+        }
+      }
+    }
+  }
+
+  Future<void> _restorePurchases() async {
+    setState(() => _isProcessing = true);
+    if (Platform.isIOS) {
+      try {
+        await _inAppPurchase.restorePurchases();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Restoring previous purchases...')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Restore error: $e'), backgroundColor: Colors.redAccent),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
+    } else {
+      await ref.read(subscriptionProvider.notifier).fetchRemoteStatus();
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription status refreshed.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openLegalUrl(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _startCheckout(SubscriptionPlan plan, String? razorpayKeyId) async {
     setState(() => _isProcessing = true);
+
+    if (Platform.isIOS) {
+      try {
+        String targetProductId = _appleYearlyId;
+        if (plan.id == 'monthly') {
+          targetProductId = _appleMonthlyId;
+        } else if (plan.id == 'half_yearly') {
+          targetProductId = _appleHalfYearlyId;
+        }
+
+        ProductDetails? product = _appleProducts[targetProductId];
+        if (product == null) {
+          final response = await _inAppPurchase.queryProductDetails(_appleProductIds);
+          for (final p in response.productDetails) {
+            _appleProducts[p.id] = p;
+          }
+          product = _appleProducts[targetProductId];
+        }
+
+        if (product == null) {
+          setState(() => _isProcessing = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Product ($targetProductId) not found in App Store. Please ensure In-App Purchases are configured in App Store Connect.',
+                ),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+          return;
+        }
+
+        final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
+        await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+      } catch (e) {
+        setState(() => _isProcessing = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error initiating Apple purchase: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+      return;
+    }
 
     try {
       final orderRes = await ApiService.createPaymentOrder(plan.id);
@@ -361,7 +573,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
         ),
         actions: [
           TextButton(
-            onPressed: () => ref.read(subscriptionProvider.notifier).fetchRemoteStatus(),
+            onPressed: _restorePurchases,
             child: Text(
               'Restore',
               style: GoogleFonts.inter(
@@ -512,7 +724,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Continue with ${activePlan.name} • ₹${activePlan.priceInr}',
+                                  'Continue with ${activePlan.name} • ${_getDisplayPrice(activePlan)}',
                                   style: GoogleFonts.outfit(
                                     fontSize: 17,
                                     fontWeight: FontWeight.bold,
@@ -526,22 +738,89 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                   ),
                   const SizedBox(height: 14),
 
-                  // Trust & Security Notice
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.lock_rounded, size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Secured by Razorpay • UPI, Cards & Netbanking',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w500,
+                  // Trust & Security Notice & Subscription Disclosures (Apple Guideline 3.1.2)
+                  if (Platform.isIOS)
+                    Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.apple, size: 16, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Secured via Apple App Store',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: const Color(0xFF94A3B8),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text(
+                            'Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period in your Apple ID Account Settings.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () => _openLegalUrl('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'),
+                              child: Text(
+                                'Terms of Use (EULA)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: const Color(0xFF38BDF8),
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Text('•', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+                            const SizedBox(width: 14),
+                            GestureDetector(
+                              onTap: () => _openLegalUrl('https://sabtrack.in/privacy'),
+                              child: Text(
+                                'Privacy Policy',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: const Color(0xFF38BDF8),
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_rounded, size: 14, color: Color(0xFF64748B)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Secured by Razorpay • UPI, Cards & Netbanking',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -835,7 +1114,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '₹${plan.priceInr}',
+                      _getDisplayPrice(plan),
                       style: GoogleFonts.outfit(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -908,5 +1187,19 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> with Si
       badge: 'BEST VALUE',
       isPopular: true,
     );
+  }
+
+  String _getDisplayPrice(SubscriptionPlan plan) {
+    if (Platform.isIOS) {
+      String targetProductId = _appleYearlyId;
+      if (plan.id == 'monthly') {
+        targetProductId = _appleMonthlyId;
+      } else if (plan.id == 'half_yearly') {
+        targetProductId = _appleHalfYearlyId;
+      }
+      final product = _appleProducts[targetProductId];
+      if (product != null) return product.price;
+    }
+    return '₹${plan.priceInr}';
   }
 }

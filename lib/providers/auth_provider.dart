@@ -86,6 +86,45 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  // Apple login flow (Apple Guideline 4.8)
+  Future<void> authenticateWithApple({
+    required String identityToken,
+    String? userIdentifier,
+    String? email,
+    String? givenName,
+    String? familyName,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null, success: false);
+    try {
+      final result = await ApiService.appleLogin(
+        identityToken: identityToken,
+        userIdentifier: userIdentifier,
+        email: email,
+        givenName: givenName,
+        familyName: familyName,
+      );
+      if (result['success'] == true) {
+        final token = result['data']?['token'] ?? result['data']?['data']?['token'];
+        final refreshToken = result['data']?['refresh_token'] ?? result['data']?['data']?['refresh_token'];
+        if (token != null) {
+          ApiService.setToken(token as String);
+        }
+        if (refreshToken != null) {
+          ApiService.setRefreshToken(refreshToken as String);
+        }
+        state = state.copyWith(isLoading: false, success: true);
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          success: false,
+          errorMessage: result['error'] ?? 'Apple authentication failed',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(isLoading: false, success: false, errorMessage: e.toString());
+    }
+  }
+
   // Helper to read token when needed
   Future<String?> getToken() async => await _secureStorage.read(key: 'auth_token');
 }

@@ -378,6 +378,69 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> appleLogin({
+    required String identityToken,
+    String? userIdentifier,
+    String? email,
+    String? givenName,
+    String? familyName,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/apple-login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'identity_token': identityToken,
+          if (userIdentifier != null) 'user_identifier': userIdentifier,
+          if (email != null) 'email': email,
+          if (givenName != null) 'given_name': givenName,
+          if (familyName != null) 'family_name': familyName,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final token = data['token'] ?? data['data']?['token'];
+        final refreshToken = data['refresh_token'] ?? data['data']?['refresh_token'];
+        if (token != null) setToken(token);
+        if (refreshToken != null) setRefreshToken(refreshToken);
+        if (email != null && email.isNotEmpty) {
+          try {
+            await PreferencesHelper.saveString('user_email', email);
+          } catch (_) {}
+        }
+        return {'success': true, 'data': data};
+      }
+      try {
+        final data = jsonDecode(response.body);
+        return {'success': false, 'error': data['detail'] ?? data['error'] ?? 'Apple authentication failed'};
+      } catch (_) {
+        return {'success': false, 'error': 'Apple authentication failed (Status: ${response.statusCode})'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Permanently deletes the user's account and data (Apple Guideline 5.1.1(v))
+  static Future<Map<String, dynamic>> deleteAccount() async {
+    try {
+      final response = await _authDelete('$baseUrl/user/account');
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        clearSession();
+        return {'success': true};
+      }
+      try {
+        final data = jsonDecode(response.body);
+        return {'success': false, 'error': data['detail'] ?? 'Failed to delete account'};
+      } catch (_) {
+        return {'success': false, 'error': 'Failed to delete account (Status: ${response.statusCode})'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
   // --- Smart Nutrition (Cal AI Feature) ---
   static Future<Map<String, dynamic>> analyzeNutrition({String? imagePath, String? date, String? description}) async {
     try {
@@ -2021,6 +2084,35 @@ class ApiService {
       }
       final body = jsonDecode(response.body);
       return {'success': false, 'error': body['detail'] ?? 'Payment verification failed'};
+    } catch (e) {
+      return {'success': false, 'error': formatErrorMessage(e)};
+    }
+  }
+
+  /// Verifies Apple StoreKit In-App Purchase and activates Pro membership
+  static Future<Map<String, dynamic>> verifyApplePayment({
+    required String productId,
+    required String transactionId,
+    String? receiptData,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/payments/verify-apple'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'product_id': productId,
+          'transaction_id': transactionId,
+          if (receiptData != null) 'receipt_data': receiptData,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      final body = jsonDecode(response.body);
+      return {'success': false, 'error': body['detail'] ?? 'Apple payment verification failed'};
     } catch (e) {
       return {'success': false, 'error': formatErrorMessage(e)};
     }

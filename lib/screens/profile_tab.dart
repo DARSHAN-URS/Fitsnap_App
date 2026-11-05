@@ -221,6 +221,127 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
     );
   }
 
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext ctx) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Delete Account',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        color: Colors.redAccent,
+                        fontSize: 19,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                'Are you sure you want to permanently delete your account?\n\nAll personal profile data, nutrition logs, workout history, progress metrics, and subscriptions will be permanently erased. This action is irreversible.',
+                style: GoogleFonts.inter(color: Colors.black87, fontSize: 13.5, height: 1.45),
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(color: Colors.black54, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          setDialogState(() => isDeleting = true);
+                          try {
+                            final res = await ApiService.deleteAccount();
+                            if (res['success'] == true) {
+                              final prefs = await SharedPreferences.getInstance();
+                              final String? userId = await ApiService.getCurrentUserId();
+                              if (userId != null) {
+                                final prefix = '${userId}_';
+                                final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+                                for (final k in keys) {
+                                  await prefs.remove(k);
+                                }
+                              }
+                              await prefs.clear();
+                              ApiService.setToken('');
+
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                              if (context.mounted) {
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const AuthScreen()),
+                                  (route) => false,
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Account permanently deleted.'),
+                                    backgroundColor: Colors.black87,
+                                  ),
+                                );
+                              }
+                            } else {
+                              setDialogState(() => isDeleting = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res['error'] ?? 'Could not delete account. Please try again.'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            setDialogState(() => isDeleting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error deleting account: $e'),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          'Delete Forever',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
@@ -627,11 +748,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                 ),
                 _buildDivider(),
                 _buildListTile(
-                  Icons.health_and_safety_outlined,
-                  'Sync Health Data',
+                  Platform.isIOS ? Icons.favorite_rounded : Icons.health_and_safety_outlined,
+                  Platform.isIOS ? 'Sync with Apple Health (HealthKit)' : 'Sync Health Data',
                   () async {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Syncing with Health/Google Fit...')),
+                      SnackBar(
+                        content: Text(Platform.isIOS
+                            ? 'Syncing with Apple Health (HealthKit)...'
+                            : 'Syncing with Health/Google Fit...'),
+                      ),
                     );
                     
                     int steps = 0;
@@ -658,7 +783,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                       
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Synced: $steps steps and ${water.toInt()}ml water!'),
+                          content: Text(Platform.isIOS
+                              ? 'Synced with Apple Health: $steps steps and ${water.toInt()}ml water!'
+                              : 'Synced: $steps steps and ${water.toInt()}ml water!'),
                           backgroundColor: Colors.green,
                         ),
                       );
@@ -708,6 +835,25 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with TickerProviderStat
                     context,
                     MaterialPageRoute(builder: (_) => const TermsPrivacyScreen()),
                   ),
+                ),
+                _buildDivider(),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+                  title: Text(
+                    'Delete Account',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.redAccent,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Permanently delete account and all data',
+                    style: GoogleFonts.inter(fontSize: 12, color: Colors.black38),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.redAccent, size: 22),
+                  onTap: () => _showDeleteAccountDialog(context),
                 ),
               ],
             ),

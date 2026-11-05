@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:io' show Platform;
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'dashboard_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,15 +30,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  // IMPORTANT: To fix Google Sign In Error (sign_in_failed, code 10):
-  // 1. Add these Android SHA-1 keys to your Google Cloud Console / Supabase Google provider settings:
-  //    Debug SHA-1: 03:A0:8B:4B:FF:CF:81:E8:E3:7D:2C:C5:21:28:88:DC:65:A3:C8:EB
-  //    Release SHA-1: 9C:DB:09:EE:5D:0E:16:37:72:7F:60:1C:BC:28:F5:CE:3F:A0:AE:ED
-  //    App Signing SHA-1: 18:FF:B4:C7:A4:EB:BB:51:CC:A6:B7:CF:58:58:1D:63:18:D5:D4:66
-  // 2. serverClientId must be the Web Client ID from Google Cloud Console.
+
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     serverClientId: '443720579971-vinvs4st5v892u20jtb9h61aimh84pq5.apps.googleusercontent.com',
+    clientId: Platform.isIOS
+        ? '443720579971-vinvs4st5v892u20jtb9h61aimh84pq5.apps.googleusercontent.com'
+        : null,
   );
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
@@ -213,10 +214,78 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
           backgroundColor: Colors.redAccent,
         ));
       }
+    } on PlatformException catch (pe) {
+      debugPrint('Google Sign In PlatformException: ${pe.code} - ${pe.message}');
+      if (!mounted) return;
+      if (pe.code != 'sign_in_canceled') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(Platform.isIOS
+              ? 'Google Sign-In is unavailable on this device. Please use Sign in with Apple or Email.'
+              : 'Google Sign In Error: ${pe.message ?? pe.code}'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Google Sign In Error: $e'),
+        content: Text(Platform.isIOS
+            ? 'Google Sign-In is unavailable. Please use Sign in with Apple or Email.'
+            : 'Google Sign In Error: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      final identityToken = credential.identityToken;
+      if (identityToken == null) {
+        throw Exception('Could not retrieve Apple identity token.');
+      }
+
+      final givenName = credential.givenName;
+      final familyName = credential.familyName;
+      final fullName = [givenName, familyName].where((n) => n != null && n.isNotEmpty).join(' ');
+      final email = credential.email;
+
+      final authNotifier = ref.read(authProvider.notifier);
+      await authNotifier.authenticateWithApple(
+        identityToken: identityToken,
+        userIdentifier: credential.userIdentifier,
+        email: email,
+        givenName: givenName,
+        familyName: familyName,
+      );
+
+      final authState = ref.read(authProvider);
+      if (authState.success) {
+        if (fullName.isNotEmpty) {
+          await PreferencesHelper.saveString('profile_name', fullName);
+        }
+        ref.read(profileProvider.notifier).loadProfile();
+        if (!mounted) return;
+        _onAuthSuccess(email ?? 'apple_user@sabtrack.in', isSignUp: false);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(authState.errorMessage ?? 'Apple Authentication failed'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (e.toString().contains('canceled') || e.toString().contains('Canceled')) {
+        return; // User canceled login flow
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Apple Sign In Error: $e'),
         backgroundColor: Colors.redAccent,
       ));
     }
@@ -490,6 +559,50 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                           ),
 
                           const SizedBox(height: 18),
+
+                          // Sign in with Apple (Guideline 4.8 - iOS requirement)
+                          if (Platform.isIOS) ...[
+                            Container(
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.12),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  )
+                                ],
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: ref.watch(authProvider).isLoading ? null : _handleAppleSignIn,
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.apple, color: Colors.white, size: 26),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'Sign in with Apple',
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
 
                           // Google Sign-In Button
                           Container(
