@@ -1,14 +1,20 @@
 require 'base64'
 require 'fileutils'
+require 'tmpdir'
+require 'time'
 
 default_platform(:ios)
 
 platform :ios do
-  desc "Build and upload production release to App Store Connect / TestFlight"
+  desc "Build, verify, and upload production release to App Store Connect / TestFlight"
   lane :release do
     key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s.strip
     issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
     raw_key = ENV["APP_STORE_CONNECT_API_KEY"].to_s.strip
+
+    UI.user_error!("Missing APP_STORE_CONNECT_KEY_ID") if key_id.empty?
+    UI.user_error!("Missing APP_STORE_CONNECT_ISSUER_ID") if issuer_id.empty?
+    UI.user_error!("Missing APP_STORE_CONNECT_API_KEY") if raw_key.empty?
 
     key_dir = File.expand_path("~/.appstoreconnect/private_keys")
     FileUtils.mkdir_p(key_dir)
@@ -67,72 +73,175 @@ platform :ios do
 
     UI.message("Using verified keychain path: #{actual_keychain_path}")
 
-    # If the 2-certificate limit is reached on Apple's portal, revoke the oldest orphaned cert to free up a slot
-    begin
-      certs = Spaceship::ConnectAPI::Certificate.all
-      dist_certs = certs.select { |c| c.certificate_type.to_s.upcase.include?("DISTRIBUTION") }
-      UI.message("Found #{dist_certs.count} distribution certificates on Apple Developer account.")
-      if dist_certs.count >= 2
-        orphaned = dist_certs.first
-        UI.important("Freeing up distribution certificate slot: revoking orphaned certificate #{orphaned.id} (#{orphaned.name})...")
-        orphaned.delete!
-        UI.success("Successfully revoked #{orphaned.id}. A slot is now open for code signing!")
+    # 1. Certificate Installation
+    # If explicit P12 is provided via secrets, import it. Otherwise use get_certificates with API key.
+    p12_raw = ENV["IOS_DISTRIBUTION_CERTIFICATE_P12"].to_s.strip
+    p12_password = ENV["IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"].to_s
+
+    if !p12_raw.empty?
+      UI.message("Importing explicitly provided Apple Distribution Certificate (.p12)...")
+      p12_tmp = File.expand_path("~/dist_cert_temp.p12")
+      begin
+        File.binwrite(p12_tmp, Base64.decode64(p12_raw))
+        import_certificate(
+          keychain_name: keychain_name,
+          keychain_password: keychain_password,
+          certificate_path: p12_tmp,
+          certificate_password: p12_password
+        )
+        UI.success("Successfully imported explicit Apple Distribution Certificate (.p12) into keychain.")
+      ensure
+        FileUtils.rm_f(p12_tmp)
       end
-    rescue => e
-      UI.important("Certificate cleanup notice: #{e.message}")
+    else
+      UI.message("No explicit .p12 provided; fetching/installing certificate via App Store Connect API...")
+      get_certificates(
+        api_key: api_key,
+        keychain_path: actual_keychain_path,
+        keychain_password: keychain_password
+      )
     end
 
-    get_certificates(
-      api_key: api_key,
-      keychain_path: actual_keychain_path,
-      keychain_password: keychain_password
-    )
+    # 2. Verify signing identity exists with private key in keychain
+    identities = `security find-identity -v -p codesigning "#{actual_keychain_path}"`
+    UI.message("Codesigning identities in keychain:\n#{identities}")
 
+    valid_id_match = identities.lines.find { |l| l.include?("Apple Distribution") && l.include?("MSK2R73A5A") }
+    if valid_id_match.nil?
+      UI.user_error!("Verification failed: No valid 'Apple Distribution: ... (MSK2R73A5A)' signing identity found with private key in #{actual_keychain_path}!")
+    end
+    signing_identity_name = valid_id_match[/\"(.*)\"/, 1] || "Apple Distribution: Binita Nadar (MSK2R73A5A)"
+    UI.success("Verified active code signing identity: #{signing_identity_name}")
+
+    # 3. Retrieve matching App Store Provisioning Profile
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: "com.sabtrack.ai",
+      team_id: "MSK2R73A5A",
       force: true
     )
 
+    profile_name = lane_context[SharedValues::SIGH_NAME]
     profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
-    team_id = nil
-    if profile_path && File.exist?(profile_path)
-      plist_xml = `security cms -D -i "#{profile_path}" 2>/dev/null`
-      match = plist_xml.match(/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([A-Z0-9]+)<\/string>/m)
-      team_id = match[1] if match
-      if !team_id
-        content = File.read(profile_path, :encoding => 'BINARY')
-        match = content.match(/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([A-Z0-9]+)<\/string>/m)
-        team_id = match[1] if match
-      end
-    end
+    UI.message("Active Provisioning Profile: #{profile_name} at #{profile_path}")
 
-    UI.message("Detected Apple Team ID: #{team_id}")
+    # 4. Update Xcode Code Signing Settings
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "MSK2R73A5A",
+      bundle_identifier: "com.sabtrack.ai",
+      profile_name: profile_name,
+      code_sign_identity: "Apple Distribution"
+    )
 
-    if team_id
-      update_code_signing_settings(
-        use_automatic_signing: false,
-        path: "Runner.xcodeproj",
-        team_id: team_id,
-        bundle_identifier: "com.sabtrack.ai",
-        profile_name: lane_context[SharedValues::SIGH_NAME],
-        code_sign_identity: "Apple Distribution"
-      )
-    end
+    # 5. Build and Export IPA
+    output_dir = "../build/ios/ipa"
+    ipa_filename = "SabTrack-Production.ipa"
+    ipa_full_path = File.expand_path(File.join(output_dir, ipa_filename))
 
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
       export_method: "app-store",
-      output_directory: "../build/ios/ipa",
-      output_name: "SabTrack-Production.ipa",
-      xcargs: team_id ? "DEVELOPMENT_TEAM=#{team_id}" : nil
+      output_directory: output_dir,
+      output_name: ipa_filename,
+      export_options: {
+        method: "app-store",
+        teamID: "MSK2R73A5A",
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.sabtrack.ai" => profile_name
+        }
+      },
+      xcargs: "DEVELOPMENT_TEAM=MSK2R73A5A"
     )
 
+    # 6. Pre-upload Verification
+    UI.message("==================================================")
+    UI.message("--- Pre-upload Verification for #{ipa_filename} ---")
+    UI.message("==================================================")
+
+    # 6.1 Check IPA file existence and size
+    UI.user_error!("Verification Error: IPA does not exist at #{ipa_full_path}") unless File.exist?(ipa_full_path)
+    file_bytes = File.size(ipa_full_path)
+    UI.user_error!("Verification Error: IPA file is empty (0 bytes)") if file_bytes <= 0
+    UI.success("✓ IPA exists and valid size: #{(file_bytes / 1024.0 / 1024.0).round(2)} MB")
+
+    # 6.2 Extract IPA Payload and verify contents
+    verify_tmp_dir = Dir.mktmpdir("sabtrack_verify_")
+    begin
+      `unzip -q "#{ipa_full_path}" -d "#{verify_tmp_dir}"`
+      app_bundle = Dir.glob("#{verify_tmp_dir}/Payload/*.app").first
+      UI.user_error!("Verification Error: No .app bundle found inside IPA Payload") unless app_bundle && File.exist?(app_bundle)
+
+      # 6.3 Verify Info.plist metadata
+      plist_file = File.join(app_bundle, "Info.plist")
+      bundle_id = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist_file}" 2>/dev/null`.strip
+      version_str = `/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "#{plist_file}" 2>/dev/null`.strip
+      build_str = `/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "#{plist_file}" 2>/dev/null`.strip
+
+      UI.message("App Metadata -> Bundle ID: #{bundle_id}, Version: #{version_str}, Build: #{build_str}")
+
+      UI.user_error!("Verification Error: Bundle ID mismatch (expected 'com.sabtrack.ai', got '#{bundle_id}')") unless bundle_id == "com.sabtrack.ai"
+      UI.user_error!("Verification Error: Version mismatch (expected '1.0.7', got '#{version_str}')") unless version_str == "1.0.7"
+      UI.user_error!("Verification Error: Build number mismatch (expected '16', got '#{build_str}')") unless build_str == "16"
+      UI.success("✓ App Metadata verified: #{bundle_id} #{version_str}+#{build_str}")
+
+      # 6.4 Verify Embedded Provisioning Profile
+      embedded_profile = File.join(app_bundle, "embedded.mobileprovision")
+      UI.user_error!("Verification Error: embedded.mobileprovision missing from .app bundle") unless File.exist?(embedded_profile)
+
+      profile_xml = `security cms -D -i "#{embedded_profile}" 2>/dev/null`
+      UI.user_error!("Verification Error: Unable to read embedded.mobileprovision XML") if profile_xml.empty?
+
+      team_match = profile_xml[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([A-Z0-9]+)<\/string>/m, 1]
+      UI.user_error!("Verification Error: Profile Team ID mismatch (expected 'MSK2R73A5A', got '#{team_match}')") unless team_match == "MSK2R73A5A"
+
+      appid_match = profile_xml[/<key>application-identifier<\/key>\s*<string>([^<]+)<\/string>/m, 1]
+      UI.user_error!("Verification Error: Profile application-identifier does not match 'com.sabtrack.ai' (got '#{appid_match}')") unless appid_match && appid_match.end_with?("com.sabtrack.ai")
+
+      exp_date_str = profile_xml[/<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/m, 1]
+      if exp_date_str
+        exp_date = Time.parse(exp_date_str) rescue nil
+        if exp_date && exp_date < Time.now
+          UI.user_error!("Verification Error: Embedded provisioning profile has expired on #{exp_date}")
+        end
+        UI.success("✓ Profile validity verified (expires: #{exp_date_str})")
+      end
+      UI.success("✓ Embedded provisioning profile verified for Team ID #{team_match} and #{appid_match}")
+
+      # 6.5 Verify Code Signing Signature
+      cs_verify = `codesign --verify --deep --strict --verbose=4 "#{app_bundle}" 2>&1`
+      if $?.exitstatus != 0
+        UI.user_error!("Verification Error: Codesign verification failed:\n#{cs_verify}")
+      end
+      UI.success("✓ Code signature verified (deep & strict)")
+
+      cs_details = `codesign -dvvv "#{app_bundle}" 2>&1`
+      authorities = cs_details.lines.select { |l| l.include?("Authority=") }
+      UI.message("Code Sign Authorities:\n#{authorities.join}")
+
+      valid_authority = authorities.any? { |l| l.include?("Apple Distribution") && l.include?("MSK2R73A5A") }
+      unless valid_authority
+        UI.user_error!("Verification Error: App is NOT signed with required 'Apple Distribution: ... (MSK2R73A5A)' identity!")
+      end
+      UI.success("✓ Verified signing certificate: Apple Distribution (MSK2R73A5A)")
+
+    ensure
+      FileUtils.rm_rf(verify_tmp_dir) if verify_tmp_dir && File.exist?(verify_tmp_dir)
+    end
+
+    UI.success("==================================================")
+    UI.success("✓ ALL PRE-UPLOAD VERIFICATIONS PASSED FOR BUILD 16")
+    UI.success("==================================================")
+
+    # 7. Upload to App Store Connect / TestFlight
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true,
-      ipa: "../build/ios/ipa/SabTrack-Production.ipa"
+      ipa: ipa_full_path
     )
+    UI.success("🚀 Successfully uploaded SabTrack-Production.ipa (1.0.7+16) to TestFlight!")
   end
 end

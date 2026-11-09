@@ -10,6 +10,11 @@ on:
   push:
     branches: [ main ]
 
+# Concurrency protection prevents simultaneous runs from modifying signing resources
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
 jobs:
   deploy-app-store:
     name: Build & Upload to App Store
@@ -29,7 +34,7 @@ jobs:
         run: flutter pub get
 
       - name: Prebuild iOS dependencies and engine
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --build-name=1.0.7 --build-number=16
 
       - name: Set up Ruby & Fastlane
         uses: ruby/setup-ruby@v1
@@ -86,12 +91,14 @@ jobs:
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          IOS_DISTRIBUTION_CERTIFICATE_P12: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
         run: fastlane release
 
       - name: Upload Production IPA as Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SabTrack-Production-Signed-IPA
+          name: SabTrack-Production-Signed-IPA-1.0.7-b16
           path: build/ios/ipa/*.ipa
           retention-days: 14
