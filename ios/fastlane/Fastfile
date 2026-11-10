@@ -158,7 +158,6 @@ platform :ios do
     # 5. Build and Export IPA
     output_dir = "../build/ios/ipa"
     ipa_filename = "SabTrack-Production.ipa"
-    ipa_full_path = File.expand_path(File.join(output_dir, ipa_filename))
 
     build_app(
       workspace: "Runner.xcworkspace",
@@ -176,6 +175,12 @@ platform :ios do
       },
       xcargs: "DEVELOPMENT_TEAM=MSK2R73A5A"
     )
+
+    ipa_full_path = lane_context[SharedValues::IPA_OUTPUT_PATH]
+    if ipa_full_path.nil? || !File.exist?(ipa_full_path)
+      ipa_full_path = File.expand_path(File.join("..", output_dir, ipa_filename))
+    end
+    UI.message("Resolved IPA path: #{ipa_full_path}")
 
     # 6. Pre-upload Verification
     UI.message("==================================================")
