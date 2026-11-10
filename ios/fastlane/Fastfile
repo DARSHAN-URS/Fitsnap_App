@@ -84,7 +84,7 @@ platform :ios do
       begin
         File.binwrite(p12_tmp, Base64.decode64(p12_raw))
         import_certificate(
-          keychain_name: keychain_name,
+          keychain_path: actual_keychain_path,
           keychain_password: keychain_password,
           certificate_path: p12_tmp,
           certificate_password: p12_password
@@ -113,13 +113,33 @@ platform :ios do
     signing_identity_name = valid_id_match[/\"(.*)\"/, 1] || "Apple Distribution: Binita Nadar (MSK2R73A5A)"
     UI.success("Verified active code signing identity: #{signing_identity_name}")
 
-    # 3. Retrieve matching App Store Provisioning Profile
-    get_provisioning_profile(
+    # 3. Match installed certificate serial to App Store Connect Certificate ID & get Provisioning Profile
+    local_serial = `security find-certificate -c "Apple Distribution" -p "#{actual_keychain_path}" | openssl x509 -noout -serial 2>/dev/null`.strip.sub(/^serial=/i, '').upcase
+    matching_cert_id = nil
+    begin
+      unless local_serial.empty?
+        certs = Spaceship::ConnectAPI::Certificate.all
+        match = certs.find { |c| c.serial_number.to_s.upcase.sub(/^0+/, '') == local_serial.sub(/^0+/, '') }
+        if match
+          matching_cert_id = match.id
+          UI.success("Matched local certificate serial #{local_serial} to Apple Certificate ID: #{matching_cert_id}")
+        else
+          UI.important("Warning: Local certificate serial #{local_serial} not found in App Store Connect Certificates API response.")
+        end
+      end
+    rescue => e
+      UI.important("Certificate ID lookup notice: #{e.message}")
+    end
+
+    sigh_params = {
       api_key: api_key,
       app_identifier: "com.sabtrack.ai",
       team_id: "MSK2R73A5A",
       force: true
-    )
+    }
+    sigh_params[:cert_id] = matching_cert_id if matching_cert_id
+
+    get_provisioning_profile(sigh_params)
 
     profile_name = lane_context[SharedValues::SIGH_NAME]
     profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
